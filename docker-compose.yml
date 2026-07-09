@@ -1,40 +1,94 @@
 services:
-  db:
+  clef-db:
+    container_name: clef-db
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: clef
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-clef}
+      POSTGRES_USER: ${POSTGRES_USER:-clef}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clef-internal-db}
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
+      - db_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clef}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  api:
+  clef-api:
+    container_name: clef-api
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      network: host
+    expose:
+      - "4000"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.clef-api-web.rule: "Host(`clef.facile.studio`) && PathPrefix(`/api`)"
+      traefik.http.routers.clef-api-web.entrypoints: web
+      traefik.http.routers.clef-api-web.middlewares: redirect-to-https@file
+      traefik.http.routers.clef-api-web.service: clef-api-svc
+      traefik.http.routers.clef-api-secure.rule: "Host(`clef.facile.studio`) && PathPrefix(`/api`)"
+      traefik.http.routers.clef-api-secure.entrypoints: websecure
+      traefik.http.routers.clef-api-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.clef-api-secure.middlewares: clef-strip-api
+      traefik.http.routers.clef-api-secure.service: clef-api-svc
+      traefik.http.middlewares.clef-strip-api.stripprefix.prefixes: /api
+      traefik.http.services.clef-api-svc.loadbalancer.server.port: "4000"
     environment:
-      DATABASE_URL: postgres://postgres:postgres@db:5432/clef?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-clef}:${POSTGRES_PASSWORD:-clef-internal-db}@clef-db:5432/${POSTGRES_DB:-clef}?sslmode=disable
       PORT: "4000"
-      LOG_LEVEL: info
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://clef.facile.studio}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
-    ports:
-      - "4000:4000"
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+      OIDC_SUCCESS_URL: ${OIDC_SUCCESS_URL:-}
+      SSO_ONLY: ${SSO_ONLY:-false}
     depends_on:
-      - db
+      clef-db:
+        condition: service_healthy
 
-  client:
+  clef-client:
+    container_name: clef-client
     build:
       context: .
       dockerfile: apps/client/Dockerfile
+      network: host
       args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:4000}
-    ports:
-      - "3000:80"
+        VITE_API_BASE_URL: https://clef.facile.studio/api
+    expose:
+      - "80"
+    networks:
+      - default
+      - dokploy-network
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.clef-client-web.rule: "Host(`clef.facile.studio`)"
+      traefik.http.routers.clef-client-web.entrypoints: web
+      traefik.http.routers.clef-client-web.middlewares: redirect-to-https@file
+      traefik.http.routers.clef-client-web.service: clef-client-svc
+      traefik.http.routers.clef-client-secure.rule: "Host(`clef.facile.studio`)"
+      traefik.http.routers.clef-client-secure.entrypoints: websecure
+      traefik.http.routers.clef-client-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.clef-client-secure.service: clef-client-svc
+      traefik.http.services.clef-client-svc.loadbalancer.server.port: "80"
     depends_on:
-      - api
+      - clef-api
+
+networks:
+  dokploy-network:
+    external: true
 
 volumes:
-  pgdata:
+  db_data:
+    name: clef_db_data
