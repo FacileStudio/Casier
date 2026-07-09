@@ -20,6 +20,7 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
 	const response = await fetch(`${API_BASE}${path}`, {
 		method: options.method ?? 'GET',
 		headers,
+		credentials: 'include',
 		body: options.body ? JSON.stringify(options.body) : undefined,
 	});
 

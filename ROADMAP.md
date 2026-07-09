@@ -18,35 +18,35 @@
 
 ## v2 — Hardening
 
-- [ ] Rate limiting on auth endpoints (login, register)
-- [ ] Password reset flow for non-OIDC users
-- [ ] Secret version history with point-in-time rollback
-- [ ] HttpOnly cookie auth as alternative to bearer tokens
-- [ ] OIDC callback via POST/fragment instead of query param token
-- [ ] Session sliding window (extend on use, max 7 days)
-- [ ] Expired session cleanup (background purge)
-- [ ] CLI: `clef init` to scaffold `.clef.toml` per project (space + env defaults)
+- [x] Rate limiting on auth endpoints (login, register)
+- [x] Password reset flow for non-OIDC users
+- [x] Secret version history with point-in-time rollback
+- [x] HttpOnly cookie auth as alternative to bearer tokens
+- [x] OIDC callback via cookie instead of query param token
+- [x] Session sliding window (extend on use, max 7 days)
+- [x] Expired session cleanup (background purge)
+- [x] CLI: `clef init` to scaffold `.clef.toml` per project
 
 ## v3 — Team Features
 
+- [x] Root encryption key rotation (re-encrypt all space data keys)
+- [x] Invite links for space membership
+- [x] Per-secret access control (beyond space-level roles)
+- [x] Secret tagging and search
+- [x] Bulk import/export (`.env` file ↔ Clef)
+- [x] CLI: `clef diff` — compare secrets across environments
+- [x] CLI: `clef sync` — push `.env` to Clef or pull from Clef
 - [ ] Secret rotation automation (scheduled re-generation)
-- [ ] Root encryption key rotation (re-encrypt all space data keys)
 - [ ] External KMS support (AWS KMS, GCP KMS) for root key
-- [ ] Invite links for space membership
-- [ ] Per-secret access control (beyond space-level roles)
-- [ ] Secret tagging and search
-- [ ] Bulk import/export (`.env` file ↔ Clef)
-- [ ] CLI: `clef diff` — compare secrets across environments
-- [ ] CLI: `clef sync` — push `.env` to Clef or pull from Clef
 
 ## v4 — Platform
 
-- [ ] Webhook notifications on secret changes
+- [x] Webhook notifications on secret changes
+- [x] API tokens (machine identity, scoped per space + environment)
+- [x] Secret references (one secret pointing to another across environments)
+- [x] Dashboard: activity feed with filterable audit log
+- [x] Dashboard: secret diff view across environments
 - [ ] Nook integration (emit secret change events to the Facile event bus)
 - [ ] Go SDK (`@facile/clef-go`) for runtime secret fetching
 - [ ] TypeScript SDK (`@facile/clef-ts`) for runtime secret fetching
-- [ ] API tokens (machine identity, scoped per space + environment)
 - [ ] CI/CD integrations (GitHub Actions, Docker build args)
-- [ ] Secret references (one secret pointing to another across environments)
-- [ ] Dashboard: activity feed with filterable audit log
-- [ ] Dashboard: secret diff view across environments

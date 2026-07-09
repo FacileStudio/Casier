@@ -32,6 +32,8 @@ func Internal(message string, cause error) *Error {
 	return New("internal", message, cause)
 }
 
+func RateLimited(message string) *Error { return New("rate_limited", message, nil) }
+
 func Status(err error) int {
 	var appErr *Error
 	if !stderrors.As(err, &appErr) {
@@ -51,6 +53,8 @@ func Status(err error) int {
 		return http.StatusConflict
 	case "resource_exhausted":
 		return http.StatusRequestEntityTooLarge
+	case "rate_limited":
+		return http.StatusTooManyRequests
 	default:
 		return http.StatusInternalServerError
 	}

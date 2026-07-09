@@ -2,6 +2,11 @@ package schemas
 
 import "time"
 
+const (
+	SessionSlidingWindow = 24 * time.Hour
+	SessionMaxLifetime   = 7 * 24 * time.Hour
+)
+
 type Session struct {
 	Token     string    `gorm:"column:token;primaryKey"`
 	UserID    int64     `gorm:"column:user_id;index"`

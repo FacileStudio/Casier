@@ -106,12 +106,17 @@
 						{loading ? 'Signing in...' : 'Sign in'}
 					</Button>
 
-					<p class="text-center text-sm text-muted-foreground">
-						No account?
-						<a href="/register" class="text-primary underline underline-offset-4 hover:text-primary/80">
-							Register
+					<div class="flex items-center justify-between text-sm text-muted-foreground">
+						<a href="/forgot-password" class="text-primary underline underline-offset-4 hover:text-primary/80">
+							Forgot password?
 						</a>
-					</p>
+						<span>
+							No account?
+							<a href="/register" class="text-primary underline underline-offset-4 hover:text-primary/80">
+								Register
+							</a>
+						</span>
+					</div>
 				</form>
 			{/if}
 		</CardContent>

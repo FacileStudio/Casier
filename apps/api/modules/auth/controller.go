@@ -45,6 +45,24 @@ func (controller *Controller) login(ctx context.Context, req *LoginRequest) (*Au
 	return &AuthResponse{UserID: userID, Token: token}, nil
 }
 
+func (controller *Controller) forgotPassword(ctx context.Context, req *ForgotPasswordRequest) error {
+	email := strings.TrimSpace(strings.ToLower(req.Email))
+	if email == "" || !strings.Contains(email, "@") {
+		return errors.Invalid("invalid email")
+	}
+	return controller.service.forgotPassword(ctx, email)
+}
+
+func (controller *Controller) resetPassword(ctx context.Context, req *ResetPasswordRequest) error {
+	if req.Token == "" {
+		return errors.Invalid("token is required")
+	}
+	if len(req.Password) < 8 {
+		return errors.Invalid("password must be at least 8 characters")
+	}
+	return controller.service.resetPassword(ctx, req.Token, req.Password)
+}
+
 func (controller *Controller) me(ctx context.Context) (*MeResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {

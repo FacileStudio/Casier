@@ -34,6 +34,7 @@ func CORS(allowedOrigins []string) func(http.Handler) http.Handler {
 			header.Set("Access-Control-Allow-Origin", origin)
 			header.Set("Access-Control-Allow-Methods", strings.Join(corsAllowedMethods, ", "))
 			header.Set("Access-Control-Allow-Headers", strings.Join(corsAllowedHeaders, ", "))
+			header.Set("Access-Control-Allow-Credentials", "true")
 			header.Set("Access-Control-Max-Age", "600")
 
 			if request.Method == http.MethodOptions {

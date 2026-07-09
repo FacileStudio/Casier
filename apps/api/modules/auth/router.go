@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"clef/internal/env"
 	"clef/internal/httpjson"
@@ -14,6 +15,7 @@ import (
 
 func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 	oidcEnabled := appEnv.OIDC != nil
+	authLimiter := middleware.NewRateLimiter(5, 1*time.Minute)
 
 	router.Route("/auth", func(router chi.Router) {
 		router.Get("/config", func(w http.ResponseWriter, r *http.Request) {
@@ -24,7 +26,7 @@ func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 		})
 
 		if !appEnv.SSOOnly {
-			router.Post("/register", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RateLimit(authLimiter)).Post("/register", func(w http.ResponseWriter, request *http.Request) {
 				var req RegisterRequest
 				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
 					httpjson.WriteError(w, err)
@@ -35,10 +37,11 @@ func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 					httpjson.WriteError(w, err)
 					return
 				}
+				SetSessionCookie(w, resp.Token)
 				httpjson.WriteJSON(w, http.StatusCreated, resp)
 			})
 
-			router.Post("/login", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RateLimit(authLimiter)).Post("/login", func(w http.ResponseWriter, request *http.Request) {
 				var req LoginRequest
 				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
 					httpjson.WriteError(w, err)
@@ -49,15 +52,49 @@ func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 					httpjson.WriteError(w, err)
 					return
 				}
+				SetSessionCookie(w, resp.Token)
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
 		}
 
-		router.With(middleware.RequireAuth(service)).Post("/logout", func(w http.ResponseWriter, request *http.Request) {
-			if err := service.logoutUser(request.Context(), request.Header.Get("Authorization")); err != nil {
+		router.With(middleware.RateLimit(authLimiter)).Post("/forgot-password", func(w http.ResponseWriter, request *http.Request) {
+			var req ForgotPasswordRequest
+			if err := httpjson.DecodeJSON(w, request, &req); err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}
+			if err := service.controller.forgotPassword(request.Context(), &req); err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		})
+
+		router.With(middleware.RateLimit(authLimiter)).Post("/reset-password", func(w http.ResponseWriter, request *http.Request) {
+			var req ResetPasswordRequest
+			if err := httpjson.DecodeJSON(w, request, &req); err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			if err := service.controller.resetPassword(request.Context(), &req); err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		})
+
+		router.With(middleware.RequireAuth(service)).Post("/logout", func(w http.ResponseWriter, request *http.Request) {
+			authorization := request.Header.Get("Authorization")
+			if authorization == "" {
+				if c, err := request.Cookie(SessionCookieName); err == nil {
+					authorization = "Bearer " + c.Value
+				}
+			}
+			if err := service.logoutUser(request.Context(), authorization); err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			ClearSessionCookie(w)
 			w.WriteHeader(http.StatusNoContent)
 		})
 

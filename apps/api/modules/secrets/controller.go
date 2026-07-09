@@ -17,7 +17,7 @@ func newController(service *Service) *Controller {
 	return &Controller{service: service}
 }
 
-func (controller *Controller) list(ctx context.Context, spaceSlug, envSlug string) (*ListResponse, error) {
+func (controller *Controller) list(ctx context.Context, spaceSlug, envSlug, tagFilter string) (*ListResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
@@ -27,7 +27,7 @@ func (controller *Controller) list(ctx context.Context, spaceSlug, envSlug strin
 		return nil, err
 	}
 
-	secrets, err := controller.service.listSecrets(ctx, envID, identity.UserID, identity.ClientIP)
+	secrets, err := controller.service.listSecrets(ctx, envID, identity.UserID, identity.ClientIP, tagFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (controller *Controller) create(ctx context.Context, spaceSlug, envSlug str
 		return nil, errors.Invalid("secret value exceeds maximum size of 64KB")
 	}
 
-	return controller.service.createSecret(ctx, envID, key, req.Value, identity.UserID, identity.ClientIP)
+	return controller.service.createSecret(ctx, envID, key, req.Value, identity.UserID, identity.ClientIP, req.Tags)
 }
 
 func (controller *Controller) update(ctx context.Context, spaceSlug, envSlug, key string, req *UpdateRequest) (*SecretResponse, error) {
@@ -93,6 +93,133 @@ func (controller *Controller) delete(ctx context.Context, spaceSlug, envSlug, ke
 	}
 
 	return controller.service.deleteSecret(ctx, envID, key, identity.UserID, identity.ClientIP)
+}
+
+func (controller *Controller) importEnv(ctx context.Context, spaceSlug, envSlug string, req *ImportRequest) (*ImportResponse, error) {
+	identity, ok := authcontext.IdentityFromContext(ctx)
+	if !ok {
+		return nil, errors.Unauthorized("missing auth")
+	}
+	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	return controller.service.importEnv(ctx, envID, req.Content, identity.UserID, identity.ClientIP)
+}
+
+func (controller *Controller) exportEnv(ctx context.Context, spaceSlug, envSlug string) (*ExportResponse, error) {
+	identity, ok := authcontext.IdentityFromContext(ctx)
+	if !ok {
+		return nil, errors.Unauthorized("missing auth")
+	}
+	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	content, err := controller.service.exportEnv(ctx, envID, identity.UserID, identity.ClientIP)
+	if err != nil {
+		return nil, err
+	}
+	return &ExportResponse{Content: content}, nil
+}
+
+func (controller *Controller) updateTags(ctx context.Context, spaceSlug, envSlug, key string, req *UpdateTagsRequest) error {
+	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return err
+	}
+	return controller.service.updateTags(ctx, envID, key, req.Tags)
+}
+
+func (controller *Controller) listVersions(ctx context.Context, spaceSlug, envSlug, key string) (*VersionsResponse, error) {
+	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	versions, err := controller.service.listVersions(ctx, envID, key)
+	if err != nil {
+		return nil, err
+	}
+	return &VersionsResponse{Versions: versions}, nil
+}
+
+func (controller *Controller) rollback(ctx context.Context, spaceSlug, envSlug, key string, req *RollbackRequest) (*SecretResponse, error) {
+	identity, ok := authcontext.IdentityFromContext(ctx)
+	if !ok {
+		return nil, errors.Unauthorized("missing auth")
+	}
+	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	if req.Version < 1 {
+		return nil, errors.Invalid("version must be >= 1")
+	}
+	return controller.service.rollbackSecret(ctx, envID, key, req.Version, identity.UserID, identity.ClientIP)
+}
+
+func (controller *Controller) diff(ctx context.Context, spaceSlug, envSlugA, envSlugB string) (*DiffResponse, error) {
+	identity, ok := authcontext.IdentityFromContext(ctx)
+	if !ok {
+		return nil, errors.Unauthorized("missing auth")
+	}
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	spaceID, err := controller.service.spaceRes.ResolveSpaceID(ctx, spaceSlug, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	envA, err := controller.service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlugA)
+	if err != nil {
+		return nil, err
+	}
+	envB, err := controller.service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlugB)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := controller.service.diffEnvironments(ctx, envA, envB, identity.UserID, identity.ClientIP)
+	if err != nil {
+		return nil, err
+	}
+	resp.From = envSlugA
+	resp.To = envSlugB
+	return resp, nil
+}
+
+func (controller *Controller) listACLs(ctx context.Context, spaceSlug, envSlug, key string) (*ACLsResponse, error) {
+	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	acls, err := controller.service.listACLs(ctx, envID, key)
+	if err != nil {
+		return nil, err
+	}
+	return &ACLsResponse{ACLs: acls}, nil
+}
+
+func (controller *Controller) setACL(ctx context.Context, spaceSlug, envSlug, key string, req *SetACLRequest) error {
+	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return err
+	}
+	if req.Email == "" {
+		return errors.Invalid("email is required")
+	}
+	return controller.service.setACL(ctx, envID, key, req.Email, req.CanRead, req.CanWrite)
+}
+
+func (controller *Controller) deleteACL(ctx context.Context, spaceSlug, envSlug, key string, aclID int64) error {
+	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	if err != nil {
+		return err
+	}
+	return controller.service.deleteACL(ctx, envID, key, aclID)
 }
 
 func (controller *Controller) resolveEnv(ctx context.Context, spaceSlug, envSlug string) (int64, error) {

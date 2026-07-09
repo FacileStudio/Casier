@@ -10,6 +10,7 @@ type Secret struct {
 	EncryptedValue []byte      `gorm:"column:encrypted_value"`
 	Nonce          []byte      `gorm:"column:nonce;size:12"`
 	Version        int         `gorm:"column:version;default:1"`
+	Tags           string      `gorm:"column:tags;default:''"`
 	CreatedAt      time.Time   `gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt      time.Time   `gorm:"column:updated_at;autoUpdateTime"`
 }

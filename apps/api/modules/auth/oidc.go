@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
-	"net/url"
 	"time"
 
 	"clef/internal/authcontext"
@@ -121,11 +120,8 @@ func (h *oidcHandler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dest, _ := url.Parse(h.successURL)
-	q := dest.Query()
-	q.Set("token", token)
-	dest.RawQuery = q.Encode()
-	http.Redirect(w, r, dest.String(), http.StatusFound)
+	SetSessionCookie(w, token)
+	http.Redirect(w, r, h.successURL, http.StatusFound)
 }
 
 func (h *oidcHandler) syncProfile(w http.ResponseWriter, r *http.Request) {

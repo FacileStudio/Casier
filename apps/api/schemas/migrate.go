@@ -10,5 +10,12 @@ func Migrate(db *gorm.DB) error {
 		&SpaceMember{},
 		&Environment{},
 		&Secret{},
+		&SecretVersion{},
+		&PasswordReset{},
+		&Invite{},
+		&SecretACL{},
+		&ApiToken{},
+		&Webhook{},
+		&AuditLog{},
 	)
 }

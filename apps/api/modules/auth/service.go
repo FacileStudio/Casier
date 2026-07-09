@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	stderrors "errors"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -121,12 +122,36 @@ func (service *Service) insertSession(ctx context.Context, token string, userID 
 	record := &schemas.Session{
 		Token:     hashToken(token),
 		UserID:    userID,
-		ExpiresAt: time.Now().Add(24 * time.Hour),
+		ExpiresAt: time.Now().Add(schemas.SessionSlidingWindow),
 	}
 	if err := service.orm.WithContext(ctx).Create(record).Error; err != nil {
 		return errors.Internal("failed to persist session", err)
 	}
 	return nil
+}
+
+func SetSessionCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   int(schemas.SessionMaxLifetime.Seconds()),
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+func ClearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func normalizeBearer(authorization string) string {
@@ -143,16 +168,18 @@ func (service *Service) authenticateRequest(ctx context.Context, authorization s
 		return "", nil, errors.Unauthorized("missing auth token")
 	}
 
+	hashed := hashToken(token)
 	var out struct {
 		UserID    int64
 		Email     string
 		ExpiresAt time.Time
+		CreatedAt time.Time
 	}
 	err := service.orm.WithContext(ctx).
 		Table("sessions s").
-		Select("u.id as user_id, u.email as email, s.expires_at as expires_at").
+		Select("u.id as user_id, u.email as email, s.expires_at as expires_at, s.created_at as created_at").
 		Joins("join users u on u.id = s.user_id").
-		Where("s.token = ?", hashToken(token)).
+		Where("s.token = ?", hashed).
 		Scan(&out).Error
 	if err != nil {
 		return "", nil, errors.Internal("failed to validate auth token", err)
@@ -160,20 +187,160 @@ func (service *Service) authenticateRequest(ctx context.Context, authorization s
 	if out.UserID == 0 {
 		return "", nil, errors.Unauthorized("invalid auth token")
 	}
-	if time.Now().After(out.ExpiresAt) {
+
+	now := time.Now()
+	if now.After(out.ExpiresAt) {
 		return "", nil, errors.Unauthorized("expired auth token")
 	}
+	if now.Sub(out.CreatedAt) > schemas.SessionMaxLifetime {
+		return "", nil, errors.Unauthorized("session expired")
+	}
+
+	newExpiry := now.Add(schemas.SessionSlidingWindow)
+	absoluteMax := out.CreatedAt.Add(schemas.SessionMaxLifetime)
+	if newExpiry.After(absoluteMax) {
+		newExpiry = absoluteMax
+	}
+	go func() {
+		service.orm.Model(&schemas.Session{}).
+			Where("token = ?", hashed).
+			Update("expires_at", newExpiry)
+	}()
 
 	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email}, nil
 }
 
 func (service *Service) Authenticate(ctx context.Context, authorization string) (string, any, error) {
+	token := normalizeBearer(authorization)
+	if strings.HasPrefix(token, "clef_") {
+		return service.authenticateApiToken(ctx, token)
+	}
 	return service.authenticateRequest(ctx, authorization)
+}
+
+func (service *Service) authenticateApiToken(ctx context.Context, token string) (string, *Data, error) {
+	hashed := hashToken(token)
+	var out struct {
+		UserID    int64
+		Email     string
+		ExpiresAt time.Time
+	}
+	err := service.orm.WithContext(ctx).
+		Table("api_tokens at").
+		Select("u.id as user_id, u.email as email, at.expires_at as expires_at").
+		Joins("join users u on u.id = at.created_by").
+		Where("at.token_hash = ?", hashed).
+		Scan(&out).Error
+	if err != nil {
+		return "", nil, errors.Internal("failed to validate API token", err)
+	}
+	if out.UserID == 0 {
+		return "", nil, errors.Unauthorized("invalid API token")
+	}
+	if time.Now().After(out.ExpiresAt) {
+		return "", nil, errors.Unauthorized("expired API token")
+	}
+
+	go func() {
+		service.orm.Model(&schemas.ApiToken{}).
+			Where("token_hash = ?", hashed).
+			Update("last_used_at", time.Now())
+	}()
+
+	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email}, nil
+}
+
+func (service *Service) StartSessionCleanup(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				result := service.orm.Where("expires_at < ?", time.Now()).Delete(&schemas.Session{})
+				if result.Error != nil {
+					service.logger.Error("session cleanup failed", slog.Any("error", result.Error))
+				} else if result.RowsAffected > 0 {
+					service.logger.Info("purged expired sessions", slog.Int64("count", result.RowsAffected))
+				}
+			}
+		}
+	}()
 }
 
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
+}
+
+func (service *Service) forgotPassword(ctx context.Context, email string) error {
+	var user schemas.User
+	err := service.orm.WithContext(ctx).Where("email = ?", email).First(&user).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return errors.Internal("failed to look up user", err)
+	}
+	if user.PasswordHash == "" {
+		return nil
+	}
+
+	token, err := authcrypto.NewToken()
+	if err != nil {
+		return errors.Internal("failed to generate reset token", err)
+	}
+
+	reset := &schemas.PasswordReset{
+		Token:     hashToken(token),
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(1 * time.Hour),
+	}
+	if err := service.orm.WithContext(ctx).Create(reset).Error; err != nil {
+		return errors.Internal("failed to create reset token", err)
+	}
+
+	service.logger.Info("password reset requested",
+		slog.String("email", email),
+		slog.String("reset_token", token),
+	)
+
+	return nil
+}
+
+func (service *Service) resetPassword(ctx context.Context, token string, newPassword string) error {
+	hashed := hashToken(token)
+	var reset schemas.PasswordReset
+	err := service.orm.WithContext(ctx).Where("token = ?", hashed).First(&reset).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.Invalid("invalid or expired reset token")
+	}
+	if err != nil {
+		return errors.Internal("failed to validate reset token", err)
+	}
+	if reset.Used || time.Now().After(reset.ExpiresAt) {
+		return errors.Invalid("invalid or expired reset token")
+	}
+
+	hash, err := authcrypto.HashPassword(newPassword)
+	if err != nil {
+		return errors.Invalid("invalid password")
+	}
+
+	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&schemas.User{}).Where("id = ?", reset.UserID).Update("password_hash", hash).Error; err != nil {
+			return errors.Internal("failed to update password", err)
+		}
+		if err := tx.Model(&schemas.PasswordReset{}).Where("token = ?", hashed).Update("used", true).Error; err != nil {
+			return errors.Internal("failed to mark token used", err)
+		}
+		if err := tx.Where("user_id = ?", reset.UserID).Delete(&schemas.Session{}).Error; err != nil {
+			return errors.Internal("failed to clear sessions", err)
+		}
+		return nil
+	})
 }
 
 func (service *Service) upsertOIDCUser(ctx context.Context, email string, name string, oauth2Token *oauth2.Token) (string, string, error) {

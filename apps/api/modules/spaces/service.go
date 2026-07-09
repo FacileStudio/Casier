@@ -3,11 +3,15 @@ package spaces
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	stderrors "errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"clef/internal/crypto"
 	"clef/internal/errors"
@@ -335,6 +339,148 @@ func (service *Service) removeMember(ctx context.Context, slug string, callerID 
 	return nil
 }
 
+func (service *Service) createInvite(ctx context.Context, slug string, callerID int64, role string, maxUses int) (*InviteResponse, error) {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return nil, errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	tokenBytes := make([]byte, 24)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, errors.Internal("failed to generate invite token", err)
+	}
+	token := base64.RawURLEncoding.EncodeToString(tokenBytes)
+
+	invite := &schemas.Invite{
+		Token:     token,
+		SpaceID:   space.ID,
+		Role:      role,
+		MaxUses:   maxUses,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+		CreatedBy: callerID,
+	}
+	if err := service.orm.WithContext(ctx).Create(invite).Error; err != nil {
+		return nil, errors.Internal("failed to create invite", err)
+	}
+
+	return &InviteResponse{
+		ID:        invite.ID,
+		Token:     invite.Token,
+		Role:      invite.Role,
+		MaxUses:   invite.MaxUses,
+		UseCount:  0,
+		ExpiresAt: invite.ExpiresAt,
+		CreatedAt: invite.CreatedAt,
+	}, nil
+}
+
+func (service *Service) listInvites(ctx context.Context, slug string, callerID int64) ([]InviteResponse, error) {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return nil, errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	var invites []schemas.Invite
+	err = service.orm.WithContext(ctx).
+		Where("space_id = ? AND expires_at > ?", space.ID, time.Now()).
+		Order("created_at desc").
+		Find(&invites).Error
+	if err != nil {
+		return nil, errors.Internal("failed to list invites", err)
+	}
+
+	result := make([]InviteResponse, len(invites))
+	for i, inv := range invites {
+		result[i] = InviteResponse{
+			ID:        inv.ID,
+			Token:     inv.Token,
+			Role:      inv.Role,
+			MaxUses:   inv.MaxUses,
+			UseCount:  inv.UseCount,
+			ExpiresAt: inv.ExpiresAt,
+			CreatedAt: inv.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (service *Service) acceptInvite(ctx context.Context, token string, userID int64) error {
+	var invite schemas.Invite
+	err := service.orm.WithContext(ctx).Where("token = ?", token).First(&invite).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.NotFound("invalid invite link")
+	}
+	if err != nil {
+		return errors.Internal("failed to find invite", err)
+	}
+
+	if time.Now().After(invite.ExpiresAt) {
+		return errors.Invalid("invite link has expired")
+	}
+	if invite.MaxUses > 0 && invite.UseCount >= invite.MaxUses {
+		return errors.Invalid("invite link has reached max uses")
+	}
+
+	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		member := &schemas.SpaceMember{
+			SpaceID: invite.SpaceID,
+			UserID:  userID,
+			Role:    invite.Role,
+		}
+		if err := tx.Create(member).Error; err != nil {
+			if stderrors.Is(err, gorm.ErrDuplicatedKey) {
+				return errors.Conflict("you are already a member of this space")
+			}
+			return errors.Internal("failed to add member", err)
+		}
+		return tx.Model(&schemas.Invite{}).
+			Where("id = ?", invite.ID).
+			Update("use_count", gorm.Expr("use_count + 1")).Error
+	})
+}
+
+func (service *Service) deleteInvite(ctx context.Context, slug string, callerID int64, inviteID int64) error {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return errors.Internal("failed to find space", err)
+	}
+
+	result := service.orm.WithContext(ctx).
+		Where("id = ? AND space_id = ?", inviteID, space.ID).
+		Delete(&schemas.Invite{})
+	if result.Error != nil {
+		return errors.Internal("failed to delete invite", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NotFound("invite not found")
+	}
+	return nil
+}
+
 func (service *Service) getSpaceWithRole(ctx context.Context, slug string, userID int64) (*schemas.Space, string, error) {
 	var space schemas.Space
 	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
@@ -398,6 +544,300 @@ func (service *Service) GetSpaceDataKey(ctx context.Context, spaceID int64) ([]b
 	}
 
 	return crypto.Decrypt(space.EncryptedDataKey, space.DataKeyNonce, service.encKey)
+}
+
+func (service *Service) createApiToken(ctx context.Context, slug string, callerID int64, name, environments, permissions string) (*ApiTokenResponse, error) {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return nil, errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, errors.Internal("failed to generate token", err)
+	}
+	rawToken := "clef_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
+	sum := sha256.Sum256([]byte(rawToken))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	if permissions == "" {
+		permissions = "read"
+	}
+
+	apiToken := &schemas.ApiToken{
+		TokenHash:    tokenHash,
+		Name:         name,
+		SpaceID:      space.ID,
+		Environments: environments,
+		Permissions:  permissions,
+		CreatedBy:    callerID,
+		ExpiresAt:    time.Now().Add(365 * 24 * time.Hour),
+	}
+	if err := service.orm.WithContext(ctx).Create(apiToken).Error; err != nil {
+		return nil, errors.Internal("failed to create API token", err)
+	}
+
+	return &ApiTokenResponse{
+		ID:           apiToken.ID,
+		Token:        rawToken,
+		Name:         apiToken.Name,
+		Environments: apiToken.Environments,
+		Permissions:  apiToken.Permissions,
+		ExpiresAt:    apiToken.ExpiresAt,
+		CreatedAt:    apiToken.CreatedAt,
+	}, nil
+}
+
+func (service *Service) listApiTokens(ctx context.Context, slug string, callerID int64) ([]ApiTokenResponse, error) {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return nil, errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	var tokens []schemas.ApiToken
+	err = service.orm.WithContext(ctx).
+		Where("space_id = ?", space.ID).
+		Order("created_at desc").
+		Find(&tokens).Error
+	if err != nil {
+		return nil, errors.Internal("failed to list tokens", err)
+	}
+
+	result := make([]ApiTokenResponse, len(tokens))
+	for i, t := range tokens {
+		result[i] = ApiTokenResponse{
+			ID:           t.ID,
+			Name:         t.Name,
+			Environments: t.Environments,
+			Permissions:  t.Permissions,
+			ExpiresAt:    t.ExpiresAt,
+			LastUsedAt:   t.LastUsedAt,
+			CreatedAt:    t.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (service *Service) revokeApiToken(ctx context.Context, slug string, callerID int64, tokenID int64) error {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return errors.Internal("failed to find space", err)
+	}
+
+	result := service.orm.WithContext(ctx).
+		Where("id = ? AND space_id = ?", tokenID, space.ID).
+		Delete(&schemas.ApiToken{})
+	if result.Error != nil {
+		return errors.Internal("failed to revoke token", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NotFound("token not found")
+	}
+	return nil
+}
+
+func (service *Service) createWebhook(ctx context.Context, slug string, callerID int64, url, events, secret string) (*WebhookResponse, error) {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return nil, errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	wh := &schemas.Webhook{
+		SpaceID:   space.ID,
+		URL:       url,
+		Events:    events,
+		Secret:    secret,
+		Active:    true,
+		CreatedBy: callerID,
+	}
+	if err := service.orm.WithContext(ctx).Create(wh).Error; err != nil {
+		return nil, errors.Internal("failed to create webhook", err)
+	}
+
+	return &WebhookResponse{
+		ID:        wh.ID,
+		URL:       wh.URL,
+		Events:    wh.Events,
+		Active:    wh.Active,
+		CreatedAt: wh.CreatedAt,
+	}, nil
+}
+
+func (service *Service) listWebhooks(ctx context.Context, slug string, callerID int64) ([]WebhookResponse, error) {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return nil, errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	var webhooks []schemas.Webhook
+	err = service.orm.WithContext(ctx).
+		Where("space_id = ?", space.ID).
+		Order("created_at desc").
+		Find(&webhooks).Error
+	if err != nil {
+		return nil, errors.Internal("failed to list webhooks", err)
+	}
+
+	result := make([]WebhookResponse, len(webhooks))
+	for i, wh := range webhooks {
+		result[i] = WebhookResponse{
+			ID:        wh.ID,
+			URL:       wh.URL,
+			Events:    wh.Events,
+			Active:    wh.Active,
+			CreatedAt: wh.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (service *Service) deleteWebhook(ctx context.Context, slug string, callerID int64, webhookID int64) error {
+	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return err
+	}
+	if callerRole != "owner" && callerRole != "admin" {
+		return errors.Forbidden("insufficient permissions")
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return errors.Internal("failed to find space", err)
+	}
+
+	result := service.orm.WithContext(ctx).
+		Where("id = ? AND space_id = ?", webhookID, space.ID).
+		Delete(&schemas.Webhook{})
+	if result.Error != nil {
+		return errors.Internal("failed to delete webhook", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NotFound("webhook not found")
+	}
+	return nil
+}
+
+func (service *Service) listAuditLogs(ctx context.Context, slug string, callerID int64, action string, limit int) ([]AuditLogEntry, error) {
+	_, _, err := service.getSpaceWithRole(ctx, slug, callerID)
+	if err != nil {
+		return nil, err
+	}
+
+	var space schemas.Space
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+		return nil, errors.Internal("failed to find space", err)
+	}
+
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	query := service.orm.WithContext(ctx).
+		Where("space_id = ?", space.ID)
+	if action != "" {
+		query = query.Where("action = ?", action)
+	}
+
+	var logs []schemas.AuditLog
+	err = query.
+		Order("created_at desc").
+		Limit(limit).
+		Find(&logs).Error
+	if err != nil {
+		return nil, errors.Internal("failed to list audit logs", err)
+	}
+
+	result := make([]AuditLogEntry, len(logs))
+	for i, l := range logs {
+		result[i] = AuditLogEntry{
+			ID:        l.ID,
+			UserEmail: l.UserEmail,
+			Action:    l.Action,
+			Resource:  l.Resource,
+			Detail:    l.Detail,
+			ClientIP:  l.ClientIP,
+			CreatedAt: l.CreatedAt,
+		}
+	}
+	return result, nil
+}
+
+func (service *Service) RotateRootKey(ctx context.Context, newKey []byte) (int, error) {
+	var spaces []schemas.Space
+	if err := service.orm.WithContext(ctx).Find(&spaces).Error; err != nil {
+		return 0, errors.Internal("failed to list spaces", err)
+	}
+
+	count := 0
+	for _, s := range spaces {
+		if len(s.EncryptedDataKey) == 0 {
+			continue
+		}
+
+		dataKey, err := crypto.Decrypt(s.EncryptedDataKey, s.DataKeyNonce, service.encKey)
+		if err != nil {
+			return count, errors.Internal(fmt.Sprintf("failed to decrypt data key for space %d", s.ID), err)
+		}
+
+		newEncDataKey, newNonce, err := crypto.Encrypt(dataKey, newKey)
+		if err != nil {
+			return count, errors.Internal(fmt.Sprintf("failed to re-encrypt data key for space %d", s.ID), err)
+		}
+
+		if err := service.orm.WithContext(ctx).
+			Model(&schemas.Space{}).
+			Where("id = ?", s.ID).
+			Updates(map[string]any{
+				"encrypted_data_key": newEncDataKey,
+				"data_key_nonce":     newNonce,
+			}).Error; err != nil {
+			return count, errors.Internal(fmt.Sprintf("failed to save re-encrypted data key for space %d", s.ID), err)
+		}
+		count++
+	}
+
+	service.encKey = newKey
+	return count, nil
 }
 
 func slugify(name string) string {

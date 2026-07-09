@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"clef/internal/audit"
 	"clef/internal/crypto"
 	"clef/internal/database"
 	documentation "clef/internal/documentation"
@@ -17,6 +18,7 @@ import (
 	"clef/internal/httpjson"
 	"clef/internal/logger"
 	"clef/internal/middleware"
+	"clef/internal/webhook"
 	"clef/modules/auth"
 	"clef/modules/environments"
 	"clef/modules/secrets"
@@ -70,10 +72,16 @@ func main() {
 		}
 	}()
 
+	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
+	defer cancelCleanup()
+
 	authService := auth.NewService(db, encKey, appLogger)
+	authService.StartSessionCleanup(shutdownCtx)
+	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
+	auditLogger := audit.NewLogger(db)
 	spacesService := spaces.NewService(db, encKey)
 	environmentsService := environments.NewService(db, spacesService)
-	secretsService := secrets.NewService(db, appLogger, spacesService, environmentsService, spacesService)
+	secretsService := secrets.NewService(db, appLogger, spacesService, environmentsService, spacesService, webhookDispatcher, auditLogger)
 
 	docs := documentation.Response{
 		Modules: []documentation.Module{

@@ -30,3 +30,14 @@ func (d *Data) GetEmail() string {
 	}
 	return d.Email
 }
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email"`
+}
+
+type ResetPasswordRequest struct {
+	Token    string `json:"token"`
+	Password string `json:"password"`
+}
+
+const SessionCookieName = "clef_session"
