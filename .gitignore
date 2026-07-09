@@ -1,0 +1,11 @@
+.local/
+node_modules/
+build/
+.svelte-kit/
+apps/api/bin/
+apps/api/vendor/
+cli/target/
+*.env
+!*.env.example
+.DS_Store
+mise.lock
