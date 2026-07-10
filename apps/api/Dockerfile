@@ -1,5 +1,7 @@
 FROM golang:1.24-alpine AS build
 
+ENV GOTOOLCHAIN=auto
+
 WORKDIR /repo/apps/api
 
 COPY apps/api/go.mod apps/api/go.sum ./
