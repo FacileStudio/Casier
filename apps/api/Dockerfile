@@ -16,7 +16,7 @@ RUN curl https://mise.run | sh
 
 WORKDIR /repo
 
-COPY mise.toml mise.lock ./
+COPY mise.toml mise.lock* ./
 COPY apps/api/mise.toml apps/api/go.mod apps/api/go.sum ./apps/api/
 
 RUN mise trust /repo/mise.toml \
