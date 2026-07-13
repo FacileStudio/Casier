@@ -22,7 +22,7 @@
 	async function loadSpaces() {
 		loading = true;
 		try {
-			spaces = await api.get<Space[]>('/api/spaces', auth.token);
+			spaces = await api.get<Space[]>('/spaces', auth.token);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Failed to load spaces');
 		} finally {
@@ -34,7 +34,7 @@
 		e.preventDefault();
 		creating = true;
 		try {
-			const space = await api.post<Space>('/api/spaces', {
+			const space = await api.post<Space>('/spaces', {
 				name: createName,
 				description: createDescription,
 			}, auth.token);

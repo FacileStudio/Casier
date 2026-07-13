@@ -47,7 +47,7 @@
 	async function loadSpace() {
 		loading = true;
 		try {
-			space = await api.get<Space>(`/api/spaces/${slug}`, auth.token);
+			space = await api.get<Space>(`/spaces/${slug}`, auth.token);
 			await Promise.all([loadSecrets(), loadMembers()]);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Failed to load space');
@@ -58,7 +58,7 @@
 
 	async function loadSecrets() {
 		try {
-			secrets = await api.get<Secret[]>(`/api/spaces/${slug}/secrets`, auth.token);
+			secrets = await api.get<Secret[]>(`/spaces/${slug}/secrets`, auth.token);
 		} catch {
 			secrets = [];
 		}
@@ -66,7 +66,7 @@
 
 	async function loadMembers() {
 		try {
-			members = await api.get<Member[]>(`/api/spaces/${slug}/members`, auth.token);
+			members = await api.get<Member[]>(`/spaces/${slug}/members`, auth.token);
 		} catch {
 			members = [];
 		}
@@ -91,7 +91,7 @@
 		e.preventDefault();
 		addingSecret = true;
 		try {
-			const secret = await api.post<Secret>(`/api/spaces/${slug}/secrets`, {
+			const secret = await api.post<Secret>(`/spaces/${slug}/secrets`, {
 				environment: selectedEnv,
 				key: newKey,
 				value: newValue,
@@ -115,7 +115,7 @@
 
 	async function saveEdit(secret: Secret) {
 		try {
-			await api.put(`/api/spaces/${slug}/secrets/${secret.id}`, {
+			await api.put(`/spaces/${slug}/secrets/${secret.id}`, {
 				value: editValue,
 			}, auth.token);
 			secrets = secrets.map((s) =>
@@ -130,7 +130,7 @@
 
 	async function deleteSecret(id: string) {
 		try {
-			await api.del(`/api/spaces/${slug}/secrets/${id}`, auth.token);
+			await api.del(`/spaces/${slug}/secrets/${id}`, auth.token);
 			secrets = secrets.filter((s) => s.id !== id);
 			toast.success('Secret deleted');
 		} catch (err) {
@@ -142,7 +142,7 @@
 		e.preventDefault();
 		addingMember = true;
 		try {
-			const member = await api.post<Member>(`/api/spaces/${slug}/members`, {
+			const member = await api.post<Member>(`/spaces/${slug}/members`, {
 				email: newMemberEmail,
 			}, auth.token);
 			members = [...members, member];
@@ -158,7 +158,7 @@
 
 	async function removeMember(id: string) {
 		try {
-			await api.del(`/api/spaces/${slug}/members/${id}`, auth.token);
+			await api.del(`/spaces/${slug}/members/${id}`, auth.token);
 			members = members.filter((m) => m.id !== id);
 			toast.success('Member removed');
 		} catch (err) {
