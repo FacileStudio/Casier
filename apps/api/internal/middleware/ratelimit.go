@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"clef/internal/errors"
-	"clef/internal/httpjson"
+	"casier/internal/errors"
+	"casier/internal/httpjson"
 )
 
 type visitor struct {

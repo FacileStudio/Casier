@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"clef/internal/errors"
-	"clef/internal/httpjson"
-	"clef/internal/middleware"
-	"clef/modules/auth"
+	"casier/internal/errors"
+	"casier/internal/httpjson"
+	"casier/internal/middleware"
+	"casier/modules/auth"
 
 	"github.com/go-chi/chi/v5"
 )

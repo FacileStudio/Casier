@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"clef/internal/env"
-	"clef/internal/httpjson"
-	"clef/internal/middleware"
+	"casier/internal/env"
+	"casier/internal/httpjson"
+	"casier/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 )

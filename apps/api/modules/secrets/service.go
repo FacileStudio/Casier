@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"clef/internal/audit"
-	"clef/internal/crypto"
-	"clef/internal/errors"
-	"clef/internal/webhook"
-	"clef/schemas"
+	"casier/internal/audit"
+	"casier/internal/crypto"
+	"casier/internal/errors"
+	"casier/internal/webhook"
+	"casier/schemas"
 
 	"gorm.io/gorm"
 )

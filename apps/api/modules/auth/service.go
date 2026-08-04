@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"clef/internal/authcrypto"
-	"clef/internal/crypto"
-	"clef/internal/errors"
-	"clef/schemas"
+	"casier/internal/authcrypto"
+	"casier/internal/crypto"
+	"casier/internal/errors"
+	"casier/schemas"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
@@ -212,7 +212,7 @@ func (service *Service) authenticateRequest(ctx context.Context, authorization s
 
 func (service *Service) Authenticate(ctx context.Context, authorization string) (string, any, error) {
 	token := normalizeBearer(authorization)
-	if strings.HasPrefix(token, "clef_") {
+	if strings.HasPrefix(token, "casier_") {
 		return service.authenticateApiToken(ctx, token)
 	}
 	return service.authenticateRequest(ctx, authorization)

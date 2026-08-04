@@ -1,4 +1,4 @@
-module clef
+module casier
 
 go 1.25.0
 

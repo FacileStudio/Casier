@@ -1,4 +1,4 @@
-# Clef
+# Casier
 
 Self-hosted secrets and environment variable manager for teams. Go API + SvelteKit frontend + PostgreSQL.
 

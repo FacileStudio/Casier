@@ -5,9 +5,9 @@ import (
 	"net"
 	"net/http"
 
-	"clef/internal/authcontext"
-	"clef/internal/errors"
-	"clef/internal/httpjson"
+	"casier/internal/authcontext"
+	"casier/internal/errors"
+	"casier/internal/httpjson"
 )
 
 type Authenticator interface {
@@ -19,7 +19,7 @@ func RequireAuth(authService Authenticator) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 			authorization := request.Header.Get("Authorization")
 			if authorization == "" {
-				if c, err := request.Cookie("clef_session"); err == nil && c.Value != "" {
+				if c, err := request.Cookie("casier_session"); err == nil && c.Value != "" {
 					authorization = "Bearer " + c.Value
 				}
 			}

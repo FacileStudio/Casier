@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"clef/internal/authcontext"
-	"clef/internal/env"
-	"clef/internal/errors"
-	"clef/internal/httpjson"
+	"casier/internal/authcontext"
+	"casier/internal/env"
+	"casier/internal/errors"
+	"casier/internal/httpjson"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"

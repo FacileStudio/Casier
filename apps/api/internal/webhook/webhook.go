@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"clef/schemas"
+	"casier/schemas"
 
 	"gorm.io/gorm"
 )
@@ -78,7 +78,7 @@ func (d *Dispatcher) send(wh schemas.Webhook, payload []byte) {
 		mac := hmac.New(sha256.New, []byte(wh.Secret))
 		mac.Write(payload)
 		sig := hex.EncodeToString(mac.Sum(nil))
-		req.Header.Set("X-Clef-Signature", "sha256="+sig)
+		req.Header.Set("X-Casier-Signature", "sha256="+sig)
 	}
 
 	resp, err := d.client.Do(req)

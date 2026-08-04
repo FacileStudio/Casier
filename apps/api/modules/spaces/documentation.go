@@ -1,6 +1,6 @@
 package spaces
 
-import documentation "clef/internal/documentation"
+import documentation "casier/internal/documentation"
 
 var Documentation = documentation.Module{
 	Name:        "spaces",

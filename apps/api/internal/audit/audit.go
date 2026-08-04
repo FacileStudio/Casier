@@ -3,7 +3,7 @@ package audit
 import (
 	"context"
 
-	"clef/schemas"
+	"casier/schemas"
 
 	"gorm.io/gorm"
 )

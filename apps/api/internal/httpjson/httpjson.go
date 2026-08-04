@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"clef/internal/errors"
+	"casier/internal/errors"
 )
 
 const maxJSONBodyBytes int64 = 1 << 20

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"clef/internal/errors"
-	"clef/schemas"
+	"casier/internal/errors"
+	"casier/schemas"
 
 	"gorm.io/gorm"
 )

@@ -3,7 +3,7 @@ set -e
 
 DATA_DIR="$(git rev-parse --show-toplevel)/.local/postgres"
 PORT=5433
-DB_NAME=clef
+DB_NAME=casier
 
 if [ -f "$DATA_DIR/postmaster.pid" ]; then
   echo "Postgres already running"

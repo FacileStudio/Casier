@@ -32,7 +32,7 @@
 				<div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
 					<KeyRoundIcon class="size-3.5" />
 				</div>
-				<span class="text-sm font-semibold text-sidebar-foreground">Clef</span>
+				<span class="text-sm font-semibold text-sidebar-foreground">Casier</span>
 			</div>
 
 			<nav class="flex flex-col gap-1">

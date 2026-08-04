@@ -3,9 +3,9 @@ package environments
 import (
 	"net/http"
 
-	"clef/internal/httpjson"
-	"clef/internal/middleware"
-	"clef/modules/auth"
+	"casier/internal/httpjson"
+	"casier/internal/middleware"
+	"casier/modules/auth"
 
 	"github.com/go-chi/chi/v5"
 )

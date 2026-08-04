@@ -1,4 +1,4 @@
-# Clef Roadmap
+# Casier Roadmap
 
 ## v1 — Foundation (current)
 
@@ -13,7 +13,7 @@
 - [x] Role-based access control (owner/admin/member/viewer)
 - [x] SvelteKit dashboard (shadcn-svelte, dark theme)
 - [x] Rust CLI with keyring token storage
-- [x] `clef run` — inject secrets as env vars
+- [x] `casier run` — inject secrets as env vars
 - [x] Docker Compose deployment
 
 ## v2 — Hardening
@@ -25,7 +25,7 @@
 - [x] OIDC callback via cookie instead of query param token
 - [x] Session sliding window (extend on use, max 7 days)
 - [x] Expired session cleanup (background purge)
-- [x] CLI: `clef init` to scaffold `.clef.toml` per project
+- [x] CLI: `casier init` to scaffold `.casier.toml` per project
 
 ## v3 — Team Features
 
@@ -33,9 +33,9 @@
 - [x] Invite links for space membership
 - [x] Per-secret access control (beyond space-level roles)
 - [x] Secret tagging and search
-- [x] Bulk import/export (`.env` file ↔ Clef)
-- [x] CLI: `clef diff` — compare secrets across environments
-- [x] CLI: `clef sync` — push `.env` to Clef or pull from Clef
+- [x] Bulk import/export (`.env` file ↔ Casier)
+- [x] CLI: `casier diff` — compare secrets across environments
+- [x] CLI: `casier sync` — push `.env` to Casier or pull from Casier
 - [ ] Secret rotation automation (scheduled re-generation)
 - [ ] External KMS support (AWS KMS, GCP KMS) for root key
 
@@ -47,6 +47,6 @@
 - [x] Dashboard: activity feed with filterable audit log
 - [x] Dashboard: secret diff view across environments
 - [ ] Nook integration (emit secret change events to the Facile event bus)
-- [ ] Go SDK (`@facile/clef-go`) for runtime secret fetching
-- [ ] TypeScript SDK (`@facile/clef-ts`) for runtime secret fetching
+- [ ] Go SDK (`@facile/casier-go`) for runtime secret fetching
+- [ ] TypeScript SDK (`@facile/casier-ts`) for runtime secret fetching
 - [ ] CI/CD integrations (GitHub Actions, Docker build args)

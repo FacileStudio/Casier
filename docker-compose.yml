@@ -1,23 +1,23 @@
 services:
-  clef-db:
-    container_name: clef-db
+  casier-db:
+    container_name: casier-db
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-clef}
-      POSTGRES_USER: ${POSTGRES_USER:-clef}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clef-internal-db}
+      POSTGRES_DB: ${POSTGRES_DB:-casier}
+      POSTGRES_USER: ${POSTGRES_USER:-casier}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-casier-internal-db}
     volumes:
       - db_data:/var/lib/postgresql/data
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clef}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-casier}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  clef-api:
-    container_name: clef-api
+  casier-api:
+    container_name: casier-api
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -30,22 +30,22 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: dokploy-network
-      traefik.http.routers.clef-api-web.rule: "Host(`clef.facile.studio`) && PathPrefix(`/api`)"
-      traefik.http.routers.clef-api-web.entrypoints: web
-      traefik.http.routers.clef-api-web.middlewares: redirect-to-https@file
-      traefik.http.routers.clef-api-web.service: clef-api-svc
-      traefik.http.routers.clef-api-secure.rule: "Host(`clef.facile.studio`) && PathPrefix(`/api`)"
-      traefik.http.routers.clef-api-secure.entrypoints: websecure
-      traefik.http.routers.clef-api-secure.tls.certresolver: letsencrypt
-      traefik.http.routers.clef-api-secure.middlewares: clef-strip-api
-      traefik.http.routers.clef-api-secure.service: clef-api-svc
-      traefik.http.middlewares.clef-strip-api.stripprefix.prefixes: /api
-      traefik.http.services.clef-api-svc.loadbalancer.server.port: "4000"
+      traefik.http.routers.casier-api-web.rule: "Host(`casier.facile.studio`) && PathPrefix(`/api`)"
+      traefik.http.routers.casier-api-web.entrypoints: web
+      traefik.http.routers.casier-api-web.middlewares: redirect-to-https@file
+      traefik.http.routers.casier-api-web.service: casier-api-svc
+      traefik.http.routers.casier-api-secure.rule: "Host(`casier.facile.studio`) && PathPrefix(`/api`)"
+      traefik.http.routers.casier-api-secure.entrypoints: websecure
+      traefik.http.routers.casier-api-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.casier-api-secure.middlewares: casier-strip-api
+      traefik.http.routers.casier-api-secure.service: casier-api-svc
+      traefik.http.middlewares.casier-strip-api.stripprefix.prefixes: /api
+      traefik.http.services.casier-api-svc.loadbalancer.server.port: "4000"
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-clef}:${POSTGRES_PASSWORD:-clef-internal-db}@clef-db:5432/${POSTGRES_DB:-clef}?sslmode=disable
+      DATABASE_URL: postgres://${POSTGRES_USER:-casier}:${POSTGRES_PASSWORD:-casier-internal-db}@casier-db:5432/${POSTGRES_DB:-casier}?sslmode=disable
       PORT: "4000"
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://clef.facile.studio}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://casier.facile.studio}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
@@ -54,17 +54,17 @@ services:
       OIDC_SUCCESS_URL: ${OIDC_SUCCESS_URL:-}
       SSO_ONLY: ${SSO_ONLY:-false}
     depends_on:
-      clef-db:
+      casier-db:
         condition: service_healthy
 
-  clef-client:
-    container_name: clef-client
+  casier-client:
+    container_name: casier-client
     build:
       context: .
       dockerfile: apps/client/Dockerfile
       network: host
       args:
-        VITE_API_BASE_URL: https://clef.facile.studio/api
+        VITE_API_BASE_URL: https://casier.facile.studio/api
     expose:
       - "80"
     networks:
@@ -73,17 +73,17 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: dokploy-network
-      traefik.http.routers.clef-client-web.rule: "Host(`clef.facile.studio`)"
-      traefik.http.routers.clef-client-web.entrypoints: web
-      traefik.http.routers.clef-client-web.middlewares: redirect-to-https@file
-      traefik.http.routers.clef-client-web.service: clef-client-svc
-      traefik.http.routers.clef-client-secure.rule: "Host(`clef.facile.studio`)"
-      traefik.http.routers.clef-client-secure.entrypoints: websecure
-      traefik.http.routers.clef-client-secure.tls.certresolver: letsencrypt
-      traefik.http.routers.clef-client-secure.service: clef-client-svc
-      traefik.http.services.clef-client-svc.loadbalancer.server.port: "80"
+      traefik.http.routers.casier-client-web.rule: "Host(`casier.facile.studio`)"
+      traefik.http.routers.casier-client-web.entrypoints: web
+      traefik.http.routers.casier-client-web.middlewares: redirect-to-https@file
+      traefik.http.routers.casier-client-web.service: casier-client-svc
+      traefik.http.routers.casier-client-secure.rule: "Host(`casier.facile.studio`)"
+      traefik.http.routers.casier-client-secure.entrypoints: websecure
+      traefik.http.routers.casier-client-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.casier-client-secure.service: casier-client-svc
+      traefik.http.services.casier-client-svc.loadbalancer.server.port: "80"
     depends_on:
-      - clef-api
+      - casier-api
 
 networks:
   dokploy-network:
@@ -91,4 +91,4 @@ networks:
 
 volumes:
   db_data:
-    name: clef_db_data
+    name: casier_db_data

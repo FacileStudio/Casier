@@ -40,4 +40,4 @@ type ResetPasswordRequest struct {
 	Password string `json:"password"`
 }
 
-const SessionCookieName = "clef_session"
+const SessionCookieName = "casier_session"

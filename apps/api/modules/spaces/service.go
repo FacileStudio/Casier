@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"clef/internal/crypto"
-	"clef/internal/errors"
-	"clef/schemas"
+	"casier/internal/crypto"
+	"casier/internal/errors"
+	"casier/schemas"
 
 	"gorm.io/gorm"
 )
@@ -564,7 +564,7 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return nil, errors.Internal("failed to generate token", err)
 	}
-	rawToken := "clef_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
+	rawToken := "casier_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
 	sum := sha256.Sum256([]byte(rawToken))
 	tokenHash := hex.EncodeToString(sum[:])
 

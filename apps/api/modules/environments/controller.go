@@ -4,8 +4,8 @@ import (
 	"context"
 	"strconv"
 
-	"clef/internal/authcontext"
-	"clef/internal/errors"
+	"casier/internal/authcontext"
+	"casier/internal/errors"
 )
 
 type Controller struct {

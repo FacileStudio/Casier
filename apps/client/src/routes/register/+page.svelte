@@ -60,7 +60,7 @@
 				<KeyRoundIcon class="size-5" />
 			</div>
 			<CardTitle class="text-xl">Create account</CardTitle>
-			<CardDescription>Get started with Clef</CardDescription>
+			<CardDescription>Get started with Casier</CardDescription>
 		</CardHeader>
 		<CardContent>
 			{#if oidcEnabled}

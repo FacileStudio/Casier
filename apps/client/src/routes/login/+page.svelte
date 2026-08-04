@@ -50,7 +50,7 @@
 			<div class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
 				<KeyRoundIcon class="size-5" />
 			</div>
-			<CardTitle class="text-xl">Clef</CardTitle>
+			<CardTitle class="text-xl">Casier</CardTitle>
 			<CardDescription>Sign in to manage your secrets</CardDescription>
 		</CardHeader>
 		<CardContent>

@@ -14,9 +14,9 @@ class AuthState {
 		this.userId = userId;
 		this.email = email;
 		if (browser) {
-			sessionStorage.setItem('clef_token', token);
-			sessionStorage.setItem('clef_user_id', userId);
-			sessionStorage.setItem('clef_email', email);
+			sessionStorage.setItem('casier_token', token);
+			sessionStorage.setItem('casier_user_id', userId);
+			sessionStorage.setItem('casier_email', email);
 		}
 	}
 
@@ -25,17 +25,17 @@ class AuthState {
 		this.userId = null;
 		this.email = null;
 		if (browser) {
-			sessionStorage.removeItem('clef_token');
-			sessionStorage.removeItem('clef_user_id');
-			sessionStorage.removeItem('clef_email');
+			sessionStorage.removeItem('casier_token');
+			sessionStorage.removeItem('casier_user_id');
+			sessionStorage.removeItem('casier_email');
 		}
 	}
 
 	restore() {
 		if (browser) {
-			this.token = sessionStorage.getItem('clef_token');
-			this.userId = sessionStorage.getItem('clef_user_id');
-			this.email = sessionStorage.getItem('clef_email');
+			this.token = sessionStorage.getItem('casier_token');
+			this.userId = sessionStorage.getItem('casier_user_id');
+			this.email = sessionStorage.getItem('casier_email');
 		}
 	}
 }
