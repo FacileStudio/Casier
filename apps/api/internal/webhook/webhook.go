@@ -19,7 +19,7 @@ import (
 
 type Event struct {
 	Type        string `json:"type"`
-	SpaceID     int64  `json:"space_id"`
+	ProjectID   int64  `json:"project_id"`
 	Environment string `json:"environment"`
 	Key         string `json:"key"`
 	Version     int    `json:"version,omitempty"`
@@ -45,7 +45,7 @@ func (d *Dispatcher) Fire(ctx context.Context, event Event) {
 	go func() {
 		var webhooks []schemas.Webhook
 		err := d.orm.WithContext(ctx).
-			Where("space_id = ? AND active = ?", event.SpaceID, true).
+			Where("project_id = ? AND active = ?", event.ProjectID, true).
 			Find(&webhooks).Error
 		if err != nil {
 			d.logger.Error("failed to load webhooks", slog.Any("error", err))

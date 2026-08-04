@@ -24,10 +24,10 @@ func New(code, message string, cause error) *Error {
 }
 
 func Invalid(message string) *Error      { return New("invalid_argument", message, nil) }
-func Unauthorized(message string) *Error  { return New("unauthenticated", message, nil) }
-func Forbidden(message string) *Error     { return New("permission_denied", message, nil) }
-func NotFound(message string) *Error      { return New("not_found", message, nil) }
-func Conflict(message string) *Error      { return New("already_exists", message, nil) }
+func Unauthorized(message string) *Error { return New("unauthenticated", message, nil) }
+func Forbidden(message string) *Error    { return New("permission_denied", message, nil) }
+func NotFound(message string) *Error     { return New("not_found", message, nil) }
+func Conflict(message string) *Error     { return New("already_exists", message, nil) }
 func Internal(message string, cause error) *Error {
 	return New("internal", message, cause)
 }

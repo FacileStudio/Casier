@@ -11,9 +11,9 @@ import (
 )
 
 type visitor struct {
-	tokens    float64
-	lastSeen  time.Time
-	maxTokens float64
+	tokens     float64
+	lastSeen   time.Time
+	maxTokens  float64
 	refillRate float64
 }
 

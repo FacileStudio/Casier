@@ -6,11 +6,8 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import { toast } from 'svelte-sonner';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
-	import UsersIcon from '@lucide/svelte/icons/users';
 
-	let { spaceSlug, canAdmin }: { spaceSlug: string; canAdmin: boolean } = $props();
+	let { projectSlug, canAdmin }: { projectSlug: string; canAdmin: boolean } = $props();
 
 	let members = $state<Member[]>([]);
 	let loading = $state(true);
@@ -27,7 +24,7 @@
 
 	const roleTones = {
 		owner: 'accent',
-		admin: 'success',
+		admin: 'neutral',
 		member: 'neutral',
 		viewer: 'neutral',
 	} as const;
@@ -36,7 +33,7 @@
 		loading = true;
 		loadError = '';
 		try {
-			const res = await api.get<MembersResponse>(`/spaces/${spaceSlug}/members`, auth.token);
+			const res = await api.get<MembersResponse>(`/projects/${projectSlug}/members`, auth.token);
 			members = res.members ?? [];
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load members';
@@ -57,7 +54,7 @@
 		adding = true;
 		try {
 			await api.post(
-				`/spaces/${spaceSlug}/members`,
+				`/projects/${projectSlug}/members`,
 				{ email: newEmail.trim(), role: newRole },
 				auth.token
 			);
@@ -80,7 +77,7 @@
 		if (!removeTarget) return;
 		removing = true;
 		try {
-			await api.del(`/spaces/${spaceSlug}/members/${removeTarget.id}`, auth.token);
+			await api.del(`/projects/${projectSlug}/members/${removeTarget.id}`, auth.token);
 			members = members.filter((m) => m.id !== removeTarget!.id);
 			toast.success(`${removeTarget.email} removed`);
 			removeOpen = false;
@@ -93,7 +90,7 @@
 	}
 
 	$effect(() => {
-		spaceSlug;
+		projectSlug;
 		loadMembers();
 	});
 </script>
@@ -101,15 +98,15 @@
 <section class="flex flex-col gap-4" aria-label="Members">
 	{#if canAdmin}
 		<div class="flex justify-end">
-			<Button onclick={openAdd}>
-				<UserPlusIcon class="size-4" aria-hidden="true" />
+			<Button class="h-9" onclick={openAdd}>
+				<iconify-icon icon="solar:add-circle-linear" width="16" aria-hidden="true"></iconify-icon>
 				Add member
 			</Button>
 		</div>
 	{/if}
 
 	{#if loading}
-		<div class="flex flex-col gap-2 rounded-fc-md bg-fc-component px-6 py-5">
+		<div class="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
 			{#each Array(3) as _, i (i)}
 				<Skeleton class="h-12 w-full" />
 			{/each}
@@ -117,36 +114,36 @@
 	{:else if loadError}
 		<ErrorState message={loadError} onretry={loadMembers} />
 	{:else if members.length === 0}
-		<EmptyState title="No members" description="Invite teammates to share this space's secrets.">
+		<EmptyState title="No members" description="Invite teammates to share this project's secrets.">
 			{#snippet icon()}
-				<UsersIcon class="size-10" aria-hidden="true" />
+				<iconify-icon icon="solar:users-group-rounded-linear" width="32" aria-hidden="true"></iconify-icon>
 			{/snippet}
 		</EmptyState>
 	{:else}
-		<ul class="flex flex-col divide-y divide-fc-fg/7 rounded-fc-md bg-fc-component px-4 py-2">
+		<ul class="flex flex-col divide-y divide-border rounded-lg border border-border bg-card px-4 py-2">
 			{#each members as member (member.id)}
 				<li class="flex items-center justify-between gap-3 py-3">
 					<div class="flex min-w-0 items-center gap-3">
 						<Avatar name={member.email} size="sm" />
 						<div class="min-w-0">
-							<p class="truncate text-fc-md text-fc-fg">
+							<p class="truncate text-sm text-foreground">
 								{member.email}
 								{#if member.email === auth.email}
-									<span class="text-fc-xs text-fc-fg-muted">(you)</span>
+									<span class="text-xs text-muted-foreground">(you)</span>
 								{/if}
 							</p>
 						</div>
 					</div>
 					<div class="flex shrink-0 items-center gap-2">
-						<Badge tone={roleTones[member.role] ?? 'neutral'}>{member.role}</Badge>
+						<Badge tone={roleTones[member.role] ?? 'neutral'} class="text-xs">{member.role}</Badge>
 						{#if canAdmin && member.email !== auth.email && member.role !== 'owner'}
 							<button
 								type="button"
-								class="inline-flex h-8 w-8 items-center justify-center rounded-fc-sm text-fc-fg-muted transition-colors hover:bg-fc-surface hover:text-fc-danger focus-visible:outline-2 focus-visible:outline-fc-accent"
+								class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
 								aria-label={`Remove ${member.email}`}
 								onclick={() => openRemove(member)}
 							>
-								<Trash2Icon class="size-4" aria-hidden="true" />
+								<iconify-icon icon="solar:trash-bin-2-linear" width="16" aria-hidden="true"></iconify-icon>
 							</button>
 						{/if}
 					</div>
@@ -175,10 +172,10 @@
 			</Select>
 		</Field>
 		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" disabled={adding} onclick={() => (addOpen = false)}>
+			<Button type="button" variant="ghost" class="h-9" disabled={adding} onclick={() => (addOpen = false)}>
 				Cancel
 			</Button>
-			<Button type="submit" disabled={adding || !newEmail.trim()}>
+			<Button type="submit" class="h-9" disabled={adding || !newEmail.trim()}>
 				{#if adding}<Spinner size="sm" />{/if}
 				{adding ? 'Adding…' : 'Add member'}
 			</Button>
@@ -189,7 +186,7 @@
 <ConfirmDialog
 	bind:open={removeOpen}
 	title="Remove member"
-	message={`This removes ${removeTarget?.email} from the space. They will immediately lose access to all of its secrets.`}
+	message={`This removes ${removeTarget?.email} from the project. They immediately lose access to every secret in every environment, and any session they have open stops working.`}
 	confirmLabel="Remove member"
 	loading={removing}
 	onconfirm={handleRemove}

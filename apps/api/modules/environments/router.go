@@ -11,7 +11,7 @@ import (
 )
 
 func RegisterRoutes(router chi.Router, service *Service, authService *auth.Service) {
-	router.Route("/spaces/{slug}/environments", func(router chi.Router) {
+	router.Route("/projects/{slug}/environments", func(router chi.Router) {
 		router.Use(middleware.RequireAuth(authService))
 
 		router.Get("/", func(w http.ResponseWriter, request *http.Request) {

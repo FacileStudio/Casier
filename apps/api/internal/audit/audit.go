@@ -16,10 +16,10 @@ func NewLogger(orm *gorm.DB) *Logger {
 	return &Logger{orm: orm}
 }
 
-func (l *Logger) Log(ctx context.Context, spaceID int64, userID, email, action, resource, detail, clientIP string) {
+func (l *Logger) Log(ctx context.Context, projectID int64, userID, email, action, resource, detail, clientIP string) {
 	go func() {
 		l.orm.Create(&schemas.AuditLog{
-			SpaceID:   spaceID,
+			ProjectID: projectID,
 			UserID:    userID,
 			UserEmail: email,
 			Action:    action,

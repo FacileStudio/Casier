@@ -2,7 +2,7 @@ package schemas
 
 import "time"
 
-type Space struct {
+type Project struct {
 	ID               int64     `gorm:"column:id;primaryKey"`
 	Name             string    `gorm:"column:name"`
 	Slug             string    `gorm:"column:slug;uniqueIndex"`
@@ -13,4 +13,4 @@ type Space struct {
 	UpdatedAt        time.Time `gorm:"column:updated_at;autoUpdateTime"`
 }
 
-func (Space) TableName() string { return "spaces" }
+func (Project) TableName() string { return "projects" }

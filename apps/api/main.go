@@ -21,8 +21,8 @@ import (
 	"casier/internal/webhook"
 	"casier/modules/auth"
 	"casier/modules/environments"
+	"casier/modules/projects"
 	"casier/modules/secrets"
-	"casier/modules/spaces"
 	"casier/schemas"
 
 	"github.com/FacileStudio/Journal/sdk/journal"
@@ -79,14 +79,14 @@ func main() {
 	authService.StartSessionCleanup(shutdownCtx)
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
 	auditLogger := audit.NewLogger(db)
-	spacesService := spaces.NewService(db, encKey, auditLogger)
-	environmentsService := environments.NewService(db, spacesService)
-	secretsService := secrets.NewService(db, appLogger, spacesService, environmentsService, spacesService, webhookDispatcher, auditLogger)
+	projectsService := projects.NewService(db, encKey, auditLogger)
+	environmentsService := environments.NewService(db, projectsService)
+	secretsService := secrets.NewService(db, appLogger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
 
 	docs := documentation.Response{
 		Modules: []documentation.Module{
 			auth.Documentation,
-			spaces.Documentation,
+			projects.Documentation,
 			environments.Documentation,
 			secrets.Documentation,
 		},
@@ -131,7 +131,7 @@ func main() {
 	})
 
 	auth.RegisterRoutes(router, authService, appEnv)
-	spaces.RegisterRoutes(router, spacesService, authService)
+	projects.RegisterRoutes(router, projectsService, authService)
 	environments.RegisterRoutes(router, environmentsService, authService)
 	secrets.RegisterRoutes(router, secretsService, authService)
 

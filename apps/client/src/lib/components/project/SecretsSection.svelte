@@ -16,27 +16,16 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import { toast } from 'svelte-sonner';
-	import CopyIcon from '@lucide/svelte/icons/copy';
-	import DownloadIcon from '@lucide/svelte/icons/download';
-	import EyeIcon from '@lucide/svelte/icons/eye';
-	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
-	import HistoryIcon from '@lucide/svelte/icons/history';
-	import KeyRoundIcon from '@lucide/svelte/icons/key-round';
-	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import PlusIcon from '@lucide/svelte/icons/plus';
-	import SearchIcon from '@lucide/svelte/icons/search';
-	import Trash2Icon from '@lucide/svelte/icons/trash-2';
-	import UploadIcon from '@lucide/svelte/icons/upload';
 
 	let {
-		spaceSlug,
+		projectSlug,
 		environment,
 		canWrite,
-	}: { spaceSlug: string; environment: Environment; canWrite: boolean } = $props();
+	}: { projectSlug: string; environment: Environment; canWrite: boolean } = $props();
 
 	const MASK = '••••••••';
 	const actionButton =
-		'inline-flex h-8 w-8 items-center justify-center rounded-fc-sm text-fc-fg-muted transition-colors hover:bg-fc-surface hover:text-fc-fg focus-visible:outline-2 focus-visible:outline-fc-accent';
+		'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
 
 	let secrets = $state<Secret[]>([]);
 	let loading = $state(true);
@@ -72,7 +61,7 @@
 	let exporting = $state(false);
 
 	let basePath = $derived(
-		`/spaces/${spaceSlug}/environments/${environment.slug}/secrets`
+		`/projects/${projectSlug}/environments/${environment.slug}/secrets`
 	);
 
 	let filtered = $derived(
@@ -91,7 +80,7 @@
 	let newKeyError = $derived.by(() => {
 		const key = newKey.trim();
 		if (!key) return undefined;
-		if (/[\s=]/.test(key)) return 'Keys cannot contain spaces or "="';
+		if (/[\s=]/.test(key)) return 'Keys cannot contain whitespace or "="';
 		if (secrets.some((s) => s.key === key)) return 'This key already exists in this environment';
 		return undefined;
 	});
@@ -272,7 +261,7 @@
 			const url = URL.createObjectURL(blob);
 			const link = document.createElement('a');
 			link.href = url;
-			link.download = `${spaceSlug}.${environment.slug}.env`;
+			link.download = `${projectSlug}.${environment.slug}.env`;
 			link.click();
 			URL.revokeObjectURL(url);
 			toast.success(`Exported ${environment.name} as .env`);
@@ -292,10 +281,12 @@
 <section class="flex flex-col gap-4" aria-label="Secrets">
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="relative min-w-0 flex-1 sm:max-w-xs">
-			<SearchIcon
-				class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-fc-fg-muted"
+			<iconify-icon
+				icon="solar:magnifer-linear"
+				width="16"
+				class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
 				aria-hidden="true"
-			/>
+			></iconify-icon>
 			<Input
 				type="search"
 				placeholder="Filter by key or tag"
@@ -305,17 +296,22 @@
 			/>
 		</div>
 		<div class="ml-auto flex items-center gap-2">
-			<Button variant="outline" disabled={exporting || secrets.length === 0} onclick={handleExport}>
-				<DownloadIcon class="size-4" aria-hidden="true" />
+			<Button
+				variant="outline"
+				class="h-9"
+				disabled={exporting || secrets.length === 0}
+				onclick={handleExport}
+			>
+				<iconify-icon icon="solar:export-linear" width="16" aria-hidden="true"></iconify-icon>
 				Export
 			</Button>
 			{#if canWrite}
-				<Button variant="outline" onclick={() => (importOpen = true)}>
-					<UploadIcon class="size-4" aria-hidden="true" />
+				<Button variant="outline" class="h-9" onclick={() => (importOpen = true)}>
+					<iconify-icon icon="solar:import-linear" width="16" aria-hidden="true"></iconify-icon>
 					Import
 				</Button>
-				<Button onclick={openAdd}>
-					<PlusIcon class="size-4" aria-hidden="true" />
+				<Button class="h-9" onclick={openAdd}>
+					<iconify-icon icon="solar:add-circle-linear" width="16" aria-hidden="true"></iconify-icon>
 					Add secret
 				</Button>
 			{/if}
@@ -323,7 +319,7 @@
 	</div>
 
 	{#if loading}
-		<div class="flex flex-col gap-2 rounded-fc-md bg-fc-component px-6 py-5">
+		<div class="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
 			{#each Array(5) as _, i (i)}
 				<Skeleton class="h-9 w-full" />
 			{/each}
@@ -333,14 +329,14 @@
 	{:else if secrets.length === 0}
 		<EmptyState
 			title="No secrets in {environment.name}"
-			description="Secrets are encrypted at rest and only visible to members of this space."
+			description="Secrets are encrypted at rest and only visible to members of this project."
 		>
 			{#snippet icon()}
-				<KeyRoundIcon class="size-10" aria-hidden="true" />
+				<iconify-icon icon="solar:key-linear" width="32" aria-hidden="true"></iconify-icon>
 			{/snippet}
 			{#if canWrite}
-				<Button onclick={openAdd}>
-					<PlusIcon class="size-4" aria-hidden="true" />
+				<Button class="h-9" onclick={openAdd}>
+					<iconify-icon icon="solar:add-circle-linear" width="16" aria-hidden="true"></iconify-icon>
 					Add your first secret
 				</Button>
 			{/if}
@@ -363,23 +359,28 @@
 					<tr>
 						<td>
 							<div class="flex flex-wrap items-center gap-1.5">
-								<code class="font-mono text-fc-sm text-fc-fg">{secret.key}</code>
+								<code class="rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">{secret.key}</code>
 								{#each secret.tags ?? [] as tag (tag)}
-									<Badge tone="neutral">{tag}</Badge>
+									<Badge tone="neutral" class="text-xs">{tag}</Badge>
 								{/each}
 							</div>
 						</td>
 						<td>
 							{#if revealed.has(secret.id)}
-								<code class="block max-w-64 truncate font-mono text-fc-sm text-fc-fg" title={secret.value}>
+								<code
+									class="block max-w-64 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground"
+									title={secret.value}
+								>
 									{secret.value}
 								</code>
 							{:else}
-								<span class="select-none text-fc-fg-muted" aria-label="Hidden value">{MASK}</span>
+								<span class="select-none font-mono text-sm text-muted-foreground" aria-label="Hidden value">
+									{MASK}
+								</span>
 							{/if}
 						</td>
-						<td class="whitespace-nowrap text-fc-fg-muted">v{secret.version}</td>
-						<td class="whitespace-nowrap text-fc-fg-muted">{formatDate(secret.updated_at)}</td>
+						<td class="whitespace-nowrap text-muted-foreground">v{secret.version}</td>
+						<td class="whitespace-nowrap text-muted-foreground">{formatDate(secret.updated_at)}</td>
 						<td>
 							<div class="flex items-center justify-end gap-0.5">
 								<button
@@ -389,9 +390,9 @@
 									onclick={() => toggleReveal(secret.id)}
 								>
 									{#if revealed.has(secret.id)}
-										<EyeOffIcon class="size-4" aria-hidden="true" />
+										<iconify-icon icon="solar:eye-closed-linear" width="16" aria-hidden="true"></iconify-icon>
 									{:else}
-										<EyeIcon class="size-4" aria-hidden="true" />
+										<iconify-icon icon="solar:eye-linear" width="16" aria-hidden="true"></iconify-icon>
 									{/if}
 								</button>
 								<button
@@ -400,7 +401,7 @@
 									aria-label={`Copy ${secret.key}`}
 									onclick={() => copyValue(secret)}
 								>
-									<CopyIcon class="size-4" aria-hidden="true" />
+									<iconify-icon icon="solar:copy-linear" width="16" aria-hidden="true"></iconify-icon>
 								</button>
 								<button
 									type="button"
@@ -408,7 +409,7 @@
 									aria-label={`History of ${secret.key}`}
 									onclick={() => openHistory(secret)}
 								>
-									<HistoryIcon class="size-4" aria-hidden="true" />
+									<iconify-icon icon="solar:history-linear" width="16" aria-hidden="true"></iconify-icon>
 								</button>
 								{#if canWrite}
 									<button
@@ -417,15 +418,15 @@
 										aria-label={`Edit ${secret.key}`}
 										onclick={() => openEdit(secret)}
 									>
-										<PencilIcon class="size-4" aria-hidden="true" />
+										<iconify-icon icon="solar:pen-new-square-linear" width="16" aria-hidden="true"></iconify-icon>
 									</button>
 									<button
 										type="button"
-										class="{actionButton} hover:text-fc-danger"
+										class={actionButton}
 										aria-label={`Delete ${secret.key}`}
 										onclick={() => openDelete(secret)}
 									>
-										<Trash2Icon class="size-4" aria-hidden="true" />
+										<iconify-icon icon="solar:trash-bin-2-linear" width="16" aria-hidden="true"></iconify-icon>
 									</button>
 								{/if}
 							</div>
@@ -449,10 +450,10 @@
 			<Input placeholder="backend, database" bind:value={newTags} disabled={adding} />
 		</Field>
 		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" disabled={adding} onclick={() => (addOpen = false)}>
+			<Button type="button" variant="ghost" class="h-9" disabled={adding} onclick={() => (addOpen = false)}>
 				Cancel
 			</Button>
-			<Button type="submit" disabled={adding || !newKey.trim() || !!newKeyError}>
+			<Button type="submit" class="h-9" disabled={adding || !newKey.trim() || !!newKeyError}>
 				{#if adding}<Spinner size="sm" />{/if}
 				{adding ? 'Adding…' : 'Add secret'}
 			</Button>
@@ -466,10 +467,10 @@
 			<Textarea rows={4} bind:value={editValue} disabled={saving} class="font-mono" />
 		</Field>
 		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" disabled={saving} onclick={() => (editOpen = false)}>
+			<Button type="button" variant="ghost" class="h-9" disabled={saving} onclick={() => (editOpen = false)}>
 				Cancel
 			</Button>
-			<Button type="submit" disabled={saving}>
+			<Button type="submit" class="h-9" disabled={saving}>
 				{#if saving}<Spinner size="sm" />{/if}
 				{saving ? 'Saving…' : 'Save'}
 			</Button>
@@ -483,21 +484,21 @@
 			<Spinner size="md" />
 		</div>
 	{:else if versionsError}
-		<p class="py-4 text-center text-fc-md text-fc-danger">{versionsError}</p>
+		<p class="py-4 text-center text-sm text-destructive">{versionsError}</p>
 	{:else if versions.length === 0}
-		<p class="py-4 text-center text-fc-md text-fc-fg-muted">No previous versions.</p>
+		<p class="py-4 text-center text-sm text-muted-foreground">No previous versions.</p>
 	{:else}
 		<ul class="flex max-h-72 flex-col gap-1 overflow-y-auto">
 			{#each versions as version (version.version)}
-				<li class="flex items-center justify-between gap-3 rounded-fc-sm px-2 py-2 hover:bg-fc-surface">
+				<li class="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted">
 					<div class="min-w-0">
-						<p class="text-fc-md text-fc-fg">
+						<p class="flex items-center gap-2 text-sm text-foreground">
 							v{version.version}
 							{#if historyTarget && version.version === historyTarget.version}
-								<Badge tone="accent">current</Badge>
+								<Badge tone="accent" class="text-xs">current</Badge>
 							{/if}
 						</p>
-						<p class="truncate text-fc-xs text-fc-fg-muted">
+						<p class="truncate text-xs text-muted-foreground">
 							{version.changed_by || 'unknown'} — {formatDateTime(version.created_at)}
 						</p>
 					</div>
@@ -505,6 +506,7 @@
 						<Button
 							variant="outline"
 							size="sm"
+							class="h-9"
 							disabled={rollingBack !== null}
 							onclick={() => handleRollback(version.version)}
 						>
@@ -529,10 +531,10 @@
 			/>
 		</Field>
 		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" disabled={importing} onclick={() => (importOpen = false)}>
+			<Button type="button" variant="ghost" class="h-9" disabled={importing} onclick={() => (importOpen = false)}>
 				Cancel
 			</Button>
-			<Button type="submit" disabled={importing || !importContent.trim()}>
+			<Button type="submit" class="h-9" disabled={importing || !importContent.trim()}>
 				{#if importing}<Spinner size="sm" />{/if}
 				{importing ? 'Importing…' : 'Import'}
 			</Button>
@@ -543,7 +545,7 @@
 <ConfirmDialog
 	bind:open={deleteOpen}
 	title="Delete secret"
-	message={`This permanently deletes ${deleteTarget?.key} from the ${environment.name} environment. This cannot be undone.`}
+	message={`This permanently deletes ${deleteTarget?.key} from the ${environment.name} environment, along with its version history. Anything reading it will break. This cannot be undone.`}
 	confirmLabel="Delete secret"
 	loading={deleting}
 	onconfirm={handleDelete}

@@ -16,31 +16,31 @@ func newController(service *Service) *Controller {
 	return &Controller{service: service}
 }
 
-func (controller *Controller) list(ctx context.Context, spaceSlug string) (*ListResponse, error) {
+func (controller *Controller) list(ctx context.Context, projectSlug string) (*ListResponse, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	spaceID, err := controller.service.spaceResolver.ResolveSpaceID(ctx, spaceSlug, userID)
+	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	envs, err := controller.service.listEnvironments(ctx, spaceID)
+	envs, err := controller.service.listEnvironments(ctx, projectID)
 	if err != nil {
 		return nil, err
 	}
 	return &ListResponse{Environments: envs}, nil
 }
 
-func (controller *Controller) create(ctx context.Context, spaceSlug string, req *CreateRequest) (*EnvironmentResponse, error) {
+func (controller *Controller) create(ctx context.Context, projectSlug string, req *CreateRequest) (*EnvironmentResponse, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	spaceID, err := controller.service.spaceResolver.ResolveSpaceID(ctx, spaceSlug, userID, "owner", "admin")
+	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin")
 	if err != nil {
 		return nil, err
 	}
@@ -49,16 +49,16 @@ func (controller *Controller) create(ctx context.Context, spaceSlug string, req 
 		return nil, errors.Invalid("name is required")
 	}
 
-	return controller.service.createEnvironment(ctx, spaceID, req.Name)
+	return controller.service.createEnvironment(ctx, projectID, req.Name)
 }
 
-func (controller *Controller) update(ctx context.Context, spaceSlug, envSlug string, req *UpdateRequest) (*EnvironmentResponse, error) {
+func (controller *Controller) update(ctx context.Context, projectSlug, envSlug string, req *UpdateRequest) (*EnvironmentResponse, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	spaceID, err := controller.service.spaceResolver.ResolveSpaceID(ctx, spaceSlug, userID, "owner", "admin")
+	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin")
 	if err != nil {
 		return nil, err
 	}
@@ -67,21 +67,21 @@ func (controller *Controller) update(ctx context.Context, spaceSlug, envSlug str
 		return nil, errors.Invalid("name is required")
 	}
 
-	return controller.service.updateEnvironment(ctx, spaceID, envSlug, req.Name)
+	return controller.service.updateEnvironment(ctx, projectID, envSlug, req.Name)
 }
 
-func (controller *Controller) delete(ctx context.Context, spaceSlug, envSlug string) error {
+func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug string) error {
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return err
 	}
 
-	spaceID, err := controller.service.spaceResolver.ResolveSpaceID(ctx, spaceSlug, userID, "owner", "admin")
+	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin")
 	if err != nil {
 		return err
 	}
 
-	return controller.service.deleteEnvironment(ctx, spaceID, envSlug)
+	return controller.service.deleteEnvironment(ctx, projectID, envSlug)
 }
 
 func extractUserID(ctx context.Context) (int64, error) {

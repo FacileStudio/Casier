@@ -14,18 +14,18 @@
 	} = $props();
 </script>
 
-<div class="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">
+<div class="rounded-lg border border-dashed border-border p-10 text-center">
 	{#if icon}
-		<div class="mb-1 text-fc-fg-muted opacity-60">
+		<div class="mb-3 flex justify-center text-muted-foreground">
 			{@render icon()}
 		</div>
 	{/if}
-	<p class="text-fc-lg font-semibold text-fc-fg">{title}</p>
+	<p class="text-base font-semibold text-foreground">{title}</p>
 	{#if description}
-		<p class="max-w-sm text-fc-md text-fc-fg-muted">{description}</p>
+		<p class="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
 	{/if}
 	{#if children}
-		<div class="pt-3">
+		<div class="mt-5 flex justify-center">
 			{@render children()}
 		</div>
 	{/if}

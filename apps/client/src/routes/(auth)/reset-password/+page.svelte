@@ -1,10 +1,13 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { api } from '$lib/backend';
 	import { toast } from 'svelte-sonner';
-	import { Alert, Button, Field, Input, Spinner } from '@facile/lib';
 
-	let token = $state('');
+	const inputClass =
+		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+
+	let token = $state(page.url.searchParams.get('token') ?? '');
 	let password = $state('');
 	let confirmPassword = $state('');
 	let error = $state('');
@@ -35,62 +38,80 @@
 </script>
 
 <svelte:head>
-	<title>Casier — Reset password</title>
+	<title>Set a new password — Casier</title>
 </svelte:head>
 
-<div class="flex flex-col gap-5">
-	<div class="flex flex-col gap-1 text-center">
-		<h1 class="text-fc-xl font-semibold text-fc-fg">Set new password</h1>
-		<p class="text-fc-md text-fc-fg-muted">Enter your reset token and a new password</p>
+<div class="mb-8">
+	<h1 class="font-heading text-2xl font-bold tracking-tight text-foreground">Set a new password</h1>
+	<p class="mt-1.5 text-sm text-muted-foreground">
+		Enter your reset token and choose a new password.
+	</p>
+</div>
+
+<form onsubmit={handleSubmit} class="space-y-4">
+	<div class="space-y-1.5">
+		<label for="token" class="text-sm font-medium leading-none">Reset token</label>
+		<input
+			id="token"
+			name="token"
+			type="text"
+			bind:value={token}
+			placeholder="Paste your reset token"
+			required
+			autocomplete="off"
+			class={inputClass}
+		/>
 	</div>
 
-	<form onsubmit={handleSubmit} class="flex flex-col gap-4">
-		{#if error}
-			<Alert tone="danger">{error}</Alert>
+	<div class="space-y-1.5">
+		<label for="password" class="text-sm font-medium leading-none">New password</label>
+		<input
+			id="password"
+			name="password"
+			type="password"
+			bind:value={password}
+			placeholder="••••••••"
+			required
+			minlength={8}
+			autocomplete="new-password"
+			class={inputClass}
+		/>
+		<p class="text-xs text-muted-foreground">At least 8 characters.</p>
+	</div>
+
+	<div class="space-y-1.5">
+		<label for="confirm-password" class="text-sm font-medium leading-none">Confirm password</label>
+		<input
+			id="confirm-password"
+			name="confirm-password"
+			type="password"
+			bind:value={confirmPassword}
+			placeholder="••••••••"
+			required
+			minlength={8}
+			autocomplete="new-password"
+			class={inputClass}
+		/>
+		{#if passwordMismatch}
+			<p class="text-sm text-destructive">Passwords do not match</p>
 		{/if}
+	</div>
 
-		<Field label="Reset token">
-			<Input
-				type="text"
-				name="token"
-				placeholder="Paste your reset token"
-				bind:value={token}
-				required
-				autocomplete="off"
-			/>
-		</Field>
+	{#if error}
+		<p class="text-sm text-destructive">{error}</p>
+	{/if}
 
-		<Field label="New password" helper="At least 8 characters">
-			<Input
-				type="password"
-				name="password"
-				placeholder="Password"
-				bind:value={password}
-				required
-				minlength={8}
-				autocomplete="new-password"
-			/>
-		</Field>
+	<button
+		type="submit"
+		disabled={loading || passwordMismatch}
+		class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+	>
+		{loading ? 'Resetting…' : 'Reset password'}
+	</button>
+</form>
 
-		<Field label="Confirm password" error={passwordMismatch ? 'Passwords do not match' : undefined}>
-			<Input
-				type="password"
-				name="confirm"
-				placeholder="Confirm password"
-				bind:value={confirmPassword}
-				required
-				minlength={8}
-				autocomplete="new-password"
-			/>
-		</Field>
-
-		<Button type="submit" class="w-full" disabled={loading || passwordMismatch}>
-			{#if loading}<Spinner size="sm" />{/if}
-			{loading ? 'Resetting…' : 'Reset password'}
-		</Button>
-
-		<p class="text-center text-fc-sm text-fc-fg-muted">
-			<a href="/login" class="text-fc-accent hover:underline">Back to login</a>
-		</p>
-	</form>
-</div>
+<p class="mt-6 text-center text-sm text-muted-foreground">
+	<a href="/login" class="underline underline-offset-2 transition-colors hover:text-foreground">
+		Back to log in
+	</a>
+</p>

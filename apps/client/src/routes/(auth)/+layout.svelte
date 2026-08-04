@@ -1,23 +1,44 @@
 <script lang="ts">
+	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
 	import Logo from '$lib/components/Logo.svelte';
 
-	let { children } = $props();
+	let { children }: { children?: Snippet } = $props();
 
 	$effect(() => {
 		if (auth.isAuthenticated) {
-			goto('/spaces', { replaceState: true });
+			goto('/projects', { replaceState: true });
 		}
 	});
 </script>
 
-<div class="flex min-h-dvh flex-col items-center justify-center gap-6 bg-fc-page px-4 py-10">
-	<a href="/login" class="rounded-fc-sm focus-visible:outline-2 focus-visible:outline-fc-accent">
-		<Logo size={32} wordmark />
-	</a>
-	<div class="w-full max-w-sm rounded-fc-md border border-fc-fg/7 bg-fc-component p-6 sm:p-8">
-		{@render children?.()}
+<div class="flex min-h-dvh">
+	<div class="hidden flex-col bg-foreground px-12 py-10 text-background lg:flex lg:w-1/2">
+		<a href="/" class="mb-auto flex items-center gap-3 text-xl">
+			<Logo size={28} wordmark />
+		</a>
+
+		<div class="mb-auto">
+			<h2 class="font-heading text-4xl font-bold leading-tight tracking-tight">
+				Your secrets.<br />Your server.
+			</h2>
+			<p class="mt-4 max-w-xs text-sm leading-relaxed text-background/50">
+				Self-hosted secrets and environment management for teams.
+			</p>
+		</div>
+
+		<p class="text-xs text-background/30">
+			&copy; {new Date().getFullYear()} Casier by Facile.
+		</p>
 	</div>
-	<p class="text-fc-sm text-fc-fg-muted">Self-hosted secrets manager by Facile Studio</p>
+
+	<div class="flex w-full flex-col items-center justify-center bg-background px-8 py-12 lg:w-1/2">
+		<div class="w-full max-w-sm">
+			<a href="/" class="mb-8 flex items-center gap-3 text-xl lg:hidden">
+				<Logo size={28} wordmark />
+			</a>
+			{@render children?.()}
+		</div>
+	</div>
 </div>

@@ -1,7 +1,9 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { api } from '$lib/backend';
-	import { Alert, Button, Field, Input, Spinner } from '@facile/lib';
+	import { Alert } from '@facile/lib';
+
+	const inputClass =
+		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 
 	let email = $state('');
 	let error = $state('');
@@ -25,51 +27,60 @@
 </script>
 
 <svelte:head>
-	<title>Casier — Forgot password</title>
+	<title>Reset password — Casier</title>
 </svelte:head>
 
-<div class="flex flex-col gap-5">
-	<div class="flex flex-col gap-1 text-center">
-		<h1 class="text-fc-xl font-semibold text-fc-fg">Reset password</h1>
-		<p class="text-fc-md text-fc-fg-muted">Enter your email to receive a reset token</p>
-	</div>
-
-	{#if success}
-		<Alert tone="success">
-			If an account exists with that email, a reset token has been generated. Ask your
-			administrator for the token, then set a new password.
-		</Alert>
-		<div class="flex flex-col gap-3">
-			<Button class="w-full" onclick={() => goto('/reset-password')}>I have a token</Button>
-			<p class="text-center text-fc-sm text-fc-fg-muted">
-				<a href="/login" class="text-fc-accent hover:underline">Back to login</a>
-			</p>
-		</div>
-	{:else}
-		<form onsubmit={handleSubmit} class="flex flex-col gap-4">
-			{#if error}
-				<Alert tone="danger">{error}</Alert>
-			{/if}
-
-			<Field label="Email">
-				<Input
-					type="email"
-					name="email"
-					placeholder="you@example.com"
-					bind:value={email}
-					required
-					autocomplete="email"
-				/>
-			</Field>
-
-			<Button type="submit" class="w-full" disabled={loading}>
-				{#if loading}<Spinner size="sm" />{/if}
-				{loading ? 'Sending…' : 'Send reset token'}
-			</Button>
-
-			<p class="text-center text-fc-sm text-fc-fg-muted">
-				<a href="/login" class="text-fc-accent hover:underline">Back to login</a>
-			</p>
-		</form>
-	{/if}
+<div class="mb-8">
+	<h1 class="font-heading text-2xl font-bold tracking-tight text-foreground">Reset password</h1>
+	<p class="mt-1.5 text-sm text-muted-foreground">
+		We'll generate a reset token for your account.
+	</p>
 </div>
+
+{#if success}
+	<Alert tone="success">
+		If an account exists with that email, a reset token has been generated. Ask your administrator
+		for the token, then set a new password.
+	</Alert>
+
+	<a
+		href="/reset-password"
+		class="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+	>
+		I have a token
+	</a>
+{:else}
+	<form onsubmit={handleSubmit} class="space-y-4">
+		<div class="space-y-1.5">
+			<label for="email" class="text-sm font-medium leading-none">Email</label>
+			<input
+				id="email"
+				name="email"
+				type="email"
+				bind:value={email}
+				placeholder="you@example.com"
+				required
+				autocomplete="email"
+				class={inputClass}
+			/>
+		</div>
+
+		{#if error}
+			<p class="text-sm text-destructive">{error}</p>
+		{/if}
+
+		<button
+			type="submit"
+			disabled={loading}
+			class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+		>
+			{loading ? 'Sending…' : 'Send reset token'}
+		</button>
+	</form>
+{/if}
+
+<p class="mt-6 text-center text-sm text-muted-foreground">
+	<a href="/login" class="underline underline-offset-2 transition-colors hover:text-foreground">
+		Back to log in
+	</a>
+</p>

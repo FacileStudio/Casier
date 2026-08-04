@@ -4,7 +4,7 @@ import "time"
 
 type AuditLog struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
-	SpaceID   int64     `gorm:"column:space_id;index"`
+	ProjectID int64     `gorm:"column:project_id;index"`
 	UserID    string    `gorm:"column:user_id"`
 	UserEmail string    `gorm:"column:user_email"`
 	Action    string    `gorm:"column:action"`

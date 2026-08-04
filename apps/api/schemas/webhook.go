@@ -4,8 +4,8 @@ import "time"
 
 type Webhook struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
-	SpaceID   int64     `gorm:"column:space_id;index"`
-	Space     Space     `gorm:"constraint:OnDelete:CASCADE"`
+	ProjectID int64     `gorm:"column:project_id;index"`
+	Project   Project   `gorm:"constraint:OnDelete:CASCADE"`
 	URL       string    `gorm:"column:url"`
 	Events    string    `gorm:"column:events"`
 	Secret    string    `gorm:"column:secret"`

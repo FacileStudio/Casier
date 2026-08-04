@@ -1,4 +1,4 @@
-package spaces
+package projects
 
 import (
 	"context"
@@ -25,14 +25,14 @@ func (controller *Controller) list(ctx context.Context) (*ListResponse, error) {
 		return nil, err
 	}
 
-	spaces, err := controller.service.listSpaces(ctx, userID)
+	projects, err := controller.service.listProjects(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return &ListResponse{Spaces: spaces}, nil
+	return &ListResponse{Projects: projects}, nil
 }
 
-func (controller *Controller) create(ctx context.Context, req *CreateRequest) (*SpaceResponse, error) {
+func (controller *Controller) create(ctx context.Context, req *CreateRequest) (*ProjectResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
@@ -46,10 +46,10 @@ func (controller *Controller) create(ctx context.Context, req *CreateRequest) (*
 		return nil, errors.Invalid("name is required")
 	}
 
-	return controller.service.createSpace(ctx, userID, req.Name, req.Description)
+	return controller.service.createProject(ctx, userID, req.Name, req.Description)
 }
 
-func (controller *Controller) get(ctx context.Context, slug string) (*SpaceResponse, error) {
+func (controller *Controller) get(ctx context.Context, slug string) (*ProjectResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
@@ -59,10 +59,10 @@ func (controller *Controller) get(ctx context.Context, slug string) (*SpaceRespo
 		return nil, err
 	}
 
-	return controller.service.getSpace(ctx, slug, userID)
+	return controller.service.getProject(ctx, slug, userID)
 }
 
-func (controller *Controller) update(ctx context.Context, slug string, req *UpdateRequest) (*SpaceResponse, error) {
+func (controller *Controller) update(ctx context.Context, slug string, req *UpdateRequest) (*ProjectResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
@@ -76,7 +76,7 @@ func (controller *Controller) update(ctx context.Context, slug string, req *Upda
 		return nil, errors.Invalid("name is required")
 	}
 
-	return controller.service.updateSpace(ctx, slug, userID, req.Name, req.Description)
+	return controller.service.updateProject(ctx, slug, userID, req.Name, req.Description)
 }
 
 func (controller *Controller) delete(ctx context.Context, slug string) error {
@@ -89,7 +89,7 @@ func (controller *Controller) delete(ctx context.Context, slug string) error {
 		return err
 	}
 
-	return controller.service.deleteSpace(ctx, slug, userID)
+	return controller.service.deleteProject(ctx, slug, userID)
 }
 
 func (controller *Controller) listMembers(ctx context.Context, slug string) (*MembersResponse, error) {

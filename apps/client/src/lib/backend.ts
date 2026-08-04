@@ -57,20 +57,20 @@ export type Me = {
 	email: string;
 };
 
-export type SpaceRole = 'owner' | 'admin' | 'member' | 'viewer';
+export type ProjectRole = 'owner' | 'admin' | 'member' | 'viewer';
 
-export type Space = {
+export type Project = {
 	id: number;
 	name: string;
 	slug: string;
 	description: string;
-	role: SpaceRole;
+	role: ProjectRole;
 	created_at: string;
 	updated_at: string;
 };
 
-export type SpacesResponse = {
-	spaces: Space[] | null;
+export type ProjectsResponse = {
+	projects: Project[] | null;
 };
 
 export type Environment = {
@@ -123,7 +123,7 @@ export type ExportResult = {
 export type Member = {
 	id: number;
 	email: string;
-	role: SpaceRole;
+	role: ProjectRole;
 };
 
 export type MembersResponse = {

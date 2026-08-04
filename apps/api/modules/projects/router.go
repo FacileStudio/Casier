@@ -1,4 +1,4 @@
-package spaces
+package projects
 
 import (
 	"net/http"
@@ -45,7 +45,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	router.Route("/spaces", func(router chi.Router) {
+	router.Route("/projects", func(router chi.Router) {
 		router.Use(middleware.RequireAuth(authService))
 
 		router.Get("/", func(w http.ResponseWriter, request *http.Request) {

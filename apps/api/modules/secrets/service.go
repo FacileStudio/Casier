@@ -27,7 +27,7 @@ func joinTags(tags []string) string {
 
 var refPattern = regexp.MustCompile(`\$\{ref:([^/]+)/([^}]+)\}`)
 
-func (service *Service) resolveReferences(ctx context.Context, spaceID int64, value string, dataKey []byte, depth int) string {
+func (service *Service) resolveReferences(ctx context.Context, projectID int64, value string, dataKey []byte, depth int) string {
 	if depth > 3 || !strings.Contains(value, "${ref:") {
 		return value
 	}
@@ -39,7 +39,7 @@ func (service *Service) resolveReferences(ctx context.Context, spaceID int64, va
 		}
 		envSlug, secretKey := parts[1], parts[2]
 
-		envID, err := service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlug)
+		envID, err := service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
 		if err != nil {
 			return match
 		}
@@ -57,7 +57,7 @@ func (service *Service) resolveReferences(ctx context.Context, spaceID int64, va
 			return match
 		}
 
-		return service.resolveReferences(ctx, spaceID, string(plaintext), dataKey, depth+1)
+		return service.resolveReferences(ctx, projectID, string(plaintext), dataKey, depth+1)
 	})
 }
 
@@ -68,22 +68,22 @@ func splitTags(s string) []string {
 	return strings.Split(s, ",")
 }
 
-type SpaceResolver interface {
-	ResolveSpaceID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
+type ProjectResolver interface {
+	ResolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
 }
 
 type EnvironmentResolver interface {
-	ResolveEnvironmentID(ctx context.Context, spaceID int64, envSlug string) (int64, error)
+	ResolveEnvironmentID(ctx context.Context, projectID int64, envSlug string) (int64, error)
 }
 
 type DataKeyResolver interface {
-	GetSpaceDataKey(ctx context.Context, spaceID int64) ([]byte, error)
+	GetProjectDataKey(ctx context.Context, projectID int64) ([]byte, error)
 }
 
 type Service struct {
 	orm        *gorm.DB
 	logger     *slog.Logger
-	spaceRes   SpaceResolver
+	projectRes ProjectResolver
 	envRes     EnvironmentResolver
 	dataKeyRes DataKeyResolver
 	webhooks   *webhook.Dispatcher
@@ -91,47 +91,47 @@ type Service struct {
 	controller *Controller
 }
 
-func NewService(orm *gorm.DB, logger *slog.Logger, spaceRes SpaceResolver, envRes EnvironmentResolver, dataKeyRes DataKeyResolver, webhooks *webhook.Dispatcher, auditLog *audit.Logger) *Service {
-	service := &Service{orm: orm, logger: logger, spaceRes: spaceRes, envRes: envRes, dataKeyRes: dataKeyRes, webhooks: webhooks, audit: auditLog}
+func NewService(orm *gorm.DB, logger *slog.Logger, projectRes ProjectResolver, envRes EnvironmentResolver, dataKeyRes DataKeyResolver, webhooks *webhook.Dispatcher, auditLog *audit.Logger) *Service {
+	service := &Service{orm: orm, logger: logger, projectRes: projectRes, envRes: envRes, dataKeyRes: dataKeyRes, webhooks: webhooks, audit: auditLog}
 	service.controller = newController(service)
 	return service
 }
 
 func (service *Service) fireWebhook(ctx context.Context, eventType string, envID int64, key string, version int, userID, clientIP string) {
-	spaceID, err := service.getSpaceIDFromEnv(ctx, envID)
+	projectID, err := service.getProjectIDFromEnv(ctx, envID)
 	if err != nil {
 		return
 	}
 	if service.audit != nil {
-		service.audit.Log(ctx, spaceID, userID, "", eventType, "secret:"+key, "", clientIP)
+		service.audit.Log(ctx, projectID, userID, "", eventType, "secret:"+key, "", clientIP)
 	}
 	if service.webhooks == nil {
 		return
 	}
 	service.webhooks.Fire(ctx, webhook.Event{
-		Type:        eventType,
-		SpaceID:     spaceID,
-		Key:         key,
-		Version:     version,
-		UserID:      userID,
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Type:      eventType,
+		ProjectID: projectID,
+		Key:       key,
+		Version:   version,
+		UserID:    userID,
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
-func (service *Service) getSpaceIDFromEnv(ctx context.Context, envID int64) (int64, error) {
+func (service *Service) getProjectIDFromEnv(ctx context.Context, envID int64) (int64, error) {
 	var env schemas.Environment
 	if err := service.orm.WithContext(ctx).Where("id = ?", envID).First(&env).Error; err != nil {
 		return 0, errors.Internal("failed to resolve environment", err)
 	}
-	return env.SpaceID, nil
+	return env.ProjectID, nil
 }
 
 func (service *Service) resolveDataKey(ctx context.Context, envID int64) ([]byte, error) {
-	spaceID, err := service.getSpaceIDFromEnv(ctx, envID)
+	projectID, err := service.getProjectIDFromEnv(ctx, envID)
 	if err != nil {
 		return nil, err
 	}
-	dataKey, err := service.dataKeyRes.GetSpaceDataKey(ctx, spaceID)
+	dataKey, err := service.dataKeyRes.GetProjectDataKey(ctx, projectID)
 	if err != nil {
 		return nil, errors.Internal("failed to resolve data key", err)
 	}
@@ -160,7 +160,7 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 		return nil, err
 	}
 
-	spaceID, _ := service.getSpaceIDFromEnv(ctx, envID)
+	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
 
 	secrets := make([]SecretResponse, len(records))
 	for i, r := range records {
@@ -168,7 +168,7 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 		if err != nil {
 			return nil, errors.Internal("failed to decrypt secret", err)
 		}
-		resolved := service.resolveReferences(ctx, spaceID, string(plaintext), dataKey, 0)
+		resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, 0)
 		secrets[i] = SecretResponse{
 			ID:        r.ID,
 			Key:       r.Key,
@@ -181,7 +181,7 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 	}
 
 	if service.audit != nil {
-		service.audit.Log(ctx, spaceID, userID, "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(records))+" secrets", clientIP)
+		service.audit.Log(ctx, projectID, userID, "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(records))+" secrets", clientIP)
 	}
 
 	return secrets, nil

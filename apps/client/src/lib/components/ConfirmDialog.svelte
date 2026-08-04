@@ -19,10 +19,10 @@
 </script>
 
 <Modal bind:open {title}>
-	<p class="text-fc-md text-fc-fg-muted">{message}</p>
-	<div class="flex justify-end gap-2 pt-2">
-		<Button variant="ghost" disabled={loading} onclick={() => (open = false)}>Cancel</Button>
-		<Button variant="danger" disabled={loading} onclick={onconfirm}>
+	<p class="text-sm text-muted-foreground">{message}</p>
+	<div class="flex justify-end gap-2 pt-4">
+		<Button variant="ghost" class="h-9" disabled={loading} onclick={() => (open = false)}>Cancel</Button>
+		<Button class="h-9" disabled={loading} onclick={onconfirm}>
 			{loading ? 'Working…' : confirmLabel}
 		</Button>
 	</div>

@@ -8,27 +8,27 @@ var Documentation = documentation.Module{
 	Routes: []documentation.Route{
 		{
 			Method:      "GET",
-			Path:        "/spaces/{slug}/environments/{envSlug}/secrets",
+			Path:        "/projects/{slug}/environments/{envSlug}/secrets",
 			Summary:     "List secrets",
 			Description: "Returns all secrets in the environment with decrypted values.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
-				{Name: "slug", Type: "string", Description: "Space slug."},
+				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
 			ResponseBody: "ListResponse",
 			Errors: []documentation.Error{
-				{Status: 404, Code: "not_found", Description: "Space or environment not found."},
+				{Status: 404, Code: "not_found", Description: "Project or environment not found."},
 			},
 		},
 		{
 			Method:      "POST",
-			Path:        "/spaces/{slug}/environments/{envSlug}/secrets",
+			Path:        "/projects/{slug}/environments/{envSlug}/secrets",
 			Summary:     "Create a secret",
 			Description: "Creates a new encrypted secret. Requires owner, admin, or member role.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
-				{Name: "slug", Type: "string", Description: "Space slug."},
+				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
 			RequestBody:  "CreateRequest",
@@ -41,12 +41,12 @@ var Documentation = documentation.Module{
 		},
 		{
 			Method:      "PUT",
-			Path:        "/spaces/{slug}/environments/{envSlug}/secrets/{key}",
+			Path:        "/projects/{slug}/environments/{envSlug}/secrets/{key}",
 			Summary:     "Update a secret",
 			Description: "Updates the secret value and increments the version. Requires owner, admin, or member role.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
-				{Name: "slug", Type: "string", Description: "Space slug."},
+				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
@@ -59,12 +59,12 @@ var Documentation = documentation.Module{
 		},
 		{
 			Method:      "DELETE",
-			Path:        "/spaces/{slug}/environments/{envSlug}/secrets/{key}",
+			Path:        "/projects/{slug}/environments/{envSlug}/secrets/{key}",
 			Summary:     "Delete a secret",
 			Description: "Deletes a secret. Requires owner, admin, or member role.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
-				{Name: "slug", Type: "string", Description: "Space slug."},
+				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},

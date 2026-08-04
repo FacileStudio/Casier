@@ -17,12 +17,12 @@ func newController(service *Service) *Controller {
 	return &Controller{service: service}
 }
 
-func (controller *Controller) list(ctx context.Context, spaceSlug, envSlug, tagFilter string) (*ListResponse, error) {
+func (controller *Controller) list(ctx context.Context, projectSlug, envSlug, tagFilter string) (*ListResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -34,12 +34,12 @@ func (controller *Controller) list(ctx context.Context, spaceSlug, envSlug, tagF
 	return &ListResponse{Secrets: secrets}, nil
 }
 
-func (controller *Controller) create(ctx context.Context, spaceSlug, envSlug string, req *CreateRequest) (*SecretResponse, error) {
+func (controller *Controller) create(ctx context.Context, projectSlug, envSlug string, req *CreateRequest) (*SecretResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +60,12 @@ func (controller *Controller) create(ctx context.Context, spaceSlug, envSlug str
 	return controller.service.createSecret(ctx, envID, key, req.Value, identity.UserID, identity.ClientIP, req.Tags)
 }
 
-func (controller *Controller) update(ctx context.Context, spaceSlug, envSlug, key string, req *UpdateRequest) (*SecretResponse, error) {
+func (controller *Controller) update(ctx context.Context, projectSlug, envSlug, key string, req *UpdateRequest) (*SecretResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -82,12 +82,12 @@ func (controller *Controller) update(ctx context.Context, spaceSlug, envSlug, ke
 	return controller.service.updateSecret(ctx, envID, key, req.Value, identity.UserID, identity.ClientIP)
 }
 
-func (controller *Controller) delete(ctx context.Context, spaceSlug, envSlug, key string) error {
+func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug, key string) error {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
 	}
@@ -95,24 +95,24 @@ func (controller *Controller) delete(ctx context.Context, spaceSlug, envSlug, ke
 	return controller.service.deleteSecret(ctx, envID, key, identity.UserID, identity.ClientIP)
 }
 
-func (controller *Controller) importEnv(ctx context.Context, spaceSlug, envSlug string, req *ImportRequest) (*ImportResponse, error) {
+func (controller *Controller) importEnv(ctx context.Context, projectSlug, envSlug string, req *ImportRequest) (*ImportResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
 	return controller.service.importEnv(ctx, envID, req.Content, identity.UserID, identity.ClientIP)
 }
 
-func (controller *Controller) exportEnv(ctx context.Context, spaceSlug, envSlug string) (*ExportResponse, error) {
+func (controller *Controller) exportEnv(ctx context.Context, projectSlug, envSlug string) (*ExportResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -123,16 +123,16 @@ func (controller *Controller) exportEnv(ctx context.Context, spaceSlug, envSlug 
 	return &ExportResponse{Content: content}, nil
 }
 
-func (controller *Controller) updateTags(ctx context.Context, spaceSlug, envSlug, key string, req *UpdateTagsRequest) error {
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+func (controller *Controller) updateTags(ctx context.Context, projectSlug, envSlug, key string, req *UpdateTagsRequest) error {
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
 	}
 	return controller.service.updateTags(ctx, envID, key, req.Tags)
 }
 
-func (controller *Controller) listVersions(ctx context.Context, spaceSlug, envSlug, key string) (*VersionsResponse, error) {
-	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+func (controller *Controller) listVersions(ctx context.Context, projectSlug, envSlug, key string) (*VersionsResponse, error) {
+	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -143,12 +143,12 @@ func (controller *Controller) listVersions(ctx context.Context, spaceSlug, envSl
 	return &VersionsResponse{Versions: versions}, nil
 }
 
-func (controller *Controller) rollback(ctx context.Context, spaceSlug, envSlug, key string, req *RollbackRequest) (*SecretResponse, error) {
+func (controller *Controller) rollback(ctx context.Context, projectSlug, envSlug, key string, req *RollbackRequest) (*SecretResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +158,7 @@ func (controller *Controller) rollback(ctx context.Context, spaceSlug, envSlug, 
 	return controller.service.rollbackSecret(ctx, envID, key, req.Version, identity.UserID, identity.ClientIP)
 }
 
-func (controller *Controller) diff(ctx context.Context, spaceSlug, envSlugA, envSlugB string) (*DiffResponse, error) {
+func (controller *Controller) diff(ctx context.Context, projectSlug, envSlugA, envSlugB string) (*DiffResponse, error) {
 	identity, ok := authcontext.IdentityFromContext(ctx)
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
@@ -168,16 +168,16 @@ func (controller *Controller) diff(ctx context.Context, spaceSlug, envSlugA, env
 		return nil, err
 	}
 
-	spaceID, err := controller.service.spaceRes.ResolveSpaceID(ctx, spaceSlug, userID)
+	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	envA, err := controller.service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlugA)
+	envA, err := controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlugA)
 	if err != nil {
 		return nil, err
 	}
-	envB, err := controller.service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlugB)
+	envB, err := controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlugB)
 	if err != nil {
 		return nil, err
 	}
@@ -191,8 +191,8 @@ func (controller *Controller) diff(ctx context.Context, spaceSlug, envSlugA, env
 	return resp, nil
 }
 
-func (controller *Controller) listACLs(ctx context.Context, spaceSlug, envSlug, key string) (*ACLsResponse, error) {
-	envID, err := controller.resolveEnv(ctx, spaceSlug, envSlug)
+func (controller *Controller) listACLs(ctx context.Context, projectSlug, envSlug, key string) (*ACLsResponse, error) {
+	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -203,8 +203,8 @@ func (controller *Controller) listACLs(ctx context.Context, spaceSlug, envSlug, 
 	return &ACLsResponse{ACLs: acls}, nil
 }
 
-func (controller *Controller) setACL(ctx context.Context, spaceSlug, envSlug, key string, req *SetACLRequest) error {
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+func (controller *Controller) setACL(ctx context.Context, projectSlug, envSlug, key string, req *SetACLRequest) error {
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
 	}
@@ -214,40 +214,40 @@ func (controller *Controller) setACL(ctx context.Context, spaceSlug, envSlug, ke
 	return controller.service.setACL(ctx, envID, key, req.Email, req.CanRead, req.CanWrite)
 }
 
-func (controller *Controller) deleteACL(ctx context.Context, spaceSlug, envSlug, key string, aclID int64) error {
-	envID, err := controller.resolveEnvWithWrite(ctx, spaceSlug, envSlug)
+func (controller *Controller) deleteACL(ctx context.Context, projectSlug, envSlug, key string, aclID int64) error {
+	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
 	}
 	return controller.service.deleteACL(ctx, envID, key, aclID)
 }
 
-func (controller *Controller) resolveEnv(ctx context.Context, spaceSlug, envSlug string) (int64, error) {
+func (controller *Controller) resolveEnv(ctx context.Context, projectSlug, envSlug string) (int64, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	spaceID, err := controller.service.spaceRes.ResolveSpaceID(ctx, spaceSlug, userID)
+	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID)
 	if err != nil {
 		return 0, err
 	}
 
-	return controller.service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlug)
+	return controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
 }
 
-func (controller *Controller) resolveEnvWithWrite(ctx context.Context, spaceSlug, envSlug string) (int64, error) {
+func (controller *Controller) resolveEnvWithWrite(ctx context.Context, projectSlug, envSlug string) (int64, error) {
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return 0, err
 	}
 
-	spaceID, err := controller.service.spaceRes.ResolveSpaceID(ctx, spaceSlug, userID, "owner", "admin", "member")
+	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin", "member")
 	if err != nil {
 		return 0, err
 	}
 
-	return controller.service.envRes.ResolveEnvironmentID(ctx, spaceID, envSlug)
+	return controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
 }
 
 func extractUserID(ctx context.Context) (int64, error) {

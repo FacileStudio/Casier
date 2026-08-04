@@ -1,4 +1,4 @@
-package spaces
+package projects
 
 import (
 	"context"
@@ -36,26 +36,26 @@ func NewService(orm *gorm.DB, encKey []byte, auditLog *audit.Logger) *Service {
 	return service
 }
 
-func (service *Service) listSpaces(ctx context.Context, userID int64) ([]SpaceResponse, error) {
+func (service *Service) listProjects(ctx context.Context, userID int64) ([]ProjectResponse, error) {
 	var results []struct {
-		schemas.Space
+		schemas.Project
 		Role string
 	}
 
 	err := service.orm.WithContext(ctx).
-		Table("spaces s").
-		Select("s.*, sm.role").
-		Joins("join space_members sm on sm.space_id = s.id").
-		Where("sm.user_id = ?", userID).
-		Order("s.created_at desc").
+		Table("projects p").
+		Select("p.*, pm.role").
+		Joins("join project_members pm on pm.project_id = p.id").
+		Where("pm.user_id = ?", userID).
+		Order("p.created_at desc").
 		Scan(&results).Error
 	if err != nil {
-		return nil, errors.Internal("failed to list spaces", err)
+		return nil, errors.Internal("failed to list projects", err)
 	}
 
-	spaces := make([]SpaceResponse, len(results))
+	projects := make([]ProjectResponse, len(results))
 	for i, r := range results {
-		spaces[i] = SpaceResponse{
+		projects[i] = ProjectResponse{
 			ID:          r.ID,
 			Name:        r.Name,
 			Slug:        r.Slug,
@@ -65,10 +65,10 @@ func (service *Service) listSpaces(ctx context.Context, userID int64) ([]SpaceRe
 			UpdatedAt:   r.UpdatedAt,
 		}
 	}
-	return spaces, nil
+	return projects, nil
 }
 
-func (service *Service) createSpace(ctx context.Context, userID int64, name, description string) (*SpaceResponse, error) {
+func (service *Service) createProject(ctx context.Context, userID int64, name, description string) (*ProjectResponse, error) {
 	slug := slugify(name)
 	if slug == "" {
 		return nil, errors.Invalid("name must contain at least one alphanumeric character")
@@ -84,7 +84,7 @@ func (service *Service) createSpace(ctx context.Context, userID int64, name, des
 		return nil, errors.Internal("failed to encrypt data key", err)
 	}
 
-	space := &schemas.Space{
+	project := &schemas.Project{
 		Name:             name,
 		Slug:             slug,
 		Description:      description,
@@ -93,26 +93,26 @@ func (service *Service) createSpace(ctx context.Context, userID int64, name, des
 	}
 
 	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(space).Error; err != nil {
+		if err := tx.Create(project).Error; err != nil {
 			if stderrors.Is(err, gorm.ErrDuplicatedKey) {
-				return errors.Conflict("space slug already exists")
+				return errors.Conflict("project slug already exists")
 			}
-			return errors.Internal("failed to create space", err)
+			return errors.Internal("failed to create project", err)
 		}
 
-		member := &schemas.SpaceMember{
-			SpaceID: space.ID,
-			UserID:  userID,
-			Role:    "owner",
+		member := &schemas.ProjectMember{
+			ProjectID: project.ID,
+			UserID:    userID,
+			Role:      "owner",
 		}
 		if err := tx.Create(member).Error; err != nil {
 			return errors.Internal("failed to add owner", err)
 		}
 
 		defaultEnvs := []schemas.Environment{
-			{SpaceID: space.ID, Name: "Development", Slug: "dev", Position: 0},
-			{SpaceID: space.ID, Name: "Staging", Slug: "staging", Position: 1},
-			{SpaceID: space.ID, Name: "Production", Slug: "prod", Position: 2},
+			{ProjectID: project.ID, Name: "Development", Slug: "dev", Position: 0},
+			{ProjectID: project.ID, Name: "Staging", Slug: "staging", Position: 1},
+			{ProjectID: project.ID, Name: "Production", Slug: "prod", Position: 2},
 		}
 		for i := range defaultEnvs {
 			if err := tx.Create(&defaultEnvs[i]).Error; err != nil {
@@ -126,37 +126,37 @@ func (service *Service) createSpace(ctx context.Context, userID int64, name, des
 		return nil, err
 	}
 
-	return &SpaceResponse{
-		ID:          space.ID,
-		Name:        space.Name,
-		Slug:        space.Slug,
-		Description: space.Description,
+	return &ProjectResponse{
+		ID:          project.ID,
+		Name:        project.Name,
+		Slug:        project.Slug,
+		Description: project.Description,
 		Role:        "owner",
-		CreatedAt:   space.CreatedAt,
-		UpdatedAt:   space.UpdatedAt,
+		CreatedAt:   project.CreatedAt,
+		UpdatedAt:   project.UpdatedAt,
 	}, nil
 }
 
-func (service *Service) getSpace(ctx context.Context, slug string, userID int64) (*SpaceResponse, error) {
+func (service *Service) getProject(ctx context.Context, slug string, userID int64) (*ProjectResponse, error) {
 	var result struct {
-		schemas.Space
+		schemas.Project
 		Role string
 	}
 
 	err := service.orm.WithContext(ctx).
-		Table("spaces s").
-		Select("s.*, sm.role").
-		Joins("join space_members sm on sm.space_id = s.id").
-		Where("s.slug = ? AND sm.user_id = ?", slug, userID).
+		Table("projects p").
+		Select("p.*, pm.role").
+		Joins("join project_members pm on pm.project_id = p.id").
+		Where("p.slug = ? AND pm.user_id = ?", slug, userID).
 		Scan(&result).Error
 	if err != nil {
-		return nil, errors.Internal("failed to get space", err)
+		return nil, errors.Internal("failed to get project", err)
 	}
 	if result.ID == 0 {
-		return nil, errors.NotFound("space not found")
+		return nil, errors.NotFound("project not found")
 	}
 
-	return &SpaceResponse{
+	return &ProjectResponse{
 		ID:          result.ID,
 		Name:        result.Name,
 		Slug:        result.Slug,
@@ -167,8 +167,8 @@ func (service *Service) getSpace(ctx context.Context, slug string, userID int64)
 	}, nil
 }
 
-func (service *Service) updateSpace(ctx context.Context, slug string, userID int64, name, description string) (*SpaceResponse, error) {
-	space, role, err := service.getSpaceWithRole(ctx, slug, userID)
+func (service *Service) updateProject(ctx context.Context, slug string, userID int64, name, description string) (*ProjectResponse, error) {
+	project, role, err := service.getProjectWithRole(ctx, slug, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -176,56 +176,56 @@ func (service *Service) updateSpace(ctx context.Context, slug string, userID int
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	space.Name = name
-	space.Description = description
-	if err := service.orm.WithContext(ctx).Save(space).Error; err != nil {
-		return nil, errors.Internal("failed to update space", err)
+	project.Name = name
+	project.Description = description
+	if err := service.orm.WithContext(ctx).Save(project).Error; err != nil {
+		return nil, errors.Internal("failed to update project", err)
 	}
 
-	return &SpaceResponse{
-		ID:          space.ID,
-		Name:        space.Name,
-		Slug:        space.Slug,
-		Description: space.Description,
+	return &ProjectResponse{
+		ID:          project.ID,
+		Name:        project.Name,
+		Slug:        project.Slug,
+		Description: project.Description,
 		Role:        role,
-		CreatedAt:   space.CreatedAt,
-		UpdatedAt:   space.UpdatedAt,
+		CreatedAt:   project.CreatedAt,
+		UpdatedAt:   project.UpdatedAt,
 	}, nil
 }
 
-func (service *Service) deleteSpace(ctx context.Context, slug string, userID int64) error {
-	_, role, err := service.getSpaceWithRole(ctx, slug, userID)
+func (service *Service) deleteProject(ctx context.Context, slug string, userID int64) error {
+	_, role, err := service.getProjectWithRole(ctx, slug, userID)
 	if err != nil {
 		return err
 	}
 	if role != "owner" {
-		return errors.Forbidden("only the owner can delete a space")
+		return errors.Forbidden("only the owner can delete a project")
 	}
 
 	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var space schemas.Space
-		if err := tx.Where("slug = ?", slug).First(&space).Error; err != nil {
-			return errors.Internal("failed to find space for deletion", err)
+		var project schemas.Project
+		if err := tx.Where("slug = ?", slug).First(&project).Error; err != nil {
+			return errors.Internal("failed to find project for deletion", err)
 		}
 
 		var envIDs []int64
-		tx.Model(&schemas.Environment{}).Where("space_id = ?", space.ID).Pluck("id", &envIDs)
+		tx.Model(&schemas.Environment{}).Where("project_id = ?", project.ID).Pluck("id", &envIDs)
 		if len(envIDs) > 0 {
 			if err := tx.Where("environment_id IN ?", envIDs).Delete(&schemas.Secret{}).Error; err != nil {
 				return errors.Internal("failed to delete secrets", err)
 			}
 		}
 
-		if err := tx.Where("space_id = ?", space.ID).Delete(&schemas.Environment{}).Error; err != nil {
+		if err := tx.Where("project_id = ?", project.ID).Delete(&schemas.Environment{}).Error; err != nil {
 			return errors.Internal("failed to delete environments", err)
 		}
 
-		if err := tx.Where("space_id = ?", space.ID).Delete(&schemas.SpaceMember{}).Error; err != nil {
+		if err := tx.Where("project_id = ?", project.ID).Delete(&schemas.ProjectMember{}).Error; err != nil {
 			return errors.Internal("failed to delete members", err)
 		}
 
-		if err := tx.Delete(&space).Error; err != nil {
-			return errors.Internal("failed to delete space", err)
+		if err := tx.Delete(&project).Error; err != nil {
+			return errors.Internal("failed to delete project", err)
 		}
 
 		return nil
@@ -233,7 +233,7 @@ func (service *Service) deleteSpace(ctx context.Context, slug string, userID int
 }
 
 func (service *Service) listMembers(ctx context.Context, slug string, userID int64) ([]MemberResponse, error) {
-	_, _, err := service.getSpaceWithRole(ctx, slug, userID)
+	_, _, err := service.getProjectWithRole(ctx, slug, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -245,12 +245,12 @@ func (service *Service) listMembers(ctx context.Context, slug string, userID int
 	}
 
 	err = service.orm.WithContext(ctx).
-		Table("space_members sm").
-		Select("u.id, u.email, sm.role").
-		Joins("join users u on u.id = sm.user_id").
-		Joins("join spaces s on s.id = sm.space_id").
-		Where("s.slug = ?", slug).
-		Order("sm.created_at asc").
+		Table("project_members pm").
+		Select("u.id, u.email, pm.role").
+		Joins("join users u on u.id = pm.user_id").
+		Joins("join projects p on p.id = pm.project_id").
+		Where("p.slug = ?", slug).
+		Order("pm.created_at asc").
 		Scan(&results).Error
 	if err != nil {
 		return nil, errors.Internal("failed to list members", err)
@@ -264,7 +264,7 @@ func (service *Service) listMembers(ctx context.Context, slug string, userID int
 }
 
 func (service *Service) addMember(ctx context.Context, slug string, callerID int64, email, role string) error {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return err
 	}
@@ -280,15 +280,15 @@ func (service *Service) addMember(ctx context.Context, slug string, callerID int
 		return errors.Internal("failed to find user", err)
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return errors.Internal("failed to find project", err)
 	}
 
-	member := &schemas.SpaceMember{
-		SpaceID: space.ID,
-		UserID:  user.ID,
-		Role:    role,
+	member := &schemas.ProjectMember{
+		ProjectID: project.ID,
+		UserID:    user.ID,
+		Role:      role,
 	}
 	if err := service.orm.WithContext(ctx).Create(member).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrDuplicatedKey) {
@@ -300,7 +300,7 @@ func (service *Service) addMember(ctx context.Context, slug string, callerID int
 }
 
 func (service *Service) removeMember(ctx context.Context, slug string, callerID int64, targetUserID int64, callerEmail, clientIP string) error {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return err
 	}
@@ -308,14 +308,14 @@ func (service *Service) removeMember(ctx context.Context, slug string, callerID 
 		return errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return errors.Internal("failed to find project", err)
 	}
 
-	var target schemas.SpaceMember
+	var target schemas.ProjectMember
 	err = service.orm.WithContext(ctx).
-		Where("space_id = ? AND user_id = ?", space.ID, targetUserID).
+		Where("project_id = ? AND user_id = ?", project.ID, targetUserID).
 		First(&target).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return errors.NotFound("member not found")
@@ -327,8 +327,8 @@ func (service *Service) removeMember(ctx context.Context, slug string, callerID 
 	if target.Role == "owner" {
 		var ownerCount int64
 		service.orm.WithContext(ctx).
-			Model(&schemas.SpaceMember{}).
-			Where("space_id = ? AND role = ?", space.ID, "owner").
+			Model(&schemas.ProjectMember{}).
+			Where("project_id = ? AND role = ?", project.ID, "owner").
 			Count(&ownerCount)
 		if ownerCount <= 1 {
 			return errors.Forbidden("cannot remove the last owner")
@@ -340,14 +340,14 @@ func (service *Service) removeMember(ctx context.Context, slug string, callerID 
 	}
 
 	if service.audit != nil {
-		service.audit.Log(ctx, space.ID, strconv.FormatInt(callerID, 10), callerEmail, "member.removed", "user:"+strconv.FormatInt(targetUserID, 10), "", clientIP)
+		service.audit.Log(ctx, project.ID, strconv.FormatInt(callerID, 10), callerEmail, "member.removed", "user:"+strconv.FormatInt(targetUserID, 10), "", clientIP)
 	}
 
 	return nil
 }
 
 func (service *Service) createInvite(ctx context.Context, slug string, callerID int64, role string, maxUses int) (*InviteResponse, error) {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -355,9 +355,9 @@ func (service *Service) createInvite(ctx context.Context, slug string, callerID 
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	tokenBytes := make([]byte, 24)
@@ -368,7 +368,7 @@ func (service *Service) createInvite(ctx context.Context, slug string, callerID 
 
 	invite := &schemas.Invite{
 		Token:     token,
-		SpaceID:   space.ID,
+		ProjectID: project.ID,
 		Role:      role,
 		MaxUses:   maxUses,
 		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
@@ -390,7 +390,7 @@ func (service *Service) createInvite(ctx context.Context, slug string, callerID 
 }
 
 func (service *Service) listInvites(ctx context.Context, slug string, callerID int64) ([]InviteResponse, error) {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -398,14 +398,14 @@ func (service *Service) listInvites(ctx context.Context, slug string, callerID i
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	var invites []schemas.Invite
 	err = service.orm.WithContext(ctx).
-		Where("space_id = ? AND expires_at > ?", space.ID, time.Now()).
+		Where("project_id = ? AND expires_at > ?", project.ID, time.Now()).
 		Order("created_at desc").
 		Find(&invites).Error
 	if err != nil {
@@ -445,14 +445,14 @@ func (service *Service) acceptInvite(ctx context.Context, token string, userID i
 	}
 
 	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		member := &schemas.SpaceMember{
-			SpaceID: invite.SpaceID,
-			UserID:  userID,
-			Role:    invite.Role,
+		member := &schemas.ProjectMember{
+			ProjectID: invite.ProjectID,
+			UserID:    userID,
+			Role:      invite.Role,
 		}
 		if err := tx.Create(member).Error; err != nil {
 			if stderrors.Is(err, gorm.ErrDuplicatedKey) {
-				return errors.Conflict("you are already a member of this space")
+				return errors.Conflict("you are already a member of this project")
 			}
 			return errors.Internal("failed to add member", err)
 		}
@@ -463,7 +463,7 @@ func (service *Service) acceptInvite(ctx context.Context, token string, userID i
 }
 
 func (service *Service) deleteInvite(ctx context.Context, slug string, callerID int64, inviteID int64) error {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return err
 	}
@@ -471,13 +471,13 @@ func (service *Service) deleteInvite(ctx context.Context, slug string, callerID 
 		return errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return errors.Internal("failed to find project", err)
 	}
 
 	result := service.orm.WithContext(ctx).
-		Where("id = ? AND space_id = ?", inviteID, space.ID).
+		Where("id = ? AND project_id = ?", inviteID, project.ID).
 		Delete(&schemas.Invite{})
 	if result.Error != nil {
 		return errors.Internal("failed to delete invite", result.Error)
@@ -488,31 +488,31 @@ func (service *Service) deleteInvite(ctx context.Context, slug string, callerID 
 	return nil
 }
 
-func (service *Service) getSpaceWithRole(ctx context.Context, slug string, userID int64) (*schemas.Space, string, error) {
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
+func (service *Service) getProjectWithRole(ctx context.Context, slug string, userID int64) (*schemas.Project, string, error) {
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, "", errors.NotFound("space not found")
+			return nil, "", errors.NotFound("project not found")
 		}
-		return nil, "", errors.Internal("failed to find space", err)
+		return nil, "", errors.Internal("failed to find project", err)
 	}
 
-	var member schemas.SpaceMember
+	var member schemas.ProjectMember
 	err := service.orm.WithContext(ctx).
-		Where("space_id = ? AND user_id = ?", space.ID, userID).
+		Where("project_id = ? AND user_id = ?", project.ID, userID).
 		First(&member).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, "", errors.NotFound("space not found")
+		return nil, "", errors.NotFound("project not found")
 	}
 	if err != nil {
 		return nil, "", errors.Internal("failed to check membership", err)
 	}
 
-	return &space, member.Role, nil
+	return &project, member.Role, nil
 }
 
-func (service *Service) resolveSpaceID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error) {
-	space, role, err := service.getSpaceWithRole(ctx, slug, userID)
+func (service *Service) resolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error) {
+	project, role, err := service.getProjectWithRole(ctx, slug, userID)
 	if err != nil {
 		return 0, err
 	}
@@ -530,31 +530,31 @@ func (service *Service) resolveSpaceID(ctx context.Context, slug string, userID 
 		}
 	}
 
-	return space.ID, nil
+	return project.ID, nil
 }
 
-func (service *Service) ResolveSpaceID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error) {
-	return service.resolveSpaceID(ctx, slug, userID, requiredRoles...)
+func (service *Service) ResolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error) {
+	return service.resolveProjectID(ctx, slug, userID, requiredRoles...)
 }
 
-func (service *Service) GetSpaceDataKey(ctx context.Context, spaceID int64) ([]byte, error) {
-	var space schemas.Space
+func (service *Service) GetProjectDataKey(ctx context.Context, projectID int64) ([]byte, error) {
+	var project schemas.Project
 	if err := service.orm.WithContext(ctx).
 		Select("encrypted_data_key, data_key_nonce").
-		Where("id = ?", spaceID).
-		First(&space).Error; err != nil {
-		return nil, fmt.Errorf("failed to load space data key: %w", err)
+		Where("id = ?", projectID).
+		First(&project).Error; err != nil {
+		return nil, fmt.Errorf("failed to load project data key: %w", err)
 	}
 
-	if len(space.EncryptedDataKey) == 0 {
-		return nil, fmt.Errorf("space %d has no data key", spaceID)
+	if len(project.EncryptedDataKey) == 0 {
+		return nil, fmt.Errorf("project %d has no data key", projectID)
 	}
 
-	return crypto.Decrypt(space.EncryptedDataKey, space.DataKeyNonce, service.encKey)
+	return crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, service.encKey)
 }
 
 func (service *Service) createApiToken(ctx context.Context, slug string, callerID int64, name, environments, permissions string) (*ApiTokenResponse, error) {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -562,9 +562,9 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	tokenBytes := make([]byte, 32)
@@ -582,7 +582,7 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 	apiToken := &schemas.ApiToken{
 		TokenHash:    tokenHash,
 		Name:         name,
-		SpaceID:      space.ID,
+		ProjectID:    project.ID,
 		Environments: environments,
 		Permissions:  permissions,
 		CreatedBy:    callerID,
@@ -604,7 +604,7 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 }
 
 func (service *Service) listApiTokens(ctx context.Context, slug string, callerID int64) ([]ApiTokenResponse, error) {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -612,14 +612,14 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	var tokens []schemas.ApiToken
 	err = service.orm.WithContext(ctx).
-		Where("space_id = ?", space.ID).
+		Where("project_id = ?", project.ID).
 		Order("created_at desc").
 		Find(&tokens).Error
 	if err != nil {
@@ -642,7 +642,7 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 }
 
 func (service *Service) revokeApiToken(ctx context.Context, slug string, callerID int64, tokenID int64) error {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return err
 	}
@@ -650,13 +650,13 @@ func (service *Service) revokeApiToken(ctx context.Context, slug string, callerI
 		return errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return errors.Internal("failed to find project", err)
 	}
 
 	result := service.orm.WithContext(ctx).
-		Where("id = ? AND space_id = ?", tokenID, space.ID).
+		Where("id = ? AND project_id = ?", tokenID, project.ID).
 		Delete(&schemas.ApiToken{})
 	if result.Error != nil {
 		return errors.Internal("failed to revoke token", result.Error)
@@ -668,7 +668,7 @@ func (service *Service) revokeApiToken(ctx context.Context, slug string, callerI
 }
 
 func (service *Service) createWebhook(ctx context.Context, slug string, callerID int64, url, events, secret string) (*WebhookResponse, error) {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -676,13 +676,13 @@ func (service *Service) createWebhook(ctx context.Context, slug string, callerID
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	wh := &schemas.Webhook{
-		SpaceID:   space.ID,
+		ProjectID: project.ID,
 		URL:       url,
 		Events:    events,
 		Secret:    secret,
@@ -703,7 +703,7 @@ func (service *Service) createWebhook(ctx context.Context, slug string, callerID
 }
 
 func (service *Service) listWebhooks(ctx context.Context, slug string, callerID int64) ([]WebhookResponse, error) {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
@@ -711,14 +711,14 @@ func (service *Service) listWebhooks(ctx context.Context, slug string, callerID 
 		return nil, errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	var webhooks []schemas.Webhook
 	err = service.orm.WithContext(ctx).
-		Where("space_id = ?", space.ID).
+		Where("project_id = ?", project.ID).
 		Order("created_at desc").
 		Find(&webhooks).Error
 	if err != nil {
@@ -739,7 +739,7 @@ func (service *Service) listWebhooks(ctx context.Context, slug string, callerID 
 }
 
 func (service *Service) deleteWebhook(ctx context.Context, slug string, callerID int64, webhookID int64) error {
-	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return err
 	}
@@ -747,13 +747,13 @@ func (service *Service) deleteWebhook(ctx context.Context, slug string, callerID
 		return errors.Forbidden("insufficient permissions")
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return errors.Internal("failed to find project", err)
 	}
 
 	result := service.orm.WithContext(ctx).
-		Where("id = ? AND space_id = ?", webhookID, space.ID).
+		Where("id = ? AND project_id = ?", webhookID, project.ID).
 		Delete(&schemas.Webhook{})
 	if result.Error != nil {
 		return errors.Internal("failed to delete webhook", result.Error)
@@ -765,14 +765,14 @@ func (service *Service) deleteWebhook(ctx context.Context, slug string, callerID
 }
 
 func (service *Service) listAuditLogs(ctx context.Context, slug string, callerID int64, action string, limit int) ([]AuditLogEntry, error) {
-	_, _, err := service.getSpaceWithRole(ctx, slug, callerID)
+	_, _, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
 	}
 
-	var space schemas.Space
-	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&space).Error; err != nil {
-		return nil, errors.Internal("failed to find space", err)
+	var project schemas.Project
+	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
+		return nil, errors.Internal("failed to find project", err)
 	}
 
 	if limit <= 0 || limit > 100 {
@@ -780,7 +780,7 @@ func (service *Service) listAuditLogs(ctx context.Context, slug string, callerID
 	}
 
 	query := service.orm.WithContext(ctx).
-		Where("space_id = ?", space.ID)
+		Where("project_id = ?", project.ID)
 	if action != "" {
 		query = query.Where("action = ?", action)
 	}
@@ -810,35 +810,35 @@ func (service *Service) listAuditLogs(ctx context.Context, slug string, callerID
 }
 
 func (service *Service) RotateRootKey(ctx context.Context, newKey []byte) (int, error) {
-	var spaces []schemas.Space
-	if err := service.orm.WithContext(ctx).Find(&spaces).Error; err != nil {
-		return 0, errors.Internal("failed to list spaces", err)
+	var projects []schemas.Project
+	if err := service.orm.WithContext(ctx).Find(&projects).Error; err != nil {
+		return 0, errors.Internal("failed to list projects", err)
 	}
 
 	count := 0
-	for _, s := range spaces {
-		if len(s.EncryptedDataKey) == 0 {
+	for _, project := range projects {
+		if len(project.EncryptedDataKey) == 0 {
 			continue
 		}
 
-		dataKey, err := crypto.Decrypt(s.EncryptedDataKey, s.DataKeyNonce, service.encKey)
+		dataKey, err := crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, service.encKey)
 		if err != nil {
-			return count, errors.Internal(fmt.Sprintf("failed to decrypt data key for space %d", s.ID), err)
+			return count, errors.Internal(fmt.Sprintf("failed to decrypt data key for project %d", project.ID), err)
 		}
 
 		newEncDataKey, newNonce, err := crypto.Encrypt(dataKey, newKey)
 		if err != nil {
-			return count, errors.Internal(fmt.Sprintf("failed to re-encrypt data key for space %d", s.ID), err)
+			return count, errors.Internal(fmt.Sprintf("failed to re-encrypt data key for project %d", project.ID), err)
 		}
 
 		if err := service.orm.WithContext(ctx).
-			Model(&schemas.Space{}).
-			Where("id = ?", s.ID).
+			Model(&schemas.Project{}).
+			Where("id = ?", project.ID).
 			Updates(map[string]any{
 				"encrypted_data_key": newEncDataKey,
 				"data_key_nonce":     newNonce,
 			}).Error; err != nil {
-			return count, errors.Internal(fmt.Sprintf("failed to save re-encrypted data key for space %d", s.ID), err)
+			return count, errors.Internal(fmt.Sprintf("failed to save re-encrypted data key for project %d", project.ID), err)
 		}
 		count++
 	}

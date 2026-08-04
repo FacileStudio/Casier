@@ -13,15 +13,15 @@ import (
 )
 
 func RegisterRoutes(router chi.Router, service *Service, authService *auth.Service) {
-	router.With(middleware.RequireAuth(authService)).Get("/spaces/{slug}/secrets/diff", func(w http.ResponseWriter, request *http.Request) {
-		spaceSlug := chi.URLParam(request, "slug")
+	router.With(middleware.RequireAuth(authService)).Get("/projects/{slug}/secrets/diff", func(w http.ResponseWriter, request *http.Request) {
+		projectSlug := chi.URLParam(request, "slug")
 		from := request.URL.Query().Get("from")
 		to := request.URL.Query().Get("to")
 		if from == "" || to == "" {
 			httpjson.WriteError(w, errors.Invalid("from and to query params are required"))
 			return
 		}
-		resp, err := service.controller.diff(request.Context(), spaceSlug, from, to)
+		resp, err := service.controller.diff(request.Context(), projectSlug, from, to)
 		if err != nil {
 			httpjson.WriteError(w, err)
 			return
@@ -29,15 +29,15 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		httpjson.WriteJSON(w, http.StatusOK, resp)
 	})
 
-	router.Route("/spaces/{slug}/environments/{envSlug}/secrets", func(router chi.Router) {
+	router.Route("/projects/{slug}/environments/{envSlug}/secrets", func(router chi.Router) {
 		router.Use(middleware.RequireAuth(authService))
 
 		router.Get("/", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			tagFilter := request.URL.Query().Get("tag")
 
-			resp, err := service.controller.list(request.Context(), spaceSlug, envSlug, tagFilter)
+			resp, err := service.controller.list(request.Context(), projectSlug, envSlug, tagFilter)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -46,7 +46,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Post("/import", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 
 			var req ImportRequest
@@ -55,7 +55,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				return
 			}
 
-			resp, err := service.controller.importEnv(request.Context(), spaceSlug, envSlug, &req)
+			resp, err := service.controller.importEnv(request.Context(), projectSlug, envSlug, &req)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -64,10 +64,10 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Get("/export", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 
-			resp, err := service.controller.exportEnv(request.Context(), spaceSlug, envSlug)
+			resp, err := service.controller.exportEnv(request.Context(), projectSlug, envSlug)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -76,7 +76,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Post("/", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 
 			var req CreateRequest
@@ -85,7 +85,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				return
 			}
 
-			resp, err := service.controller.create(request.Context(), spaceSlug, envSlug, &req)
+			resp, err := service.controller.create(request.Context(), projectSlug, envSlug, &req)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -94,7 +94,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Put("/{key}", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
@@ -104,7 +104,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				return
 			}
 
-			resp, err := service.controller.update(request.Context(), spaceSlug, envSlug, key, &req)
+			resp, err := service.controller.update(request.Context(), projectSlug, envSlug, key, &req)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -113,7 +113,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Put("/{key}/tags", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
@@ -123,7 +123,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				return
 			}
 
-			if err := service.controller.updateTags(request.Context(), spaceSlug, envSlug, key, &req); err != nil {
+			if err := service.controller.updateTags(request.Context(), projectSlug, envSlug, key, &req); err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}
@@ -131,11 +131,11 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Get("/{key}/versions", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
-			resp, err := service.controller.listVersions(request.Context(), spaceSlug, envSlug, key)
+			resp, err := service.controller.listVersions(request.Context(), projectSlug, envSlug, key)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -144,7 +144,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Post("/{key}/rollback", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
@@ -154,7 +154,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				return
 			}
 
-			resp, err := service.controller.rollback(request.Context(), spaceSlug, envSlug, key, &req)
+			resp, err := service.controller.rollback(request.Context(), projectSlug, envSlug, key, &req)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -163,11 +163,11 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Get("/{key}/acls", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
-			resp, err := service.controller.listACLs(request.Context(), spaceSlug, envSlug, key)
+			resp, err := service.controller.listACLs(request.Context(), projectSlug, envSlug, key)
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
@@ -176,7 +176,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Put("/{key}/acls", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
@@ -185,7 +185,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteError(w, err)
 				return
 			}
-			if err := service.controller.setACL(request.Context(), spaceSlug, envSlug, key, &req); err != nil {
+			if err := service.controller.setACL(request.Context(), projectSlug, envSlug, key, &req); err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}
@@ -193,7 +193,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Delete("/{key}/acls/{aclId}", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 			aclID, err := strconv.ParseInt(chi.URLParam(request, "aclId"), 10, 64)
@@ -201,7 +201,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteError(w, errors.Invalid("invalid acl id"))
 				return
 			}
-			if err := service.controller.deleteACL(request.Context(), spaceSlug, envSlug, key, aclID); err != nil {
+			if err := service.controller.deleteACL(request.Context(), projectSlug, envSlug, key, aclID); err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}
@@ -209,11 +209,11 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		})
 
 		router.Delete("/{key}", func(w http.ResponseWriter, request *http.Request) {
-			spaceSlug := chi.URLParam(request, "slug")
+			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
-			if err := service.controller.delete(request.Context(), spaceSlug, envSlug, key); err != nil {
+			if err := service.controller.delete(request.Context(), projectSlug, envSlug, key); err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}

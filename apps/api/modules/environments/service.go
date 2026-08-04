@@ -14,26 +14,26 @@ import (
 
 var slugRegexp = regexp.MustCompile(`[^a-z0-9]+`)
 
-type SpaceResolver interface {
-	ResolveSpaceID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
+type ProjectResolver interface {
+	ResolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
 }
 
 type Service struct {
-	orm           *gorm.DB
-	spaceResolver SpaceResolver
-	controller    *Controller
+	orm             *gorm.DB
+	projectResolver ProjectResolver
+	controller      *Controller
 }
 
-func NewService(orm *gorm.DB, spaceResolver SpaceResolver) *Service {
-	service := &Service{orm: orm, spaceResolver: spaceResolver}
+func NewService(orm *gorm.DB, projectResolver ProjectResolver) *Service {
+	service := &Service{orm: orm, projectResolver: projectResolver}
 	service.controller = newController(service)
 	return service
 }
 
-func (service *Service) listEnvironments(ctx context.Context, spaceID int64) ([]EnvironmentResponse, error) {
+func (service *Service) listEnvironments(ctx context.Context, projectID int64) ([]EnvironmentResponse, error) {
 	var records []schemas.Environment
 	err := service.orm.WithContext(ctx).
-		Where("space_id = ?", spaceID).
+		Where("project_id = ?", projectID).
 		Order("position asc").
 		Find(&records).Error
 	if err != nil {
@@ -54,7 +54,7 @@ func (service *Service) listEnvironments(ctx context.Context, spaceID int64) ([]
 	return envs, nil
 }
 
-func (service *Service) createEnvironment(ctx context.Context, spaceID int64, name string) (*EnvironmentResponse, error) {
+func (service *Service) createEnvironment(ctx context.Context, projectID int64, name string) (*EnvironmentResponse, error) {
 	slug := slugify(name)
 	if slug == "" {
 		return nil, errors.Invalid("name must contain at least one alphanumeric character")
@@ -64,18 +64,18 @@ func (service *Service) createEnvironment(ctx context.Context, spaceID int64, na
 	service.orm.WithContext(ctx).
 		Table("environments").
 		Select("COALESCE(MAX(position), -1) as position").
-		Where("space_id = ?", spaceID).
+		Where("project_id = ?", projectID).
 		Scan(&maxPos)
 
 	record := &schemas.Environment{
-		SpaceID:  spaceID,
-		Name:     name,
-		Slug:     slug,
-		Position: maxPos.Position + 1,
+		ProjectID: projectID,
+		Name:      name,
+		Slug:      slug,
+		Position:  maxPos.Position + 1,
 	}
 	if err := service.orm.WithContext(ctx).Create(record).Error; err != nil {
 		if stderrors.Is(err, gorm.ErrDuplicatedKey) {
-			return nil, errors.Conflict("environment slug already exists in this space")
+			return nil, errors.Conflict("environment slug already exists in this project")
 		}
 		return nil, errors.Internal("failed to create environment", err)
 	}
@@ -90,10 +90,10 @@ func (service *Service) createEnvironment(ctx context.Context, spaceID int64, na
 	}, nil
 }
 
-func (service *Service) updateEnvironment(ctx context.Context, spaceID int64, envSlug, name string) (*EnvironmentResponse, error) {
+func (service *Service) updateEnvironment(ctx context.Context, projectID int64, envSlug, name string) (*EnvironmentResponse, error) {
 	var record schemas.Environment
 	err := service.orm.WithContext(ctx).
-		Where("space_id = ? AND slug = ?", spaceID, envSlug).
+		Where("project_id = ? AND slug = ?", projectID, envSlug).
 		First(&record).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, errors.NotFound("environment not found")
@@ -117,10 +117,10 @@ func (service *Service) updateEnvironment(ctx context.Context, spaceID int64, en
 	}, nil
 }
 
-func (service *Service) deleteEnvironment(ctx context.Context, spaceID int64, envSlug string) error {
+func (service *Service) deleteEnvironment(ctx context.Context, projectID int64, envSlug string) error {
 	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var env schemas.Environment
-		err := tx.Where("space_id = ? AND slug = ?", spaceID, envSlug).First(&env).Error
+		err := tx.Where("project_id = ? AND slug = ?", projectID, envSlug).First(&env).Error
 		if stderrors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.NotFound("environment not found")
 		}
@@ -140,10 +140,10 @@ func (service *Service) deleteEnvironment(ctx context.Context, spaceID int64, en
 	})
 }
 
-func (service *Service) resolveEnvironmentID(ctx context.Context, spaceID int64, envSlug string) (int64, error) {
+func (service *Service) resolveEnvironmentID(ctx context.Context, projectID int64, envSlug string) (int64, error) {
 	var record schemas.Environment
 	err := service.orm.WithContext(ctx).
-		Where("space_id = ? AND slug = ?", spaceID, envSlug).
+		Where("project_id = ? AND slug = ?", projectID, envSlug).
 		First(&record).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, errors.NotFound("environment not found")
@@ -154,8 +154,8 @@ func (service *Service) resolveEnvironmentID(ctx context.Context, spaceID int64,
 	return record.ID, nil
 }
 
-func (service *Service) ResolveEnvironmentID(ctx context.Context, spaceID int64, envSlug string) (int64, error) {
-	return service.resolveEnvironmentID(ctx, spaceID, envSlug)
+func (service *Service) ResolveEnvironmentID(ctx context.Context, projectID int64, envSlug string) (int64, error) {
+	return service.resolveEnvironmentID(ctx, projectID, envSlug)
 }
 
 func slugify(name string) string {

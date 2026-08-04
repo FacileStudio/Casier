@@ -1,4 +1,4 @@
-package spaces
+package projects
 
 import "time"
 
@@ -17,7 +17,7 @@ type AddMemberRequest struct {
 	Role  string `json:"role"`
 }
 
-type SpaceResponse struct {
+type ProjectResponse struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
 	Slug        string    `json:"slug"`
@@ -28,7 +28,7 @@ type SpaceResponse struct {
 }
 
 type ListResponse struct {
-	Spaces []SpaceResponse `json:"spaces"`
+	Projects []ProjectResponse `json:"projects"`
 }
 
 type MemberResponse struct {

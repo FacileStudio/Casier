@@ -6,8 +6,8 @@ type ApiToken struct {
 	ID           int64     `gorm:"column:id;primaryKey"`
 	TokenHash    string    `gorm:"column:token_hash;uniqueIndex"`
 	Name         string    `gorm:"column:name"`
-	SpaceID      int64     `gorm:"column:space_id;index"`
-	Space        Space     `gorm:"constraint:OnDelete:CASCADE"`
+	ProjectID    int64     `gorm:"column:project_id;index"`
+	Project      Project   `gorm:"constraint:OnDelete:CASCADE"`
 	Environments string    `gorm:"column:environments"`
 	Permissions  string    `gorm:"column:permissions;default:'read'"`
 	CreatedBy    int64     `gorm:"column:created_by"`

@@ -1,16 +1,16 @@
 # Casier Roadmap
 
 > Formerly Clef. Renamed 2026-08-04 — grid of lockers, one compartment per
-> space × environment. Registry-clean on crates.io and npm.
+> project × environment. Registry-clean on crates.io and npm.
 
 ## v1 — Foundation
 
 - [x] Go API with Chi + GORM + Postgres
 - [x] Email + password auth (argon2id, session-based)
 - [x] OIDC SSO via Authentik
-- [x] Spaces with per-space AES-256-GCM data keys (Infisical-style key hierarchy)
+- [x] Projects with per-project AES-256-GCM data keys (Infisical-style key hierarchy)
 - [x] Environments (dev/staging/prod auto-created)
-- [x] Secrets encrypted at rest with per-space data keys
+- [x] Secrets encrypted at rest with per-project data keys
 - [x] OIDC tokens encrypted at rest
 - [x] Audit logging (user, IP, key, operation)
 - [x] Role-based access control (owner/admin/member/viewer)
@@ -32,9 +32,9 @@
 
 ## v3 — Team Features
 
-- [x] Root encryption key rotation (re-encrypt all space data keys)
-- [x] Invite links for space membership
-- [x] Per-secret access control (beyond space-level roles)
+- [x] Root encryption key rotation (re-encrypt all project data keys)
+- [x] Invite links for project membership
+- [x] Per-secret access control (beyond project-level roles)
 - [x] Secret tagging and search
 - [x] Bulk import/export (`.env` file ↔ Casier)
 - [x] CLI: `casier diff` — compare secrets across environments
@@ -45,7 +45,7 @@
 ## v4 — Platform
 
 - [x] Webhook notifications on secret changes
-- [x] API tokens (machine identity, scoped per space + environment)
+- [x] API tokens (machine identity, scoped per project + environment)
 - [x] Secret references (one secret pointing to another across environments)
 - [x] Dashboard: activity feed with filterable audit log
 - [x] Dashboard: secret diff view across environments
