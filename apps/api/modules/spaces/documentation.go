@@ -111,12 +111,13 @@ var Documentation = documentation.Module{
 			Method:      "DELETE",
 			Path:        "/spaces/{slug}/members/{userId}",
 			Summary:     "Remove a member",
-			Description: "Removes a user from the space. Requires owner or admin role.",
+			Description: "Removes a user from the space. Requires owner or admin role. Returns a warning reminding to rotate credentials the removed member may have fetched.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Space slug."},
 				{Name: "userId", Type: "int64", Description: "User ID to remove."},
 			},
+			ResponseBody: "RemoveMemberResponse",
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Member not found."},

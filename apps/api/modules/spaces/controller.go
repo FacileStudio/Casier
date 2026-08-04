@@ -139,7 +139,7 @@ func (controller *Controller) removeMember(ctx context.Context, slug string, tar
 		return err
 	}
 
-	return controller.service.removeMember(ctx, slug, userID, targetUserID)
+	return controller.service.removeMember(ctx, slug, userID, targetUserID, identity.Email, identity.ClientIP)
 }
 
 func (controller *Controller) createInvite(ctx context.Context, slug string, req *CreateInviteRequest) (*InviteResponse, error) {

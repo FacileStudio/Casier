@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"casier/internal/audit"
 	"casier/internal/crypto"
 	"casier/internal/errors"
 	"casier/schemas"
@@ -25,11 +26,12 @@ var slugRegexp = regexp.MustCompile(`[^a-z0-9]+`)
 type Service struct {
 	orm        *gorm.DB
 	encKey     []byte
+	audit      *audit.Logger
 	controller *Controller
 }
 
-func NewService(orm *gorm.DB, encKey []byte) *Service {
-	service := &Service{orm: orm, encKey: encKey}
+func NewService(orm *gorm.DB, encKey []byte, auditLog *audit.Logger) *Service {
+	service := &Service{orm: orm, encKey: encKey, audit: auditLog}
 	service.controller = newController(service)
 	return service
 }
@@ -297,7 +299,7 @@ func (service *Service) addMember(ctx context.Context, slug string, callerID int
 	return nil
 }
 
-func (service *Service) removeMember(ctx context.Context, slug string, callerID int64, targetUserID int64) error {
+func (service *Service) removeMember(ctx context.Context, slug string, callerID int64, targetUserID int64, callerEmail, clientIP string) error {
 	_, callerRole, err := service.getSpaceWithRole(ctx, slug, callerID)
 	if err != nil {
 		return err
@@ -336,6 +338,11 @@ func (service *Service) removeMember(ctx context.Context, slug string, callerID 
 	if err := service.orm.WithContext(ctx).Delete(&target).Error; err != nil {
 		return errors.Internal("failed to remove member", err)
 	}
+
+	if service.audit != nil {
+		service.audit.Log(ctx, space.ID, strconv.FormatInt(callerID, 10), callerEmail, "member.removed", "user:"+strconv.FormatInt(targetUserID, 10), "", clientIP)
+	}
+
 	return nil
 }
 

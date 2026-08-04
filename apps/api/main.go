@@ -79,7 +79,7 @@ func main() {
 	authService.StartSessionCleanup(shutdownCtx)
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
 	auditLogger := audit.NewLogger(db)
-	spacesService := spaces.NewService(db, encKey)
+	spacesService := spaces.NewService(db, encKey, auditLogger)
 	environmentsService := environments.NewService(db, spacesService)
 	secretsService := secrets.NewService(db, appLogger, spacesService, environmentsService, spacesService, webhookDispatcher, auditLogger)
 

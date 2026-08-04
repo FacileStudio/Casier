@@ -1,48 +1,67 @@
 <script lang="ts">
+	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
-	import { api, type Space } from '$lib/backend';
-	import { Button } from '$lib/components/ui/button';
-	import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import { Badge } from '$lib/components/ui/badge';
+	import { api, type Space, type SpacesResponse } from '$lib/backend';
+	import { formatDate } from '$lib/format';
+	import { Badge, Button, Field, Input, Modal, Skeleton, Spinner, Textarea } from '@facile/lib';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import ErrorState from '$lib/components/ErrorState.svelte';
 	import { toast } from 'svelte-sonner';
 	import PlusIcon from '@lucide/svelte/icons/plus';
 	import FolderLockIcon from '@lucide/svelte/icons/folder-lock';
-	import UsersIcon from '@lucide/svelte/icons/users';
-	import XIcon from '@lucide/svelte/icons/x';
 
 	let spaces = $state<Space[]>([]);
 	let loading = $state(true);
-	let showCreate = $state(false);
+	let loadError = $state('');
+
+	let createOpen = $state(false);
 	let createName = $state('');
 	let createDescription = $state('');
 	let creating = $state(false);
 
+	let nameError = $derived(
+		createName.length > 0 && createName.trim().length < 2 ? 'Name must be at least 2 characters' : undefined
+	);
+
+	const roleTones = {
+		owner: 'accent',
+		admin: 'success',
+		member: 'neutral',
+		viewer: 'neutral',
+	} as const;
+
 	async function loadSpaces() {
 		loading = true;
+		loadError = '';
 		try {
-			spaces = await api.get<Space[]>('/spaces', auth.token);
+			const res = await api.get<SpacesResponse>('/spaces', auth.token);
+			spaces = (res.spaces ?? []).toSorted((a, b) => a.name.localeCompare(b.name));
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to load spaces');
+			loadError = err instanceof Error ? err.message : 'Failed to load spaces';
 		} finally {
 			loading = false;
 		}
 	}
 
+	function openCreate() {
+		createName = '';
+		createDescription = '';
+		createOpen = true;
+	}
+
 	async function handleCreate(e: Event) {
 		e.preventDefault();
+		if (createName.trim().length < 2) return;
 		creating = true;
 		try {
-			const space = await api.post<Space>('/spaces', {
-				name: createName,
-				description: createDescription,
-			}, auth.token);
-			spaces = [...spaces, space];
-			showCreate = false;
-			createName = '';
-			createDescription = '';
-			toast.success('Space created');
+			const space = await api.post<Space>(
+				'/spaces',
+				{ name: createName.trim(), description: createDescription.trim() },
+				auth.token
+			);
+			createOpen = false;
+			toast.success(`Space "${space.name}" created`);
+			goto(`/spaces/${space.slug}`);
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Failed to create space');
 		} finally {
@@ -55,78 +74,86 @@
 	});
 </script>
 
-<div class="p-6">
-	<div class="mb-6 flex items-center justify-between">
-		<div>
-			<h1 class="text-xl font-semibold">Spaces</h1>
-			<p class="text-sm text-muted-foreground">Manage your secret spaces</p>
-		</div>
-		<Button onclick={() => (showCreate = true)}>
-			<PlusIcon class="size-4" />
-			New space
-		</Button>
+<svelte:head>
+	<title>Casier — Spaces</title>
+</svelte:head>
+
+<div class="mb-6 flex flex-wrap items-center justify-between gap-3">
+	<div>
+		<h1 class="text-fc-2xl font-semibold text-fc-fg">Spaces</h1>
+		<p class="text-fc-md text-fc-fg-muted">Each space groups environments and their secrets</p>
 	</div>
-
-	{#if showCreate}
-		<Card class="mb-6">
-			<CardHeader>
-				<div class="flex items-center justify-between">
-					<CardTitle>Create space</CardTitle>
-					<Button variant="ghost" size="icon" onclick={() => (showCreate = false)}>
-						<XIcon class="size-4" />
-					</Button>
-				</div>
-			</CardHeader>
-			<CardContent>
-				<form onsubmit={handleCreate} class="flex flex-col gap-4">
-					<div class="flex flex-col gap-1.5">
-						<Label for="space-name">Name</Label>
-						<Input id="space-name" placeholder="my-project" bind:value={createName} required />
-					</div>
-					<div class="flex flex-col gap-1.5">
-						<Label for="space-desc">Description</Label>
-						<Input id="space-desc" placeholder="Optional description" bind:value={createDescription} />
-					</div>
-					<div class="flex justify-end">
-						<Button type="submit" disabled={creating}>
-							{creating ? 'Creating...' : 'Create'}
-						</Button>
-					</div>
-				</form>
-			</CardContent>
-		</Card>
-	{/if}
-
-	{#if loading}
-		<div class="flex items-center justify-center py-12 text-muted-foreground">
-			Loading spaces...
-		</div>
-	{:else if spaces.length === 0}
-		<div class="flex flex-col items-center justify-center py-12 text-muted-foreground">
-			<FolderLockIcon class="mb-3 size-10 opacity-40" />
-			<p class="text-sm">No spaces yet</p>
-			<p class="text-xs">Create a space to start managing secrets</p>
-		</div>
-	{:else}
-		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-			{#each spaces as space (space.id)}
-				<a href="/spaces/{space.slug}" class="block">
-					<Card class="transition-colors hover:bg-muted/30">
-						<CardHeader>
-							<div class="flex items-center justify-between">
-								<CardTitle>{space.name}</CardTitle>
-								<Badge variant="secondary" class="gap-1">
-									<UsersIcon class="size-3" />
-									{space.member_count}
-								</Badge>
-							</div>
-							{#if space.description}
-								<CardDescription>{space.description}</CardDescription>
-							{/if}
-						</CardHeader>
-					</Card>
-				</a>
-			{/each}
-		</div>
-	{/if}
+	<Button onclick={openCreate}>
+		<PlusIcon class="size-4" aria-hidden="true" />
+		New space
+	</Button>
 </div>
+
+{#if loading}
+	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+		{#each Array(6) as _, i (i)}
+			<div class="flex flex-col gap-3 rounded-fc-md bg-fc-component px-8 py-6">
+				<Skeleton class="h-5 w-2/5" />
+				<Skeleton class="h-4 w-4/5" />
+				<Skeleton class="h-3 w-1/3" />
+			</div>
+		{/each}
+	</div>
+{:else if loadError}
+	<ErrorState message={loadError} onretry={loadSpaces} />
+{:else if spaces.length === 0}
+	<EmptyState
+		title="No spaces yet"
+		description="A space holds your environments and secrets for one project or team. Create your first one to get started."
+	>
+		{#snippet icon()}
+			<FolderLockIcon class="size-10" aria-hidden="true" />
+		{/snippet}
+		<Button onclick={openCreate}>
+			<PlusIcon class="size-4" aria-hidden="true" />
+			Create a space
+		</Button>
+	</EmptyState>
+{:else}
+	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+		{#each spaces as space (space.id)}
+			<a
+				href="/spaces/{space.slug}"
+				class="group flex flex-col gap-2 rounded-fc-md border border-transparent bg-fc-component px-8 py-6 transition-colors hover:border-fc-accent/40 focus-visible:outline-2 focus-visible:outline-fc-accent"
+			>
+				<div class="flex items-start justify-between gap-2">
+					<span class="truncate text-fc-lg font-semibold text-fc-fg group-hover:text-fc-accent">
+						{space.name}
+					</span>
+					<Badge tone={roleTones[space.role] ?? 'neutral'}>{space.role}</Badge>
+				</div>
+				{#if space.description}
+					<p class="line-clamp-2 text-fc-md text-fc-fg-muted">{space.description}</p>
+				{/if}
+				<p class="mt-auto pt-2 text-fc-xs text-fc-fg-muted">
+					Updated {formatDate(space.updated_at)}
+				</p>
+			</a>
+		{/each}
+	</div>
+{/if}
+
+<Modal bind:open={createOpen} title="Create space">
+	<form onsubmit={handleCreate} class="flex flex-col gap-4">
+		<Field label="Name" error={nameError}>
+			<Input placeholder="my-project" bind:value={createName} required disabled={creating} />
+		</Field>
+		<Field label="Description" helper="Optional">
+			<Textarea rows={2} placeholder="What lives in this space?" bind:value={createDescription} disabled={creating} />
+		</Field>
+		<div class="flex justify-end gap-2 pt-1">
+			<Button type="button" variant="ghost" disabled={creating} onclick={() => (createOpen = false)}>
+				Cancel
+			</Button>
+			<Button type="submit" disabled={creating || createName.trim().length < 2}>
+				{#if creating}<Spinner size="sm" />{/if}
+				{creating ? 'Creating…' : 'Create space'}
+			</Button>
+		</div>
+	</form>
+</Modal>

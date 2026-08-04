@@ -114,6 +114,7 @@ func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 			} else {
 				router.Get("/oidc", oidc.login)
 				router.Get("/oidc/callback", oidc.callback)
+				router.With(middleware.RateLimit(authLimiter)).Post("/cli", oidc.cliExchange)
 				router.With(middleware.RequireAuth(service)).Post("/sync-profile", oidc.syncProfile)
 			}
 		}

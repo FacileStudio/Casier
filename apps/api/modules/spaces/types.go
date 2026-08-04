@@ -41,6 +41,10 @@ type MembersResponse struct {
 	Members []MemberResponse `json:"members"`
 }
 
+type RemoveMemberResponse struct {
+	Warning string `json:"warning"`
+}
+
 type CreateInviteRequest struct {
 	Role    string `json:"role"`
 	MaxUses int    `json:"max_uses"`

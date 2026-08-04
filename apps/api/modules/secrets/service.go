@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,6 +179,11 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 			UpdatedAt: r.UpdatedAt,
 		}
 	}
+
+	if service.audit != nil {
+		service.audit.Log(ctx, spaceID, userID, "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(records))+" secrets", clientIP)
+	}
+
 	return secrets, nil
 }
 

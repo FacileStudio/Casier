@@ -124,6 +124,39 @@ func (h *oidcHandler) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, h.successURL, http.StatusFound)
 }
 
+func (h *oidcHandler) cliExchange(w http.ResponseWriter, r *http.Request) {
+	var req CLIExchangeRequest
+	if err := httpjson.DecodeJSON(w, r, &req); err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	if req.IDToken == "" {
+		httpjson.WriteError(w, errors.Invalid("id_token is required"))
+		return
+	}
+
+	idToken, err := h.verifier.Verify(r.Context(), req.IDToken)
+	if err != nil {
+		httpjson.WriteError(w, errors.Unauthorized("invalid id_token"))
+		return
+	}
+
+	var claims struct {
+		Email string `json:"email"`
+	}
+	if err := idToken.Claims(&claims); err != nil || claims.Email == "" {
+		httpjson.WriteError(w, errors.Unauthorized("invalid id_token"))
+		return
+	}
+
+	token, err := h.service.exchangeCLIToken(r.Context(), claims.Email)
+	if err != nil {
+		httpjson.WriteError(w, err)
+		return
+	}
+	httpjson.WriteJSON(w, http.StatusOK, CLIExchangeResponse{Token: token})
+}
+
 func (h *oidcHandler) syncProfile(w http.ResponseWriter, r *http.Request) {
 	identity, ok := authcontext.IdentityFromContext(r.Context())
 	if !ok {

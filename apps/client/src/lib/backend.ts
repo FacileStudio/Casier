@@ -1,5 +1,7 @@
 export const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 
+export const COOKIE_SESSION = 'cookie';
+
 type FetchOptions = {
 	method?: string;
 	body?: unknown;
@@ -13,7 +15,7 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
 		headers['Content-Type'] = 'application/json';
 	}
 
-	if (options.token) {
+	if (options.token && options.token !== COOKIE_SESSION) {
 		headers['Authorization'] = `Bearer ${options.token}`;
 	}
 
@@ -40,37 +42,119 @@ export const api = {
 	del: <T>(path: string, token?: string | null) => request<T>(path, { method: 'DELETE', token }),
 };
 
-export type Space = {
+export type AuthConfig = {
+	sso_only: boolean;
+	oidc_enabled: boolean;
+};
+
+export type AuthResponse = {
+	user_id: string;
+	token: string;
+};
+
+export type Me = {
 	id: string;
+	email: string;
+};
+
+export type SpaceRole = 'owner' | 'admin' | 'member' | 'viewer';
+
+export type Space = {
+	id: number;
 	name: string;
 	slug: string;
 	description: string;
+	role: SpaceRole;
 	created_at: string;
 	updated_at: string;
-	member_count: number;
+};
+
+export type SpacesResponse = {
+	spaces: Space[] | null;
+};
+
+export type Environment = {
+	id: number;
+	name: string;
+	slug: string;
+	position: number;
+	created_at: string;
+	updated_at: string;
+};
+
+export type EnvironmentsResponse = {
+	environments: Environment[] | null;
 };
 
 export type Secret = {
-	id: string;
-	space_id: string;
-	environment: string;
+	id: number;
 	key: string;
 	value: string;
+	version: number;
+	tags: string[] | null;
 	created_at: string;
 	updated_at: string;
 };
 
-export type Member = {
-	id: string;
-	user_id: string;
-	space_id: string;
-	role: string;
-	email: string;
+export type SecretsResponse = {
+	secrets: Secret[] | null;
+};
+
+export type SecretVersion = {
+	version: number;
+	changed_by: string;
 	created_at: string;
 };
 
-export type User = {
-	id: string;
+export type SecretVersionsResponse = {
+	versions: SecretVersion[] | null;
+};
+
+export type ImportResult = {
+	created: number;
+	updated: number;
+	skipped: number;
+};
+
+export type ExportResult = {
+	content: string;
+};
+
+export type Member = {
+	id: number;
 	email: string;
+	role: SpaceRole;
+};
+
+export type MembersResponse = {
+	members: Member[] | null;
+};
+
+export type ApiToken = {
+	id: number;
+	token?: string;
+	name: string;
+	environments: string;
+	permissions: string;
+	expires_at: string;
+	last_used_at: string;
 	created_at: string;
+};
+
+export type ApiTokensResponse = {
+	tokens: ApiToken[] | null;
+};
+
+export type AuditLogEntry = {
+	id: number;
+	user_email: string;
+	action: string;
+	resource: string;
+	detail: string;
+	client_ip: string;
+	created_at: string;
+};
+
+export type AuditLogsResponse = {
+	logs: AuditLogEntry[] | null;
 };

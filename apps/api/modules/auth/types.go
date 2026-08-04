@@ -31,6 +31,14 @@ func (d *Data) GetEmail() string {
 	return d.Email
 }
 
+type CLIExchangeRequest struct {
+	IDToken string `json:"id_token"`
+}
+
+type CLIExchangeResponse struct {
+	Token string `json:"token"`
+}
+
 type ForgotPasswordRequest struct {
 	Email string `json:"email"`
 }

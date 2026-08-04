@@ -105,6 +105,26 @@ func (service *Service) loginUser(ctx context.Context, email string, password st
 	return strconv.FormatInt(record.ID, 10), token, nil
 }
 
+func (service *Service) exchangeCLIToken(ctx context.Context, email string) (string, error) {
+	var record schemas.User
+	err := service.orm.WithContext(ctx).Where("email = ?", email).First(&record).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return "", errors.Forbidden("no account for this identity")
+	}
+	if err != nil {
+		return "", errors.Internal("failed to look up user", err)
+	}
+
+	token, err := authcrypto.NewToken()
+	if err != nil {
+		return "", errors.Internal("failed to create session", err)
+	}
+	if err := service.insertSession(ctx, token, record.ID); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
 func (service *Service) logoutUser(ctx context.Context, authorization string) error {
 	token := normalizeBearer(authorization)
 	if token == "" {

@@ -279,7 +279,9 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 					httpjson.WriteError(w, err)
 					return
 				}
-				w.WriteHeader(http.StatusNoContent)
+				httpjson.WriteJSON(w, http.StatusOK, RemoveMemberResponse{
+					Warning: "Removed members keep any secrets they already fetched. Rotate affected credentials.",
+				})
 			})
 		})
 	})

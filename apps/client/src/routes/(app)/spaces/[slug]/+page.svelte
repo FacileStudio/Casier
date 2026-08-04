@@ -1,359 +1,305 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { auth } from '$lib/auth.svelte';
-	import { api, type Space, type Secret, type Member } from '$lib/backend';
-	import { Button } from '$lib/components/ui/button';
-	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
-	import { Card, CardContent, CardHeader, CardTitle } from '$lib/components/ui/card';
-	import { Badge } from '$lib/components/ui/badge';
-	import { Separator } from '$lib/components/ui/separator';
-	import * as Table from '$lib/components/ui/table';
+	import {
+		api,
+		type Environment,
+		type EnvironmentsResponse,
+		type Space,
+	} from '$lib/backend';
+	import { nav } from '$lib/nav.svelte';
+	import { Badge, Button, Field, Input, Modal, Skeleton, Spinner } from '@facile/lib';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import ErrorState from '$lib/components/ErrorState.svelte';
+	import SecretsSection from '$lib/components/space/SecretsSection.svelte';
+	import MembersSection from '$lib/components/space/MembersSection.svelte';
+	import TokensSection from '$lib/components/space/TokensSection.svelte';
+	import AuditSection from '$lib/components/space/AuditSection.svelte';
 	import { toast } from 'svelte-sonner';
-	import PlusIcon from '@lucide/svelte/icons/plus';
-	import EyeIcon from '@lucide/svelte/icons/eye';
-	import EyeOffIcon from '@lucide/svelte/icons/eye-off';
-	import PencilIcon from '@lucide/svelte/icons/pencil';
-	import TrashIcon from '@lucide/svelte/icons/trash-2';
-	import UserPlusIcon from '@lucide/svelte/icons/user-plus';
-	import XIcon from '@lucide/svelte/icons/x';
-	import CheckIcon from '@lucide/svelte/icons/check';
 	import ArrowLeftIcon from '@lucide/svelte/icons/arrow-left';
+	import PlusIcon from '@lucide/svelte/icons/plus';
+	import Trash2Icon from '@lucide/svelte/icons/trash-2';
 
-	const DEFAULT_ENVS = ['development', 'staging', 'production'];
+	let slug = $derived(page.params.slug ?? '');
 
 	let space = $state<Space | null>(null);
-	let secrets = $state<Secret[]>([]);
-	let members = $state<Member[]>([]);
+	let environments = $state<Environment[]>([]);
+	let selectedEnvSlug = $state<string | null>(null);
 	let loading = $state(true);
-	let selectedEnv = $state('development');
-	let revealedKeys = $state<Set<string>>(new Set());
+	let loadError = $state('');
 
-	let showAddSecret = $state(false);
-	let newKey = $state('');
-	let newValue = $state('');
-	let addingSecret = $state(false);
+	let tab = $state<'secrets' | 'members' | 'tokens' | 'audit'>('secrets');
 
-	let editingId = $state<string | null>(null);
-	let editValue = $state('');
+	let createEnvOpen = $state(false);
+	let newEnvName = $state('');
+	let creatingEnv = $state(false);
 
-	let showAddMember = $state(false);
-	let newMemberEmail = $state('');
-	let addingMember = $state(false);
+	let deleteEnvOpen = $state(false);
+	let deletingEnv = $state(false);
 
-	let slug = $derived($page.params.slug);
-	let envSecrets = $derived(secrets.filter((s) => s.environment === selectedEnv));
+	let deleteSpaceOpen = $state(false);
+	let deletingSpace = $state(false);
+
+	let canWrite = $derived(
+		space !== null && ['owner', 'admin', 'member'].includes(space.role)
+	);
+	let canAdmin = $derived(space !== null && ['owner', 'admin'].includes(space.role));
+	let selectedEnv = $derived(environments.find((e) => e.slug === selectedEnvSlug) ?? null);
+
+	const roleTones = {
+		owner: 'accent',
+		admin: 'success',
+		member: 'neutral',
+		viewer: 'neutral',
+	} as const;
 
 	async function loadSpace() {
 		loading = true;
+		loadError = '';
 		try {
-			space = await api.get<Space>(`/spaces/${slug}`, auth.token);
-			await Promise.all([loadSecrets(), loadMembers()]);
+			const [spaceRes, envsRes] = await Promise.all([
+				api.get<Space>(`/spaces/${slug}`, auth.token),
+				api.get<EnvironmentsResponse>(`/spaces/${slug}/environments`, auth.token),
+			]);
+			space = spaceRes;
+			nav.spaceName = spaceRes.name;
+			environments = (envsRes.environments ?? []).toSorted((a, b) => a.position - b.position);
+			if (!environments.some((e) => e.slug === selectedEnvSlug)) {
+				selectedEnvSlug = environments[0]?.slug ?? null;
+			}
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to load space');
+			loadError = err instanceof Error ? err.message : 'Failed to load space';
 		} finally {
 			loading = false;
 		}
 	}
 
-	async function loadSecrets() {
-		try {
-			secrets = await api.get<Secret[]>(`/spaces/${slug}/secrets`, auth.token);
-		} catch {
-			secrets = [];
+	async function reloadEnvironments() {
+		const envsRes = await api.get<EnvironmentsResponse>(`/spaces/${slug}/environments`, auth.token);
+		environments = (envsRes.environments ?? []).toSorted((a, b) => a.position - b.position);
+		if (!environments.some((e) => e.slug === selectedEnvSlug)) {
+			selectedEnvSlug = environments[0]?.slug ?? null;
 		}
 	}
 
-	async function loadMembers() {
-		try {
-			members = await api.get<Member[]>(`/spaces/${slug}/members`, auth.token);
-		} catch {
-			members = [];
-		}
-	}
-
-	function toggleReveal(id: string) {
-		const next = new Set(revealedKeys);
-		if (next.has(id)) {
-			next.delete(id);
-		} else {
-			next.add(id);
-		}
-		revealedKeys = next;
-	}
-
-	function maskValue(value: string): string {
-		if (value.length <= 4) return '*'.repeat(value.length || 8);
-		return value.slice(0, 2) + '*'.repeat(Math.min(value.length - 4, 16)) + value.slice(-2);
-	}
-
-	async function handleAddSecret(e: Event) {
+	async function handleCreateEnv(e: Event) {
 		e.preventDefault();
-		addingSecret = true;
+		if (!newEnvName.trim()) return;
+		creatingEnv = true;
 		try {
-			const secret = await api.post<Secret>(`/spaces/${slug}/secrets`, {
-				environment: selectedEnv,
-				key: newKey,
-				value: newValue,
-			}, auth.token);
-			secrets = [...secrets, secret];
-			showAddSecret = false;
-			newKey = '';
-			newValue = '';
-			toast.success('Secret added');
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to add secret');
-		} finally {
-			addingSecret = false;
-		}
-	}
-
-	function startEdit(secret: Secret) {
-		editingId = secret.id;
-		editValue = secret.value;
-	}
-
-	async function saveEdit(secret: Secret) {
-		try {
-			await api.put(`/spaces/${slug}/secrets/${secret.id}`, {
-				value: editValue,
-			}, auth.token);
-			secrets = secrets.map((s) =>
-				s.id === secret.id ? { ...s, value: editValue } : s
+			const env = await api.post<Environment>(
+				`/spaces/${slug}/environments`,
+				{ name: newEnvName.trim() },
+				auth.token
 			);
-			editingId = null;
-			toast.success('Secret updated');
+			createEnvOpen = false;
+			newEnvName = '';
+			await reloadEnvironments();
+			selectedEnvSlug = env.slug;
+			toast.success(`Environment "${env.name}" created`);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to update secret');
-		}
-	}
-
-	async function deleteSecret(id: string) {
-		try {
-			await api.del(`/spaces/${slug}/secrets/${id}`, auth.token);
-			secrets = secrets.filter((s) => s.id !== id);
-			toast.success('Secret deleted');
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to delete secret');
-		}
-	}
-
-	async function handleAddMember(e: Event) {
-		e.preventDefault();
-		addingMember = true;
-		try {
-			const member = await api.post<Member>(`/spaces/${slug}/members`, {
-				email: newMemberEmail,
-			}, auth.token);
-			members = [...members, member];
-			showAddMember = false;
-			newMemberEmail = '';
-			toast.success('Member added');
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to add member');
+			toast.error(err instanceof Error ? err.message : 'Failed to create environment');
 		} finally {
-			addingMember = false;
+			creatingEnv = false;
 		}
 	}
 
-	async function removeMember(id: string) {
+	async function handleDeleteEnv() {
+		if (!selectedEnv) return;
+		deletingEnv = true;
 		try {
-			await api.del(`/spaces/${slug}/members/${id}`, auth.token);
-			members = members.filter((m) => m.id !== id);
-			toast.success('Member removed');
+			await api.del(`/spaces/${slug}/environments/${selectedEnv.slug}`, auth.token);
+			toast.success(`Environment "${selectedEnv.name}" deleted`);
+			deleteEnvOpen = false;
+			await reloadEnvironments();
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to remove member');
+			toast.error(err instanceof Error ? err.message : 'Failed to delete environment');
+		} finally {
+			deletingEnv = false;
+		}
+	}
+
+	async function handleDeleteSpace() {
+		if (!space) return;
+		deletingSpace = true;
+		try {
+			await api.del(`/spaces/${slug}`, auth.token);
+			toast.success(`Space "${space.name}" deleted`);
+			goto('/spaces');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Failed to delete space');
+			deletingSpace = false;
 		}
 	}
 
 	$effect(() => {
 		slug;
 		loadSpace();
+		return () => {
+			nav.spaceName = null;
+		};
 	});
 </script>
 
-<div class="p-6">
-	{#if loading}
-		<div class="flex items-center justify-center py-12 text-muted-foreground">
-			Loading...
+<svelte:head>
+	<title>{space ? `Casier — ${space.name}` : 'Casier'}</title>
+</svelte:head>
+
+{#if loading}
+	<div class="flex flex-col gap-6">
+		<Skeleton class="h-4 w-24" />
+		<div class="flex flex-col gap-2">
+			<Skeleton class="h-8 w-64" />
+			<Skeleton class="h-4 w-96 max-w-full" />
 		</div>
-	{:else if space}
-		<div class="mb-6">
-			<Button variant="ghost" size="sm" href="/spaces" class="mb-3 gap-1">
-				<ArrowLeftIcon class="size-3.5" />
-				Back
-			</Button>
-			<h1 class="text-xl font-semibold">{space.name}</h1>
-			{#if space.description}
-				<p class="text-sm text-muted-foreground">{space.description}</p>
+		<Skeleton class="h-10 w-72 max-w-full rounded-fc-pill" />
+		<div class="rounded-fc-md bg-fc-component px-8 py-6">
+			<div class="flex flex-col gap-3">
+				{#each Array(5) as _, i (i)}
+					<Skeleton class="h-9 w-full" />
+				{/each}
+			</div>
+		</div>
+	</div>
+{:else if loadError}
+	<ErrorState message={loadError} onretry={loadSpace} />
+{:else if space}
+	<div class="flex flex-col gap-6">
+		<div>
+			<a
+				href="/spaces"
+				class="mb-3 inline-flex items-center gap-1.5 rounded-fc-sm text-fc-sm text-fc-fg-muted transition-colors hover:text-fc-fg focus-visible:outline-2 focus-visible:outline-fc-accent"
+			>
+				<ArrowLeftIcon class="size-3.5" aria-hidden="true" />
+				All spaces
+			</a>
+			<div class="flex flex-wrap items-start justify-between gap-3">
+				<div class="min-w-0">
+					<div class="flex items-center gap-3">
+						<h1 class="truncate text-fc-2xl font-semibold text-fc-fg">{space.name}</h1>
+						<Badge tone={roleTones[space.role] ?? 'neutral'}>{space.role}</Badge>
+					</div>
+					{#if space.description}
+						<p class="mt-1 text-fc-md text-fc-fg-muted">{space.description}</p>
+					{/if}
+				</div>
+				{#if canAdmin}
+					<Button variant="ghost" class="text-fc-danger" onclick={() => (deleteSpaceOpen = true)}>
+						<Trash2Icon class="size-4" aria-hidden="true" />
+						Delete space
+					</Button>
+				{/if}
+			</div>
+		</div>
+
+		<div class="flex flex-wrap items-center gap-2">
+			<div
+				class="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-fc-pill bg-fc-surface p-1"
+				role="group"
+				aria-label="Environments"
+			>
+				{#each environments as env (env.id)}
+					<button
+						type="button"
+						class="shrink-0 rounded-fc-pill px-3 py-1.5 text-fc-sm font-medium transition-colors {selectedEnvSlug ===
+						env.slug
+							? 'bg-fc-accent text-fc-accent-fg'
+							: 'text-fc-fg-muted hover:text-fc-fg'}"
+						aria-pressed={selectedEnvSlug === env.slug}
+						onclick={() => (selectedEnvSlug = env.slug)}
+					>
+						{env.name}
+					</button>
+				{/each}
+			</div>
+			{#if canAdmin}
+				<button
+					type="button"
+					class="inline-flex h-9 w-9 items-center justify-center rounded-fc-pill bg-fc-surface text-fc-fg-muted transition-colors hover:text-fc-fg focus-visible:outline-2 focus-visible:outline-fc-accent"
+					aria-label="Add environment"
+					onclick={() => (createEnvOpen = true)}
+				>
+					<PlusIcon class="size-4" aria-hidden="true" />
+				</button>
+				{#if selectedEnv && environments.length > 1}
+					<button
+						type="button"
+						class="inline-flex h-9 w-9 items-center justify-center rounded-fc-pill bg-fc-surface text-fc-fg-muted transition-colors hover:text-fc-danger focus-visible:outline-2 focus-visible:outline-fc-accent"
+						aria-label={`Delete environment ${selectedEnv.name}`}
+						onclick={() => (deleteEnvOpen = true)}
+					>
+						<Trash2Icon class="size-4" aria-hidden="true" />
+					</button>
+				{/if}
 			{/if}
 		</div>
 
-		<div class="mb-4 flex gap-1">
-			{#each DEFAULT_ENVS as env (env)}
-				<Button
-					variant={selectedEnv === env ? 'default' : 'outline'}
-					size="sm"
-					onclick={() => (selectedEnv = env)}
+		<div class="flex gap-1 border-b border-fc-fg/10" role="tablist" aria-label="Space sections">
+			{#each [['secrets', 'Secrets'], ['members', 'Members'], ...(canAdmin ? [['tokens', 'API tokens']] : []), ['audit', 'Audit log']] as [id, label] (id)}
+				<button
+					type="button"
+					role="tab"
+					aria-selected={tab === id}
+					class="-mb-px border-b-2 px-3 py-2 text-fc-md font-medium transition-colors {tab === id
+						? 'border-fc-accent text-fc-fg'
+						: 'border-transparent text-fc-fg-muted hover:text-fc-fg'}"
+					onclick={() => (tab = id as typeof tab)}
 				>
-					{env}
-				</Button>
+					{label}
+				</button>
 			{/each}
 		</div>
 
-		<Card class="mb-6">
-			<CardHeader>
-				<div class="flex items-center justify-between">
-					<CardTitle class="flex items-center gap-2">
-						Secrets
-						<Badge variant="secondary">{envSecrets.length}</Badge>
-					</CardTitle>
-					<Button size="sm" onclick={() => (showAddSecret = true)}>
-						<PlusIcon class="size-3.5" />
-						Add secret
-					</Button>
-				</div>
-			</CardHeader>
-			<CardContent>
-				{#if showAddSecret}
-					<form onsubmit={handleAddSecret} class="mb-4 flex items-end gap-2 rounded-lg border border-border p-3">
-						<div class="flex flex-1 flex-col gap-1.5">
-							<Label for="new-key">Key</Label>
-							<Input id="new-key" placeholder="SECRET_KEY" bind:value={newKey} required />
-						</div>
-						<div class="flex flex-1 flex-col gap-1.5">
-							<Label for="new-value">Value</Label>
-							<Input id="new-value" placeholder="secret-value" bind:value={newValue} required />
-						</div>
-						<Button type="submit" size="sm" disabled={addingSecret}>
-							{addingSecret ? 'Adding...' : 'Add'}
-						</Button>
-						<Button variant="ghost" size="icon" onclick={() => (showAddSecret = false)}>
-							<XIcon class="size-4" />
-						</Button>
-					</form>
-				{/if}
+		{#if tab === 'secrets'}
+			{#if selectedEnv}
+				<SecretsSection spaceSlug={slug} environment={selectedEnv} {canWrite} />
+			{:else}
+				<p class="py-8 text-center text-fc-md text-fc-fg-muted">
+					No environment yet. Create one to start adding secrets.
+				</p>
+			{/if}
+		{:else if tab === 'members'}
+			<MembersSection spaceSlug={slug} {canAdmin} />
+		{:else if tab === 'tokens' && canAdmin}
+			<TokensSection spaceSlug={slug} />
+		{:else if tab === 'audit'}
+			<AuditSection spaceSlug={slug} />
+		{/if}
+	</div>
 
-				{#if envSecrets.length === 0 && !showAddSecret}
-					<p class="py-6 text-center text-sm text-muted-foreground">
-						No secrets in {selectedEnv}
-					</p>
-				{:else if envSecrets.length > 0}
-					<Table.Table>
-						<Table.TableHeader>
-							<Table.TableRow>
-								<Table.TableHead>Key</Table.TableHead>
-								<Table.TableHead>Value</Table.TableHead>
-								<Table.TableHead class="w-[120px] text-right">Actions</Table.TableHead>
-							</Table.TableRow>
-						</Table.TableHeader>
-						<Table.TableBody>
-							{#each envSecrets as secret (secret.id)}
-								<Table.TableRow>
-									<Table.TableCell class="font-mono text-xs">{secret.key}</Table.TableCell>
-									<Table.TableCell class="font-mono text-xs">
-										{#if editingId === secret.id}
-											<div class="flex items-center gap-1">
-												<Input
-													class="h-7 text-xs font-mono"
-													bind:value={editValue}
-												/>
-												<Button variant="ghost" size="icon" onclick={() => saveEdit(secret)}>
-													<CheckIcon class="size-3.5" />
-												</Button>
-												<Button variant="ghost" size="icon" onclick={() => (editingId = null)}>
-													<XIcon class="size-3.5" />
-												</Button>
-											</div>
-										{:else if revealedKeys.has(secret.id)}
-											{secret.value}
-										{:else}
-											{maskValue(secret.value)}
-										{/if}
-									</Table.TableCell>
-									<Table.TableCell class="text-right">
-										{#if editingId !== secret.id}
-											<div class="flex items-center justify-end gap-0.5">
-												<Button variant="ghost" size="icon" onclick={() => toggleReveal(secret.id)}>
-													{#if revealedKeys.has(secret.id)}
-														<EyeOffIcon class="size-3.5" />
-													{:else}
-														<EyeIcon class="size-3.5" />
-													{/if}
-												</Button>
-												<Button variant="ghost" size="icon" onclick={() => startEdit(secret)}>
-													<PencilIcon class="size-3.5" />
-												</Button>
-												<Button variant="ghost" size="icon" onclick={() => deleteSecret(secret.id)}>
-													<TrashIcon class="size-3.5 text-destructive" />
-												</Button>
-											</div>
-										{/if}
-									</Table.TableCell>
-								</Table.TableRow>
-							{/each}
-						</Table.TableBody>
-					</Table.Table>
-				{/if}
-			</CardContent>
-		</Card>
+	<Modal bind:open={createEnvOpen} title="Create environment">
+		<form onsubmit={handleCreateEnv} class="flex flex-col gap-4">
+			<Field label="Name" helper="e.g. Preview, QA">
+				<Input placeholder="Environment name" bind:value={newEnvName} required disabled={creatingEnv} />
+			</Field>
+			<div class="flex justify-end gap-2 pt-1">
+				<Button type="button" variant="ghost" disabled={creatingEnv} onclick={() => (createEnvOpen = false)}>
+					Cancel
+				</Button>
+				<Button type="submit" disabled={creatingEnv || !newEnvName.trim()}>
+					{#if creatingEnv}<Spinner size="sm" />{/if}
+					{creatingEnv ? 'Creating…' : 'Create'}
+				</Button>
+			</div>
+		</form>
+	</Modal>
 
-		<Separator class="my-6" />
+	<ConfirmDialog
+		bind:open={deleteEnvOpen}
+		title="Delete environment"
+		message={`This permanently deletes the "${selectedEnv?.name}" environment and all of its secrets in ${space.name}. This cannot be undone.`}
+		confirmLabel="Delete environment"
+		loading={deletingEnv}
+		onconfirm={handleDeleteEnv}
+	/>
 
-		<Card>
-			<CardHeader>
-				<div class="flex items-center justify-between">
-					<CardTitle class="flex items-center gap-2">
-						Members
-						<Badge variant="secondary">{members.length}</Badge>
-					</CardTitle>
-					<Button size="sm" onclick={() => (showAddMember = true)}>
-						<UserPlusIcon class="size-3.5" />
-						Add member
-					</Button>
-				</div>
-			</CardHeader>
-			<CardContent>
-				{#if showAddMember}
-					<form onsubmit={handleAddMember} class="mb-4 flex items-end gap-2 rounded-lg border border-border p-3">
-						<div class="flex flex-1 flex-col gap-1.5">
-							<Label for="member-email">Email</Label>
-							<Input id="member-email" type="email" placeholder="teammate@example.com" bind:value={newMemberEmail} required />
-						</div>
-						<Button type="submit" size="sm" disabled={addingMember}>
-							{addingMember ? 'Adding...' : 'Add'}
-						</Button>
-						<Button variant="ghost" size="icon" onclick={() => (showAddMember = false)}>
-							<XIcon class="size-4" />
-						</Button>
-					</form>
-				{/if}
-
-				{#if members.length === 0}
-					<p class="py-6 text-center text-sm text-muted-foreground">No members</p>
-				{:else}
-					<div class="flex flex-col gap-2">
-						{#each members as member (member.id)}
-							<div class="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-muted/50">
-								<div class="flex items-center gap-3">
-									<div class="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium uppercase">
-										{member.email.slice(0, 2)}
-									</div>
-									<div>
-										<p class="text-sm">{member.email}</p>
-										<p class="text-xs text-muted-foreground">{member.role}</p>
-									</div>
-								</div>
-								{#if member.email !== auth.email}
-									<Button variant="ghost" size="icon" onclick={() => removeMember(member.id)}>
-										<TrashIcon class="size-3.5 text-destructive" />
-									</Button>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</CardContent>
-		</Card>
-	{/if}
-</div>
+	<ConfirmDialog
+		bind:open={deleteSpaceOpen}
+		title="Delete space"
+		message={`This permanently deletes the space "${space.name}" with all of its environments, secrets, members and tokens. This cannot be undone.`}
+		confirmLabel="Delete space"
+		loading={deletingSpace}
+		onconfirm={handleDeleteSpace}
+	/>
+{/if}
