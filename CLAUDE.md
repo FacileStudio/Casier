@@ -86,6 +86,28 @@ docker compose up --build
 | OIDC_SUCCESS_URL       | No       | Redirect after OIDC login (default: first CORS origin) |
 | SSO_ONLY               | No       | Hide password auth when true                     |
 
+## CLI (cli/)
+
+    casier login --server https://casier.facile.studio
+    casier projects
+    casier run -p <project> -e <env> -- <command>
+
+`login` resolves the server from `--server`, then `CASIER_SERVER_URL`, then the saved config,
+then a prompt, and saves the winner to `<config_dir>/casier/config.toml`. Because Traefik
+serves the API under `/api` in production while dev serves it at the root, login probes
+`<url>/auth/config` and falls back to `<url>/api/auth/config`, saving whichever answers — so
+both `https://casier.facile.studio` and `.../api` work.
+
+Against an SSO server the CLI opens a browser and receives the session token on an ephemeral
+`127.0.0.1` listener: it calls `/auth/oidc?cli_port=<port>&cli_state=<nonce>`, and after the
+OIDC round trip the API mints a **separate** session token and redirects to
+`http://127.0.0.1:<port>/callback`. The port and nonce are validated server-side and the
+redirect host is hard-coded, so the parameters cannot be turned into an open redirect. The
+nonce is checked by the CLI to reject token injection from other local processes.
+
+Tokens live in the OS keychain, keyed by server URL. `CASIER_TOKEN` overrides it for CI and
+containers, where no keychain exists.
+
 ## Domain Vocabulary
 
 Casier follows the Facile Suite vocabulary: **`space` is reserved suite-wide for the team

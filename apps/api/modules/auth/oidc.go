@@ -4,7 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"casier/internal/authcontext"
@@ -18,6 +22,7 @@ import (
 
 const (
 	oidcStateCookie = "oidc_state"
+	oidcCLICookie   = "oidc_cli"
 	oidcStateTTL    = 10 * time.Minute
 )
 
@@ -65,6 +70,19 @@ func (h *oidcHandler) login(w http.ResponseWriter, r *http.Request) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
+
+	cli, isCLI := parseCLICallback(r.URL.Query().Get("cli_port"), r.URL.Query().Get("cli_state"))
+	if isCLI {
+		http.SetCookie(w, &http.Cookie{
+			Name:     oidcCLICookie,
+			Value:    cli.encode(),
+			Path:     "/",
+			MaxAge:   int(oidcStateTTL.Seconds()),
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+		})
+	}
+
 	http.Redirect(w, r, h.oauth2Cfg.AuthCodeURL(state), http.StatusFound)
 }
 
@@ -121,7 +139,33 @@ func (h *oidcHandler) callback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	SetSessionCookie(w, token)
+
+	if cli, isCLI := h.takeCLICallback(w, r); isCLI {
+		cliToken, err := h.service.exchangeCLIToken(r.Context(), claims.Email)
+		if err != nil {
+			httpjson.WriteError(w, err)
+			return
+		}
+		http.Redirect(w, r, cli.redirectURL(cliToken), http.StatusFound)
+		return
+	}
+
 	http.Redirect(w, r, h.successURL, http.StatusFound)
+}
+
+func (h *oidcHandler) takeCLICallback(w http.ResponseWriter, r *http.Request) (cliCallback, bool) {
+	cookie, err := r.Cookie(oidcCLICookie)
+	if err != nil {
+		return cliCallback{}, false
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     oidcCLICookie,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+	})
+	return decodeCLICallback(cookie.Value)
 }
 
 func (h *oidcHandler) cliExchange(w http.ResponseWriter, r *http.Request) {
@@ -178,4 +222,52 @@ func randomState() (string, error) {
 		return "", err
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+type cliCallback struct {
+	port  int
+	state string
+}
+
+func parseCLICallback(port, state string) (cliCallback, bool) {
+	parsedPort, err := strconv.Atoi(port)
+	if err != nil || parsedPort < 1024 || parsedPort > 65535 {
+		return cliCallback{}, false
+	}
+	if state == "" || len(state) > 64 || !isURLSafeToken(state) {
+		return cliCallback{}, false
+	}
+	return cliCallback{port: parsedPort, state: state}, true
+}
+
+func decodeCLICallback(value string) (cliCallback, bool) {
+	port, state, found := strings.Cut(value, ":")
+	if !found {
+		return cliCallback{}, false
+	}
+	return parseCLICallback(port, state)
+}
+
+func (c cliCallback) encode() string {
+	return strconv.Itoa(c.port) + ":" + c.state
+}
+
+func (c cliCallback) redirectURL(token string) string {
+	return fmt.Sprintf(
+		"http://127.0.0.1:%d/callback?token=%s&state=%s",
+		c.port,
+		url.QueryEscape(token),
+		url.QueryEscape(c.state),
+	)
+}
+
+func isURLSafeToken(value string) bool {
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
 }
