@@ -88,15 +88,16 @@ docker compose up --build
 
 ## CLI (cli/)
 
-    casier login --server https://casier.facile.studio
+    casier login
     casier projects
     casier run -p <project> -e <env> -- <command>
 
 `login` resolves the server from `--server`, then `CASIER_SERVER_URL`, then the saved config,
-then a prompt, and saves the winner to `<config_dir>/casier/config.toml`. Because Traefik
-serves the API under `/api` in production while dev serves it at the root, login probes
-`<url>/auth/config` and falls back to `<url>/api/auth/config`, saving whichever answers — so
-both `https://casier.facile.studio` and `.../api` work.
+then a prompt defaulting to `https://casier.facile.studio/api`, and saves the winner to
+`<config_dir>/casier/config.toml`. Because Traefik serves the API under `/api` in production
+while dev serves it at the root, login probes `<url>/auth/config` and falls back to
+`<url>/api/auth/config`, saving whichever answers — so both `https://casier.facile.studio` and
+`.../api` work. Against a local API, override it: `casier login --server http://localhost:4000`.
 
 Against an SSO server the CLI opens a browser and receives the session token on an ephemeral
 `127.0.0.1` listener: it calls `/auth/oidc?cli_port=<port>&cli_state=<nonce>`, and after the
@@ -107,6 +108,12 @@ nonce is checked by the CLI to reject token injection from other local processes
 
 Tokens live in the OS keychain, keyed by server URL. `CASIER_TOKEN` overrides it for CI and
 containers, where no keychain exists.
+
+`keyring` must keep its per-target platform features in `cli/Cargo.toml` (`apple-native`,
+`windows-native`, `sync-secret-service`). With none of them enabled the crate silently falls
+back to an in-memory mock store: login prints "Logged in as …", writes the config, and the
+token disappears when the process exits, so every later command reports "Not logged in".
+`store_token` reads the token back after writing to make that failure loud if it ever returns.
 
 ## Domain Vocabulary
 
