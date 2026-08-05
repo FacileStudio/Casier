@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { api } from '$lib/backend';
-	import { Alert } from '@facile/lib';
 
 	const inputClass =
-		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+	const labelClass = 'text-sm font-medium leading-none';
+	const primaryButtonClass =
+		'inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50';
+	const outlineButtonClass =
+		'inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50';
 
 	let email = $state('');
 	let error = $state('');
@@ -38,21 +42,16 @@
 </div>
 
 {#if success}
-	<Alert tone="success">
+	<p class="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
 		If an account exists with that email, a reset token has been generated. Ask your administrator
 		for the token, then set a new password.
-	</Alert>
+	</p>
 
-	<a
-		href="/reset-password"
-		class="mt-4 inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-	>
-		I have a token
-	</a>
+	<a href="/reset-password" class="mt-4 {outlineButtonClass}">I have a token</a>
 {:else}
 	<form onsubmit={handleSubmit} class="space-y-4">
 		<div class="space-y-1.5">
-			<label for="email" class="text-sm font-medium leading-none">Email</label>
+			<label for="email" class={labelClass}>Email</label>
 			<input
 				id="email"
 				name="email"
@@ -61,19 +60,20 @@
 				placeholder="you@example.com"
 				required
 				autocomplete="email"
+				disabled={loading}
 				class={inputClass}
 			/>
 		</div>
 
 		{#if error}
-			<p class="text-sm text-destructive">{error}</p>
+			<p
+				class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+			>
+				{error}
+			</p>
 		{/if}
 
-		<button
-			type="submit"
-			disabled={loading}
-			class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-		>
+		<button type="submit" disabled={loading} class={primaryButtonClass}>
 			{loading ? 'Sending…' : 'Send reset token'}
 		</button>
 	</form>

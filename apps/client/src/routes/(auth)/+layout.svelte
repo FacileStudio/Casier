@@ -13,22 +13,22 @@
 	});
 </script>
 
-<div class="flex min-h-dvh">
-	<div class="hidden flex-col bg-foreground px-12 py-10 text-background lg:flex lg:w-1/2">
-		<a href="/" class="mb-auto flex items-center gap-3 text-xl">
+<div class="flex min-h-screen">
+	<div class="hidden flex-col bg-black px-12 py-10 lg:flex lg:w-1/2">
+		<a href="/" class="mb-auto flex items-center gap-3 text-xl text-white">
 			<Logo size={28} wordmark />
 		</a>
 
 		<div class="mb-auto">
-			<h2 class="font-heading text-4xl font-bold leading-tight tracking-tight">
+			<h2 class="font-heading text-4xl font-bold leading-tight tracking-tight text-white">
 				Your secrets.<br />Your server.
 			</h2>
-			<p class="mt-4 max-w-xs text-sm leading-relaxed text-background/50">
+			<p class="mt-4 max-w-xs text-sm leading-relaxed text-white/50">
 				Self-hosted secrets and environment management for teams.
 			</p>
 		</div>
 
-		<p class="text-xs text-background/30">
+		<p class="text-xs text-white/30">
 			&copy; {new Date().getFullYear()} Casier by Facile.
 		</p>
 	</div>

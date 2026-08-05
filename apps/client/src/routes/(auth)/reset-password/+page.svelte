@@ -5,7 +5,10 @@
 	import { toast } from 'svelte-sonner';
 
 	const inputClass =
-		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+	const labelClass = 'text-sm font-medium leading-none';
+	const primaryButtonClass =
+		'inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50';
 
 	let token = $state(page.url.searchParams.get('token') ?? '');
 	let password = $state('');
@@ -50,7 +53,7 @@
 
 <form onsubmit={handleSubmit} class="space-y-4">
 	<div class="space-y-1.5">
-		<label for="token" class="text-sm font-medium leading-none">Reset token</label>
+		<label for="token" class={labelClass}>Reset token</label>
 		<input
 			id="token"
 			name="token"
@@ -59,12 +62,13 @@
 			placeholder="Paste your reset token"
 			required
 			autocomplete="off"
+			disabled={loading}
 			class={inputClass}
 		/>
 	</div>
 
 	<div class="space-y-1.5">
-		<label for="password" class="text-sm font-medium leading-none">New password</label>
+		<label for="password" class={labelClass}>New password</label>
 		<input
 			id="password"
 			name="password"
@@ -74,13 +78,14 @@
 			required
 			minlength={8}
 			autocomplete="new-password"
+			disabled={loading}
 			class={inputClass}
 		/>
 		<p class="text-xs text-muted-foreground">At least 8 characters.</p>
 	</div>
 
 	<div class="space-y-1.5">
-		<label for="confirm-password" class="text-sm font-medium leading-none">Confirm password</label>
+		<label for="confirm-password" class={labelClass}>Confirm password</label>
 		<input
 			id="confirm-password"
 			name="confirm-password"
@@ -90,6 +95,7 @@
 			required
 			minlength={8}
 			autocomplete="new-password"
+			disabled={loading}
 			class={inputClass}
 		/>
 		{#if passwordMismatch}
@@ -98,14 +104,14 @@
 	</div>
 
 	{#if error}
-		<p class="text-sm text-destructive">{error}</p>
+		<p
+			class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+		>
+			{error}
+		</p>
 	{/if}
 
-	<button
-		type="submit"
-		disabled={loading || passwordMismatch}
-		class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-	>
+	<button type="submit" disabled={loading || passwordMismatch} class={primaryButtonClass}>
 		{loading ? 'Resetting…' : 'Reset password'}
 	</button>
 </form>
