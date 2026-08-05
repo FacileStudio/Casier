@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,7 +30,14 @@ import (
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
+	"github.com/FacileStudio/tronc/spa"
+	"github.com/go-chi/chi/v5"
 )
+
+func redirectToProjects(w http.ResponseWriter, request *http.Request) {
+	target := "/projects" + strings.TrimPrefix(request.URL.Path, "/spaces")
+	http.Redirect(w, request, target, http.StatusMovedPermanently)
+}
 
 func main() {
 	if healthcheck.Handle(os.Args) {
@@ -124,10 +132,21 @@ func main() {
 		httpjson.WriteJSON(w, http.StatusOK, docs)
 	})
 
-	auth.RegisterRoutes(router, authService, appEnv)
-	projects.RegisterRoutes(router, projectsService, authService)
-	environments.RegisterRoutes(router, environmentsService, authService)
-	secrets.RegisterRoutes(router, secretsService, authService)
+	router.Route("/api", func(r chi.Router) {
+		auth.RegisterRoutes(r, authService, appEnv)
+		projects.RegisterRoutes(r, projectsService, authService)
+		environments.RegisterRoutes(r, environmentsService, authService)
+		secrets.RegisterRoutes(r, secretsService, authService)
+	})
+
+	router.Get("/spaces", redirectToProjects)
+	router.Get("/spaces/*", redirectToProjects)
+
+	clientDir := spa.DirFromEnv()
+	if spa.Available(clientDir) {
+		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
+		appLogger.Info("serving client", slog.String("dir", clientDir))
+	}
 
 	addr := ":" + appEnv.Port
 	server := &http.Server{

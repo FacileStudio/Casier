@@ -22,7 +22,7 @@ services:
     restart: unless-stopped
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: Dockerfile
     expose:
       - "4000"
     networks:
@@ -31,17 +31,21 @@ services:
     labels:
       traefik.enable: "true"
       traefik.docker.network: dokploy-network
-      traefik.http.routers.casier-api-web.rule: "Host(`casier.facile.studio`) && PathPrefix(`/api`)"
-      traefik.http.routers.casier-api-web.entrypoints: web
-      traefik.http.routers.casier-api-web.middlewares: redirect-to-https@file
-      traefik.http.routers.casier-api-web.service: casier-api-svc
-      traefik.http.routers.casier-api-secure.rule: "Host(`casier.facile.studio`) && PathPrefix(`/api`)"
-      traefik.http.routers.casier-api-secure.entrypoints: websecure
-      traefik.http.routers.casier-api-secure.tls.certresolver: letsencrypt
-      traefik.http.routers.casier-api-secure.middlewares: casier-strip-api
-      traefik.http.routers.casier-api-secure.service: casier-api-svc
-      traefik.http.middlewares.casier-strip-api.stripprefix.prefixes: /api
-      traefik.http.services.casier-api-svc.loadbalancer.server.port: "4000"
+      traefik.http.routers.casier-web.rule: "Host(`casier.facile.studio`)"
+      traefik.http.routers.casier-web.entrypoints: web
+      traefik.http.routers.casier-web.middlewares: redirect-to-https@file
+      traefik.http.routers.casier-web.service: casier-svc
+      traefik.http.routers.casier-secure.rule: "Host(`casier.facile.studio`)"
+      traefik.http.routers.casier-secure.entrypoints: websecure
+      traefik.http.routers.casier-secure.tls.certresolver: letsencrypt
+      traefik.http.routers.casier-secure.service: casier-svc
+      traefik.http.services.casier-svc.loadbalancer.server.port: "4000"
+    healthcheck:
+      test: ["CMD", "/api", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-casier}:${POSTGRES_PASSWORD:-casier-internal-db}@casier-db:5432/${POSTGRES_DB:-casier}?sslmode=disable
       PORT: "4000"
@@ -57,34 +61,6 @@ services:
     depends_on:
       casier-db:
         condition: service_healthy
-
-  casier-client:
-    container_name: casier-client
-    restart: unless-stopped
-    build:
-      context: .
-      dockerfile: apps/client/Dockerfile
-      args:
-        VITE_API_BASE_URL: https://casier.facile.studio/api
-    expose:
-      - "80"
-    networks:
-      - default
-      - dokploy-network
-    labels:
-      traefik.enable: "true"
-      traefik.docker.network: dokploy-network
-      traefik.http.routers.casier-client-web.rule: "Host(`casier.facile.studio`)"
-      traefik.http.routers.casier-client-web.entrypoints: web
-      traefik.http.routers.casier-client-web.middlewares: redirect-to-https@file
-      traefik.http.routers.casier-client-web.service: casier-client-svc
-      traefik.http.routers.casier-client-secure.rule: "Host(`casier.facile.studio`)"
-      traefik.http.routers.casier-client-secure.entrypoints: websecure
-      traefik.http.routers.casier-client-secure.tls.certresolver: letsencrypt
-      traefik.http.routers.casier-client-secure.service: casier-client-svc
-      traefik.http.services.casier-client-svc.loadbalancer.server.port: "80"
-    depends_on:
-      - casier-api
 
 networks:
   dokploy-network:

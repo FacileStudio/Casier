@@ -9,7 +9,7 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 | API      | Go 1.24, Chi router, GORM, PostgreSQL 16                    |
 | Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/lib`) |
 | Build    | `go build`, Bun                                              |
-| Deploy   | Docker Compose (API via distroless, client via Nginx)        |
+| Deploy   | Docker Compose, single distroless container serving API + client |
 | Auth     | Email + password (session-based, argon2id), optional OIDC SSO |
 | Crypto   | AES-256-GCM encryption for secret values at rest             |
 
@@ -21,7 +21,6 @@ apps/
     modules/            Domain modules (auth, projects, environments, secrets)
     internal/           Shared infra (database, middleware, crypto, logger, etc.)
     schemas/            GORM models and migrations
-    Dockerfile          Multi-stage: golang:1.24-alpine -> distroless
   client/               SvelteKit frontend
     src/
       app.css           Design tokens (Facile Suite palette + muse token aliases)
@@ -37,8 +36,8 @@ apps/
         theme.svelte.ts Light/dark/system preference
         components/     App components (shell chrome + project sections)
     static/fonts/       Goga typeface
-    Dockerfile          Multi-stage: bun -> nginx:alpine
-docker-compose.yml      Full stack: db + api + client
+Dockerfile              Multi-stage: bun build -> golang:1.25-alpine -> distroless
+docker-compose.yml      Full stack: db + app
 
 ## Commands
 
@@ -78,7 +77,7 @@ docker compose up --build
 | LOG_LEVEL              | No       | debug/info/warn/error (default: info)    |
 | CORS_ALLOWED_ORIGINS   | No       | Comma-separated origins                  |
 | ENCRYPTION_KEY         | Yes      | Base64-encoded 32-byte key for AES-256-GCM |
-| VITE_API_BASE_URL      | No       | Client API URL (default: http://localhost:4000) |
+| CLIENT_DIR             | No       | Built client directory served by the API (default: ./client) |
 | OIDC_ISSUER            | No       | OIDC provider URL (enables SSO)                  |
 | OIDC_CLIENT_ID         | If OIDC  | OIDC client ID                                   |
 | OIDC_CLIENT_SECRET     | If OIDC  | OIDC client secret                               |

@@ -62,7 +62,7 @@ Tokens are stored in the OS keychain, keyed by server URL. Set `CASIER_TOKEN` fo
 
 ## Environment variables
 
-See `.env.example`. Required: `DATABASE_URL`, `ENCRYPTION_KEY`. Optional: `PORT`, `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`, `VITE_API_BASE_URL`, and `OIDC_*` / `SSO_ONLY` for SSO.
+See `.env.example`. Required: `DATABASE_URL`, `ENCRYPTION_KEY`. Optional: `PORT`, `LOG_LEVEL`, `CORS_ALLOWED_ORIGINS`, `CLIENT_DIR`, and `OIDC_*` / `SSO_ONLY` for SSO.
 
 ## Docs
 
