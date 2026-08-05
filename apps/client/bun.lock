@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "clef-client",
+      "name": "casier-client",
       "dependencies": {
         "@facile/lib": "github:FacileStudio/muse",
       },
