@@ -15,8 +15,8 @@ pub async fn run(project: &str, env_a: &str, env_b: &str) -> Result<()> {
 
     let client = ApiClient::new(&config.server_url, Some(token));
     let (secrets_a, secrets_b) = tokio::try_join!(
-        client.list_secrets(project, env_a),
-        client.list_secrets(project, env_b),
+        client.list_secrets_with_values(project, env_a),
+        client.list_secrets_with_values(project, env_b),
     )?;
 
     cache::store(project, env_a, &cache::to_map(&secrets_a));
@@ -24,11 +24,11 @@ pub async fn run(project: &str, env_a: &str, env_b: &str) -> Result<()> {
 
     let map_a: BTreeMap<&str, &str> = secrets_a
         .iter()
-        .map(|s| (s.key.as_str(), s.value.as_str()))
+        .map(|s| (s.key.as_str(), s.value.as_deref().unwrap_or_default()))
         .collect();
     let map_b: BTreeMap<&str, &str> = secrets_b
         .iter()
-        .map(|s| (s.key.as_str(), s.value.as_str()))
+        .map(|s| (s.key.as_str(), s.value.as_deref().unwrap_or_default()))
         .collect();
 
     let mut has_diff = false;

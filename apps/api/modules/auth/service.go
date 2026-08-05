@@ -14,6 +14,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
+	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -26,11 +27,19 @@ type Service struct {
 	orm        *gorm.DB
 	keyring    *crypto.Keyring
 	logger     *slog.Logger
+	mailer     mailer.Mailer
+	publicURL  string
 	controller *Controller
+	// deliverReset is the out-of-band half of the forgot-password flow. It is a
+	// field rather than a direct method call so forgotPassword can hand the
+	// address off without ever branching on it, and so a test can watch the
+	// handoff without a database behind it.
+	deliverReset func(ctx context.Context, email string)
 }
 
-func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger) *Service {
-	service := &Service{orm: orm, keyring: keyring, logger: logger}
+func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, mail mailer.Mailer, publicURL string) *Service {
+	service := &Service{orm: orm, keyring: keyring, logger: logger, mailer: mail, publicURL: publicURL}
+	service.deliverReset = service.sendPasswordReset
 	service.controller = newController(service)
 	return service
 }
@@ -341,73 +350,6 @@ func (service *Service) StartSessionCleanup(ctx context.Context) {
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
-}
-
-func (service *Service) forgotPassword(ctx context.Context, email string) error {
-	var user schemas.User
-	err := service.orm.WithContext(ctx).Where("email = ?", email).First(&user).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
-	}
-	if err != nil {
-		return errors.Internal("failed to look up user", err)
-	}
-	if user.PasswordHash == "" {
-		return nil
-	}
-
-	token, err := authcrypto.NewToken()
-	if err != nil {
-		return errors.Internal("failed to generate reset token", err)
-	}
-
-	reset := &schemas.PasswordReset{
-		TokenHash: hashToken(token),
-		UserID:    user.ID,
-		ExpiresAt: time.Now().Add(1 * time.Hour),
-	}
-	if err := service.orm.WithContext(ctx).Create(reset).Error; err != nil {
-		return errors.Internal("failed to create reset token", err)
-	}
-
-	service.logger.Warn("password reset requested but no mailer is configured, the reset token cannot be delivered",
-		slog.String("email", email),
-	)
-
-	return nil
-}
-
-func (service *Service) resetPassword(ctx context.Context, token string, newPassword string) error {
-	hashed := hashToken(token)
-	var reset schemas.PasswordReset
-	err := service.orm.WithContext(ctx).Where("token_hash = ?", hashed).First(&reset).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return errors.Invalid("invalid or expired reset token")
-	}
-	if err != nil {
-		return errors.Internal("failed to validate reset token", err)
-	}
-	if reset.Used || time.Now().After(reset.ExpiresAt) {
-		return errors.Invalid("invalid or expired reset token")
-	}
-
-	hash, err := authcrypto.HashPassword(newPassword)
-	if err != nil {
-		return errors.Invalid("invalid password")
-	}
-
-	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&schemas.User{}).Where("id = ?", reset.UserID).Update("password_hash", hash).Error; err != nil {
-			return errors.Internal("failed to update password", err)
-		}
-		if err := tx.Model(&schemas.PasswordReset{}).Where("token_hash = ?", hashed).Update("used", true).Error; err != nil {
-			return errors.Internal("failed to mark token used", err)
-		}
-		if err := tx.Where("user_id = ?", reset.UserID).Delete(&schemas.Session{}).Error; err != nil {
-			return errors.Internal("failed to clear sessions", err)
-		}
-		return nil
-	})
 }
 
 func (service *Service) upsertOIDCUser(ctx context.Context, email string, name string, oauth2Token *oauth2.Token) (string, string, error) {

@@ -130,6 +130,7 @@ export type Environment = {
 	name: string;
 	slug: string;
 	position: number;
+	protected: boolean;
 	created_at: string;
 	updated_at: string;
 };
@@ -207,6 +208,7 @@ export type ApiToken = {
 	permissions: string;
 	expires_at: string;
 	last_used_at: string;
+	revoked_at: string | null;
 	created_at: string;
 };
 

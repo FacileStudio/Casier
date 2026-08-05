@@ -35,6 +35,33 @@ var Documentation = documentation.Module{
 			},
 		},
 		{
+			Method:      "POST",
+			Path:        "/auth/forgot-password",
+			Summary:     "Request a password reset link",
+			Description: "Emails a single-use reset link to the address if it belongs to a password account. The response is identical whether or not the address is registered, and delivery happens after the response, so it never reveals which. Only registered when password auth is enabled.",
+			Auth:        "public",
+			RequestBody: "ForgotPasswordRequest",
+			Errors: []documentation.Error{
+				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body or malformed email."},
+				{Status: 429, Code: "rate_limited", Description: "Too many requests from this caller."},
+				{Status: 503, Code: "unavailable", Description: "No SMTP relay is configured, so no link can be delivered."},
+			},
+		},
+		{
+			Method:      "POST",
+			Path:        "/auth/reset-password",
+			Summary:     "Set a new password from a reset link",
+			Description: "Consumes the token from the reset link, sets the new password, invalidates every other outstanding reset token for that user, and deletes all of the user's sessions. Only registered when password auth is enabled.",
+			Auth:        "public",
+			RequestBody: "ResetPasswordRequest",
+			Errors: []documentation.Error{
+				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body, password shorter than 8 characters, or a token that is unknown, already used, or expired."},
+				{Status: 429, Code: "rate_limited", Description: "Too many requests from this caller."},
+				{Status: 503, Code: "unavailable", Description: "No SMTP relay is configured, so the reset flow is offline."},
+				{Status: 500, Code: "internal", Description: "Unexpected server error."},
+			},
+		},
+		{
 			Method:       "POST",
 			Path:         "/auth/cli",
 			Summary:      "Exchange an OIDC ID token for a CLI auth token",

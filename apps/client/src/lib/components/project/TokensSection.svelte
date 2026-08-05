@@ -19,8 +19,17 @@
 	let newName = $state('');
 	let newPermissions = $state('read');
 	let newEnvironments = $state('*');
+	let newExpiresInDays = $state('90');
 	let creating = $state(false);
 	let createdToken = $state<string | null>(null);
+
+	function isRevoked(token: ApiToken) {
+		return Boolean(token.revoked_at);
+	}
+
+	function isExpired(token: ApiToken) {
+		return !isRevoked(token) && new Date(token.expires_at).getTime() < Date.now();
+	}
 
 	let revokeTarget = $state<ApiToken | null>(null);
 	let revokeOpen = $state(false);
@@ -43,6 +52,7 @@
 		newName = '';
 		newPermissions = 'read';
 		newEnvironments = '*';
+		newExpiresInDays = '90';
 		createdToken = null;
 		createOpen = true;
 	}
@@ -58,6 +68,7 @@
 					name: newName.trim(),
 					permissions: newPermissions,
 					environments: newEnvironments.trim() || '*',
+					expires_in_days: Number(newExpiresInDays),
 				},
 				auth.token
 			);
@@ -91,10 +102,10 @@
 		revoking = true;
 		try {
 			await api.del(`/projects/${projectSlug}/tokens/${revokeTarget.id}`, auth.token);
-			tokens = tokens.filter((t) => t.id !== revokeTarget!.id);
 			toast.success(`Token "${revokeTarget.name}" revoked`);
 			revokeOpen = false;
 			revokeTarget = null;
+			await loadTokens();
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Failed to revoke token');
 		} finally {
@@ -145,17 +156,27 @@
 			<thead>
 				<tr>
 					<th>Name</th>
+					<th>Status</th>
 					<th>Permissions</th>
 					<th>Environments</th>
 					<th>Last used</th>
-					<th>Created</th>
+					<th>Expires</th>
 					<th class="w-1 text-right" aria-label="Actions"></th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each tokens as token (token.id)}
-					<tr>
+					<tr class={isRevoked(token) || isExpired(token) ? 'opacity-55' : ''}>
 						<td class="font-medium text-foreground">{token.name}</td>
+						<td>
+							{#if isRevoked(token)}
+								<Badge tone="neutral" class="text-xs">Revoked {formatDate(token.revoked_at ?? '')}</Badge>
+							{:else if isExpired(token)}
+								<Badge tone="neutral" class="text-xs">Expired</Badge>
+							{:else}
+								<Badge tone="accent" class="text-xs">Active</Badge>
+							{/if}
+						</td>
 						<td>
 							<Badge tone={token.permissions.includes('write') ? 'accent' : 'neutral'} class="text-xs">
 								{token.permissions}
@@ -163,23 +184,25 @@
 						</td>
 						<td>
 							<code class="rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
-								{token.environments || '*'}
+								{token.environments || 'all'}
 							</code>
 						</td>
 						<td class="whitespace-nowrap text-muted-foreground">
 							{formatDateTime(token.last_used_at) === '—' ? 'Never' : formatDateTime(token.last_used_at)}
 						</td>
-						<td class="whitespace-nowrap text-muted-foreground">{formatDate(token.created_at)}</td>
+						<td class="whitespace-nowrap text-muted-foreground">{formatDate(token.expires_at)}</td>
 						<td>
 							<div class="flex justify-end">
-								<button
-									type="button"
-									class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-									aria-label={`Revoke ${token.name}`}
-									onclick={() => openRevoke(token)}
-								>
-									<iconify-icon icon="solar:trash-bin-2-linear" width="16" aria-hidden="true"></iconify-icon>
-								</button>
+								{#if !isRevoked(token)}
+									<button
+										type="button"
+										class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+										aria-label={`Revoke ${token.name}`}
+										onclick={() => openRevoke(token)}
+									>
+										<iconify-icon icon="solar:forbidden-circle-linear" width="16" aria-hidden="true"></iconify-icon>
+									</button>
+								{/if}
 							</div>
 						</td>
 					</tr>
@@ -224,6 +247,14 @@
 			<Field label="Environments" helper={'Comma-separated environment slugs, or * for all'}>
 				<Input placeholder="*" bind:value={newEnvironments} disabled={creating} class="font-mono" />
 			</Field>
+			<Field label="Expires in" helper={'A machine credential that never lapses is the one nobody remembers to rotate.'}>
+				<Select bind:value={newExpiresInDays} disabled={creating}>
+					<option value="30">30 days</option>
+					<option value="90">90 days</option>
+					<option value="365">1 year</option>
+					<option value="730">2 years</option>
+				</Select>
+			</Field>
 			<div class="flex justify-end gap-2 pt-1">
 				<Button type="button" variant="ghost" class="h-9" disabled={creating} onclick={() => (createOpen = false)}>
 					Cancel
@@ -240,7 +271,7 @@
 <ConfirmDialog
 	bind:open={revokeOpen}
 	title="Revoke token"
-	message={`This immediately and permanently revokes the token "${revokeTarget?.name}". Any CI pipeline or CLI still using it will start failing, and the token cannot be restored.`}
+	message={`This immediately revokes the token "${revokeTarget?.name}". Any CI pipeline or CLI still using it will start failing, and it cannot be un-revoked. The token stays listed so the audit log still names what it changed.`}
 	confirmLabel="Revoke token"
 	loading={revoking}
 	onconfirm={handleRevoke}

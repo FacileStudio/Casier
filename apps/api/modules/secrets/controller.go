@@ -17,17 +17,53 @@ func newController(service *Service) *Controller {
 	return &Controller{service: service}
 }
 
-func (controller *Controller) list(ctx context.Context, projectSlug, envSlug, tagFilter string) (*ListResponse, error) {
+// list answers with metadata only unless the caller explicitly asked to reveal
+// values, and the two are audited apart: masking in the browser was never a
+// control, and one audit row could not tell a dashboard page load from a
+// production dump.
+func (controller *Controller) list(ctx context.Context, projectSlug, envSlug, tagFilter string, reveal bool) (*ListResponse, error) {
 	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	secrets, rotationDays, err := controller.service.listSecrets(ctx, envID, person, strings.TrimSpace(tagFilter))
+	action := auditActionList
+	if reveal {
+		action = auditActionRevealList
+	}
+	secrets, rotationDays, err := controller.service.listSecrets(ctx, envID, person, secretRead{
+		tagFilter:   strings.TrimSpace(tagFilter),
+		reveal:      reveal,
+		auditAction: action,
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &ListResponse{Secrets: secrets, RotationDays: rotationDays}, nil
+}
+
+func (controller *Controller) reveal(ctx context.Context, projectSlug, envSlug, key string) (*SecretResponse, error) {
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	return controller.service.revealSecret(ctx, envID, key, person)
+}
+
+func (controller *Controller) trash(ctx context.Context, projectSlug, envSlug string) (*TrashResponse, error) {
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	return controller.service.listTrash(ctx, envID, person)
+}
+
+func (controller *Controller) restore(ctx context.Context, projectSlug, envSlug, key string) error {
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	if err != nil {
+		return err
+	}
+	return controller.service.restoreSecret(ctx, envID, key, person)
 }
 
 func (controller *Controller) rotation(ctx context.Context, projectSlug string) (*RotationSummaryResponse, error) {
@@ -80,7 +116,19 @@ func (controller *Controller) update(ctx context.Context, projectSlug, envSlug, 
 	return controller.service.updateSecret(ctx, envID, key, req.Value, person)
 }
 
-func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug, key string) error {
+// delete trashes a secret by default and destroys it only when the caller asks
+// for it. A purge frees the key immediately and takes the versions and ACLs
+// with it, so it is held to the same roles that administer the project rather
+// than to the roles that may write a value.
+func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug, key string, purge bool) error {
+	if purge {
+		envID, person, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin)
+		if err != nil {
+			return err
+		}
+		return controller.service.purgeSecret(ctx, envID, key, person)
+	}
+
 	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
@@ -172,7 +220,7 @@ func (controller *Controller) listACLs(ctx context.Context, projectSlug, envSlug
 }
 
 func (controller *Controller) setACL(ctx context.Context, projectSlug, envSlug, key string, req *SetACLRequest) error {
-	envID, _, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, "owner", "admin")
+	envID, _, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin)
 	if err != nil {
 		return err
 	}
@@ -183,7 +231,7 @@ func (controller *Controller) setACL(ctx context.Context, projectSlug, envSlug, 
 }
 
 func (controller *Controller) deleteACL(ctx context.Context, projectSlug, envSlug, key string, aclID int64) error {
-	envID, _, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, "owner", "admin")
+	envID, _, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin)
 	if err != nil {
 		return err
 	}
@@ -198,14 +246,31 @@ func (controller *Controller) resolveEnv(ctx context.Context, projectSlug, envSl
 // through: it rejects a read-only API token before any role is even looked up,
 // then demands a role that may write in the project.
 func (controller *Controller) resolveEnvWithWrite(ctx context.Context, projectSlug, envSlug string) (int64, caller, error) {
-	return controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, "owner", "admin", "member")
+	return controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin, "member")
 }
 
+// resolveEnvWithRoles is where a protected environment is enforced, for every
+// write route at once. Reads never come through here, which is the point: a
+// protected environment restricts who may change it, not who may see it.
 func (controller *Controller) resolveEnvWithRoles(ctx context.Context, projectSlug, envSlug string, requiredRoles ...string) (int64, caller, error) {
 	if !authcontext.ScopeFromContext(ctx).AllowsWrite() {
 		return 0, caller{}, errors.Forbidden("this API token is read-only")
 	}
-	return controller.resolveEnvFor(ctx, projectSlug, envSlug, requiredRoles...)
+
+	envID, person, err := controller.resolveEnvFor(ctx, projectSlug, envSlug, requiredRoles...)
+	if err != nil {
+		return 0, caller{}, err
+	}
+
+	protected, err := controller.service.environmentProtected(ctx, envID)
+	if err != nil {
+		return 0, caller{}, err
+	}
+	if !roleMayWriteProtected(person.role, protected) {
+		return 0, caller{}, errors.Forbidden("this environment is protected: only an owner or admin may write to it")
+	}
+
+	return envID, person, nil
 }
 
 // resolveEnvFor resolves the environment a request targets and, with it, who is

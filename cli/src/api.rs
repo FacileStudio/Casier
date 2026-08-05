@@ -34,10 +34,16 @@ pub struct Project {
     pub description: String,
 }
 
-#[derive(Deserialize)]
+/// `value` is absent unless the request asked to reveal it. It is an
+/// `Option<String>` rather than a defaulted `String` on purpose: a server that
+/// withholds a value and a secret whose value is genuinely empty must not
+/// deserialize into the same thing, or `casier run` would inject an empty
+/// variable and the child process would fail somewhere far away from the cause.
+#[derive(Debug, Deserialize)]
 pub struct Secret {
     pub key: String,
-    pub value: String,
+    #[serde(default)]
+    pub value: Option<String>,
     #[serde(default)]
     pub version: i32,
 }
@@ -146,8 +152,23 @@ impl ApiClient {
         Ok(body.projects.unwrap_or_default())
     }
 
+    /// Lists secrets without their values. Use it when only the keys matter.
     pub async fn list_secrets(&self, project: &str, env: &str) -> Result<Vec<Secret>> {
-        let path = format!("/projects/{}/environments/{}/secrets", project, env);
+        self.fetch_secrets(project, env, false).await
+    }
+
+    /// Lists secrets with their values, which is what every command that hands
+    /// secrets to something else needs. The server withholds values unless
+    /// asked, so this asks, and then insists it was answered.
+    pub async fn list_secrets_with_values(&self, project: &str, env: &str) -> Result<Vec<Secret>> {
+        require_values(self.fetch_secrets(project, env, true).await?)
+    }
+
+    async fn fetch_secrets(&self, project: &str, env: &str, reveal: bool) -> Result<Vec<Secret>> {
+        let mut path = format!("/projects/{}/environments/{}/secrets", project, env);
+        if reveal {
+            path.push_str("?reveal=true");
+        }
         let resp = self
             .request(reqwest::Method::GET, &path)
             .send()
@@ -183,7 +204,7 @@ impl ApiClient {
     }
 
     pub async fn get_secret(&self, project: &str, env: &str, key: &str) -> Result<Secret> {
-        let secrets = self.list_secrets(project, env).await?;
+        let secrets = self.list_secrets_with_values(project, env).await?;
         secrets
             .into_iter()
             .find(|s| s.key == key)
@@ -237,5 +258,68 @@ impl ApiClient {
             bail!("DELETE {} failed ({}): {}", path, status, body);
         }
         Ok(())
+    }
+}
+
+/// Refuses a response that named secrets but withheld their values. A server
+/// only does that when it was not asked to reveal them, which after the reveal
+/// gating landed means this binary predates the server. Injecting an empty
+/// environment would let the child process start and fail somewhere unrelated,
+/// so nothing downstream is allowed to proceed on a partial answer.
+fn require_values(secrets: Vec<Secret>) -> Result<Vec<Secret>> {
+    let withheld: Vec<&str> = secrets
+        .iter()
+        .filter(|s| s.value.is_none())
+        .map(|s| s.key.as_str())
+        .collect();
+    if !withheld.is_empty() {
+        bail!(
+            "the server returned {} secret(s) without their values ({}).\n\
+             This CLI is older than the server it is talking to — reinstall it, \
+             then try again.\n\
+             Refusing to continue with an incomplete environment.",
+            withheld.len(),
+            withheld.join(", ")
+        );
+    }
+    Ok(secrets)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn secret(key: &str, value: Option<&str>) -> Secret {
+        Secret {
+            key: key.to_string(),
+            value: value.map(|v| v.to_string()),
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn values_present_pass_through() {
+        let secrets = require_values(vec![secret("A", Some("1")), secret("B", Some(""))]).unwrap();
+        assert_eq!(secrets.len(), 2);
+    }
+
+    #[test]
+    fn an_empty_value_is_not_a_missing_one() {
+        let secrets = require_values(vec![secret("EMPTY", Some(""))]).unwrap();
+        assert_eq!(secrets[0].value.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn a_withheld_value_refuses_and_names_the_key() {
+        let err = require_values(vec![secret("A", Some("1")), secret("MISSING", None)])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("MISSING"), "error did not name the key: {err}");
+        assert!(err.contains("Refusing to continue"), "{err}");
+    }
+
+    #[test]
+    fn no_secrets_at_all_is_not_an_error() {
+        assert!(require_values(vec![]).unwrap().is_empty());
     }
 }

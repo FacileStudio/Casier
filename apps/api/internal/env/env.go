@@ -3,6 +3,7 @@ package env
 import (
 	"fmt"
 
+	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	troncenv "github.com/FacileStudio/tronc/env"
 )
 
@@ -18,6 +19,8 @@ type Config struct {
 	troncenv.Core
 	EncryptionKey string
 	OIDC          *OIDCConfig
+	SMTP          *mailer.SMTPConfig
+	PublicURL     string
 	SSOOnly       bool
 	AdminEmails   []string
 }
@@ -43,6 +46,14 @@ func Load() (Config, error) {
 
 	cfg.AdminEmails = troncenv.List("CASIER_ADMIN_EMAILS")
 
+	// The public origin is what a link in an email has to point at. Deployments
+	// almost never set it twice, so it falls back to the first CORS origin the
+	// same way OIDC_SUCCESS_URL does.
+	cfg.PublicURL = troncenv.String("PUBLIC_URL", "")
+	if cfg.PublicURL == "" && len(cfg.CORSAllowedOrigins) > 0 {
+		cfg.PublicURL = cfg.CORSAllowedOrigins[0]
+	}
+
 	if issuer := troncenv.String("OIDC_ISSUER", ""); issuer != "" {
 		clientID := troncenv.String("OIDC_CLIENT_ID", "")
 		clientSecret := troncenv.String("OIDC_CLIENT_SECRET", "")
@@ -60,6 +71,30 @@ func Load() (Config, error) {
 			ClientSecret: clientSecret,
 			RedirectURL:  redirectURL,
 			SuccessURL:   successURL,
+		}
+	}
+
+	// SMTP_HOST is the switch: unset means no mailer and a password reset flow
+	// that refuses rather than silently drops mail. Set means the rest has to
+	// add up now, at startup, instead of at the first reset request.
+	if host := troncenv.String("SMTP_HOST", ""); host != "" {
+		port, err := troncenv.Int("SMTP_PORT", mailer.DefaultPort)
+		if err != nil {
+			return Config{}, err
+		}
+		from := troncenv.String("SMTP_FROM", "")
+		if from == "" {
+			return Config{}, fmt.Errorf("SMTP_FROM is required when SMTP_HOST is set")
+		}
+		if cfg.PublicURL == "" {
+			return Config{}, fmt.Errorf("PUBLIC_URL or CORS_ALLOWED_ORIGINS is required when SMTP_HOST is set, a password reset link needs a public origin")
+		}
+		cfg.SMTP = &mailer.SMTPConfig{
+			Host:     host,
+			Port:     port,
+			Username: troncenv.String("SMTP_USERNAME", ""),
+			Password: troncenv.String("SMTP_PASSWORD", ""),
+			From:     from,
 		}
 	}
 

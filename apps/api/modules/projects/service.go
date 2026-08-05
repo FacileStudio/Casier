@@ -604,7 +604,7 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 		return nil, err
 	}
 
-	requested := authcontext.ParseScopeList(environments)
+	requested := parseRequestedEnvironments(environments)
 	scoped, err := service.resolveScopeEnvironments(ctx, project.ID, requested)
 	if err != nil {
 		return nil, err
@@ -670,6 +670,20 @@ func tokenLifetime(expiresInDays *int) (time.Duration, error) {
 		return 0, errors.Invalid(fmt.Sprintf("expires_in_days must be between 1 and %d", schemas.MaxTokenDays))
 	}
 	return time.Duration(days) * 24 * time.Hour, nil
+}
+
+// parseRequestedEnvironments reads the scope a caller asked for. Both an empty
+// list and a lone "*" mean every environment — the dashboard has always offered
+// "*" as the affordance for it, and refusing the string its own placeholder
+// suggests would be a strange way to enforce a security boundary. Neither is an
+// inference: whichever the caller sends, what gets stored is the explicit
+// all_environments flag.
+func parseRequestedEnvironments(raw string) []string {
+	requested := authcontext.ParseScopeList(raw)
+	if len(requested) == 1 && requested[0] == "*" {
+		return nil
+	}
+	return requested
 }
 
 // resolveScopeEnvironments turns the requested slugs into environment rows, and

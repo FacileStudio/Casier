@@ -17,6 +17,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/database"
 	documentation "github.com/FacileStudio/Casier/apps/api/internal/documentation"
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
+	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
@@ -101,13 +102,20 @@ func run() int {
 	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
 	defer cancelCleanup()
 
-	authService := auth.NewService(db, keyring, appLogger)
+	appMailer, err := mailer.New(appEnv.SMTP)
+	if err != nil {
+		appLogger.Error("invalid SMTP configuration", slog.Any("error", err))
+		return 1
+	}
+
+	authService := auth.NewService(db, keyring, appLogger, appMailer, appEnv.PublicURL)
 	authService.StartSessionCleanup(shutdownCtx)
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
 	auditLogger := audit.NewLogger(db, appLogger)
 	projectsService := projects.NewService(db, keyring, auditLogger)
 	environmentsService := environments.NewService(db, projectsService)
 	secretsService := secrets.NewService(db, appLogger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
+	secretsService.StartTrashPurge(shutdownCtx)
 
 	docs := documentation.Response{
 		Modules: []documentation.Module{

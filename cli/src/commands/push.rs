@@ -19,12 +19,12 @@ pub async fn dokploy(compose_id: &str, project: Option<String>, env: Option<Stri
     };
 
     let client = ApiClient::new(&config.server_url, Some(token));
-    let secrets = client.list_secrets(&project, &env).await?;
+    let secrets = client.list_secrets_with_values(&project, &env).await?;
     cache::store(&project, &env, &cache::to_map(&secrets));
 
     let env_content = secrets
         .iter()
-        .map(|s| format!("{}={}", s.key, s.value))
+        .map(|s| format!("{}={}", s.key, s.value.as_deref().unwrap_or_default()))
         .collect::<Vec<_>>()
         .join("\n");
 

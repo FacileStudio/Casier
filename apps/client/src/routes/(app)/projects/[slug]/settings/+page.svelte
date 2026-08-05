@@ -28,6 +28,7 @@
 
 	let newEnvName = $state('');
 	let addingEnv = $state(false);
+	let togglingEnvSlug = $state<string | null>(null);
 
 	let envToDelete = $state<Environment | null>(null);
 	let deleteEnvOpen = $state(false);
@@ -110,6 +111,27 @@
 			toast.error(err instanceof Error ? err.message : 'Failed to create environment');
 		} finally {
 			addingEnv = false;
+		}
+	}
+
+	async function toggleEnvProtection(env: Environment) {
+		togglingEnvSlug = env.slug;
+		try {
+			await api.put<Environment>(
+				`/projects/${ctx.slug}/environments/${env.slug}`,
+				{ name: env.name, protected: !env.protected },
+				auth.token
+			);
+			await ctx.reloadEnvironments();
+			toast.success(
+				env.protected
+					? `"${env.name}" is no longer protected`
+					: `"${env.name}" now requires owner or admin to write`
+			);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Failed to change protection');
+		} finally {
+			togglingEnvSlug = null;
 		}
 	}
 
@@ -233,17 +255,48 @@
 							<div class="flex min-w-0 flex-wrap items-center gap-2">
 								<span class="truncate text-sm font-medium">{env.name}</span>
 								<code class="rounded bg-muted px-2 py-1 font-mono text-xs">{env.slug}</code>
+								{#if env.protected}
+									<span
+										class="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground"
+									>
+										<iconify-icon icon="solar:lock-keyhole-linear" width="12" aria-hidden="true"
+										></iconify-icon>
+										Protected
+									</span>
+								{/if}
 							</div>
-							<button
-								type="button"
-								aria-label="Delete environment {env.name}"
-								disabled={ctx.environments.length <= 1}
-								onclick={() => askDeleteEnv(env)}
-								class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-							>
-								<iconify-icon icon="solar:trash-bin-2-linear" width="16" aria-hidden="true"
-								></iconify-icon>
-							</button>
+							<div class="flex shrink-0 items-center gap-1">
+								<button
+									type="button"
+									aria-label={env.protected
+										? `Remove protection from ${env.name}`
+										: `Protect ${env.name}`}
+									title={env.protected
+										? 'Allow any member to write here'
+										: 'Require owner or admin to write here'}
+									disabled={togglingEnvSlug === env.slug}
+									onclick={() => toggleEnvProtection(env)}
+									class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+								>
+									<iconify-icon
+										icon={env.protected
+											? 'solar:lock-keyhole-unlocked-linear'
+											: 'solar:lock-keyhole-linear'}
+										width="16"
+										aria-hidden="true"
+									></iconify-icon>
+								</button>
+								<button
+									type="button"
+									aria-label="Delete environment {env.name}"
+									disabled={ctx.environments.length <= 1}
+									onclick={() => askDeleteEnv(env)}
+									class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+								>
+									<iconify-icon icon="solar:trash-bin-2-linear" width="16" aria-hidden="true"
+									></iconify-icon>
+								</button>
+							</div>
 						</div>
 					{/each}
 				</div>

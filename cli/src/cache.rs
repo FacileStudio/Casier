@@ -12,10 +12,13 @@ pub struct CachedSecrets {
     pub secrets: BTreeMap<String, String>,
 }
 
+/// Only secrets that carry a value are cached. A valueless entry would poison
+/// `casier run --offline` with an empty variable long after the reason it was
+/// missing has been fixed.
 pub fn to_map(secrets: &[Secret]) -> BTreeMap<String, String> {
     secrets
         .iter()
-        .map(|s| (s.key.clone(), s.value.clone()))
+        .filter_map(|s| s.value.clone().map(|value| (s.key.clone(), value)))
         .collect()
 }
 

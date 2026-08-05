@@ -78,11 +78,44 @@ func splitTags(s string) []string {
 	return strings.Split(s, ",")
 }
 
-const roleOwner = "owner"
+const (
+	roleOwner = "owner"
+	roleAdmin = "admin"
+)
 
 const maxSecretKeyLength = 256
 
 const maxSecretValueSize = 64 * 1024
+
+// The audit log distinguishes a page load from a data exfiltration. Listing
+// metadata, revealing a page of values, revealing one key and exporting the
+// whole environment used to collapse into a single "bulk_read" row, which made
+// the log useless for the one question it exists to answer.
+const (
+	auditActionList       = "secrets.list"
+	auditActionRevealList = "secrets.reveal_list"
+	auditActionReveal     = "secrets.reveal"
+	auditActionExport     = "secrets.export"
+	auditActionDiff       = "secrets.diff"
+	auditActionTrashList  = "secrets.trash_list"
+	auditActionPurge      = "secrets.purge"
+)
+
+// roleMayWriteProtected answers whether a project role may write to an
+// environment. A protected environment narrows writes to owner and admin;
+// anywhere else the project role the caller already passed governs alone.
+func roleMayWriteProtected(role string, protected bool) bool {
+	if !protected {
+		return true
+	}
+	return role == roleOwner || role == roleAdmin
+}
+
+// errDuplicateKey marks the unique-index violation on (environment_id, key) so
+// the transaction can unwind before the collision is diagnosed. Postgres aborts
+// a transaction on a failed statement, so the follow-up query that tells a live
+// key from a trashed one has to run once the transaction is gone.
+var errDuplicateKey = stderrors.New("duplicate secret key")
 
 // caller is who a secret operation runs as: the resolved user, their role in
 // the project, and the scope of the API token they authenticated with, if any.
@@ -278,13 +311,27 @@ func (service *Service) resolveDataKey(ctx context.Context, envID int64) ([]byte
 	return dataKey, nil
 }
 
+// secretRead describes one read of an environment: how it is filtered, whether
+// plaintext leaves the server, and which audit action it is recorded under. The
+// audit action is part of the request rather than inferred, because export and
+// diff read exactly as much as a revealing list does and must not be logged as
+// one.
+type secretRead struct {
+	tagFilter   string
+	reveal      bool
+	auditAction string
+}
+
 // listSecrets returns the secrets of an environment the caller is allowed to
 // read. A secret carrying ACL rows is dropped entirely unless the caller holds
 // a can_read grant on it, which is also what hides it from export and diff.
-func (service *Service) listSecrets(ctx context.Context, envID int64, person caller, tagFilter string) ([]SecretResponse, int, error) {
+// Values are decrypted only when the read asks for them: a metadata listing
+// never touches the data key, so a dashboard page load cannot leak plaintext it
+// only intended to mask.
+func (service *Service) listSecrets(ctx context.Context, envID int64, person caller, read secretRead) ([]SecretResponse, int, error) {
 	query := service.orm.WithContext(ctx).Where("environment_id = ?", envID)
-	if tagFilter != "" {
-		query = query.Where(tagFilterClause, tagFilterPattern(tagFilter))
+	if read.tagFilter != "" {
+		query = query.Where(tagFilterClause, tagFilterPattern(read.tagFilter))
 	}
 	var records []schemas.Secret
 	err := query.Order("key asc").Find(&records).Error
@@ -296,13 +343,16 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, person cal
 	rotationDays := service.rotationDays(ctx, projectID)
 
 	if len(records) == 0 {
-		service.logger.Info("secrets.list", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", 0))
+		service.logger.Info(read.auditAction, slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", 0), slog.Bool("revealed", read.reveal))
 		return []SecretResponse{}, rotationDays, nil
 	}
 
-	dataKey, err := service.resolveDataKey(ctx, envID)
-	if err != nil {
-		return nil, 0, err
+	var dataKey []byte
+	if read.reveal {
+		dataKey, err = service.resolveDataKey(ctx, envID)
+		if err != nil {
+			return nil, 0, err
+		}
 	}
 
 	ids := make([]int64, len(records))
@@ -321,35 +371,103 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, person cal
 		if !aclAllowsRead(person.role, grants[r.ID]) {
 			continue
 		}
-		plaintext, err := crypto.Decrypt(r.EncryptedValue, r.Nonce, dataKey)
-		if err != nil {
-			return nil, 0, errors.Internal("failed to decrypt secret", err)
-		}
-		resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person.scope, 0)
 		rotatedAt, ok := rotations[r.ID]
 		if !ok {
 			rotatedAt = r.UpdatedAt
 		}
-		secrets = append(secrets, SecretResponse{
+		response := SecretResponse{
 			ID:             r.ID,
 			Key:            r.Key,
-			Value:          resolved,
 			Version:        r.Version,
 			Tags:           splitTags(r.Tags),
 			CreatedAt:      r.CreatedAt,
 			UpdatedAt:      r.UpdatedAt,
 			RotatedAt:      rotatedAt,
 			RotationStatus: rotationStatus(rotatedAt, rotationDays, now),
-		})
+		}
+		if read.reveal {
+			plaintext, err := crypto.Decrypt(r.EncryptedValue, r.Nonce, dataKey)
+			if err != nil {
+				return nil, 0, errors.Internal("failed to decrypt secret", err)
+			}
+			resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person.scope, 0)
+			response.Value = &resolved
+		}
+		secrets = append(secrets, response)
 	}
 
-	service.logger.Info("secrets.list", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", len(secrets)))
+	service.logger.Info(read.auditAction, slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", len(secrets)), slog.Bool("revealed", read.reveal))
 
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, person.logID(), "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(secrets))+" secrets", person.clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), "", read.auditAction, "environment:"+strconv.FormatInt(envID, 10), readDetail(len(secrets), read.reveal), person.clientIP)
 	}
 
 	return secrets, rotationDays, nil
+}
+
+// readDetail is the audit detail of a bulk read. A revealing read is spelled
+// out in values rather than rows, because that number is the size of the
+// exposure.
+func readDetail(count int, reveal bool) string {
+	if reveal {
+		return strconv.Itoa(count) + " values revealed"
+	}
+	return strconv.Itoa(count) + " secrets"
+}
+
+// revealSecret returns the plaintext of one secret and records that in its own
+// audit entry, so reading a single key is never indistinguishable from dumping
+// an environment. A secret the caller may not read answers not_found, the same
+// way it is simply absent from every listing: an ACL hides a secret, it does
+// not announce it.
+func (service *Service) revealSecret(ctx context.Context, envID int64, key string, person caller) (*SecretResponse, error) {
+	record, err := service.findSecret(ctx, envID, key)
+	if err != nil {
+		return nil, err
+	}
+
+	grants, err := service.secretGrants(ctx, service.orm, []int64{record.ID}, person.userID)
+	if err != nil {
+		return nil, err
+	}
+	if !aclAllowsRead(person.role, grants[record.ID]) {
+		return nil, errors.NotFound("secret not found")
+	}
+
+	dataKey, err := service.resolveDataKey(ctx, envID)
+	if err != nil {
+		return nil, err
+	}
+	plaintext, err := crypto.Decrypt(record.EncryptedValue, record.Nonce, dataKey)
+	if err != nil {
+		return nil, errors.Internal("failed to decrypt secret", err)
+	}
+
+	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
+	rotationDays := service.rotationDays(ctx, projectID)
+	resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person.scope, 0)
+
+	rotatedAt, ok := service.lastRotations(ctx, []int64{record.ID})[record.ID]
+	if !ok {
+		rotatedAt = record.UpdatedAt
+	}
+
+	service.logger.Info(auditActionReveal, slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
+	if service.audit != nil {
+		service.audit.Log(ctx, projectID, person.logID(), "", auditActionReveal, "secret:"+key, "", person.clientIP)
+	}
+
+	return &SecretResponse{
+		ID:             record.ID,
+		Key:            record.Key,
+		Value:          &resolved,
+		Version:        record.Version,
+		Tags:           splitTags(record.Tags),
+		CreatedAt:      record.CreatedAt,
+		UpdatedAt:      record.UpdatedAt,
+		RotatedAt:      rotatedAt,
+		RotationStatus: rotationStatus(rotatedAt, rotationDays, time.Now().UTC()),
+	}, nil
 }
 
 // rotationSummary grades every secret in the project so the UI can flag a stale
@@ -513,7 +631,7 @@ func (service *Service) createSecret(ctx context.Context, envID int64, key, valu
 	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(record).Error; err != nil {
 			if stderrors.Is(err, gorm.ErrDuplicatedKey) {
-				return errors.Conflict("secret key already exists in this environment")
+				return errDuplicateKey
 			}
 			return errors.Internal("failed to create secret", err)
 		}
@@ -525,6 +643,9 @@ func (service *Service) createSecret(ctx context.Context, envID int64, key, valu
 			ChangedBy:      person.logID(),
 		}).Error
 	})
+	if stderrors.Is(err, errDuplicateKey) {
+		return nil, service.duplicateKeyError(ctx, envID, key)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -535,7 +656,7 @@ func (service *Service) createSecret(ctx context.Context, envID int64, key, valu
 	return &SecretResponse{
 		ID:             record.ID,
 		Key:            record.Key,
-		Value:          value,
+		Value:          &value,
 		Version:        record.Version,
 		Tags:           splitTags(record.Tags),
 		CreatedAt:      record.CreatedAt,
@@ -591,7 +712,7 @@ func (service *Service) updateSecret(ctx context.Context, envID int64, key, valu
 	return &SecretResponse{
 		ID:             record.ID,
 		Key:            record.Key,
-		Value:          value,
+		Value:          &value,
 		Version:        record.Version,
 		Tags:           splitTags(record.Tags),
 		CreatedAt:      record.CreatedAt,
@@ -683,13 +804,15 @@ func (service *Service) rollbackSecret(ctx context.Context, envID int64, key str
 		return nil, errors.Internal("failed to decrypt secret", err)
 	}
 
+	restored := string(plaintext)
+
 	service.logger.Info("secrets.rollback", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key), slog.Int("to_version", targetVersion), slog.Int("new_version", secret.Version))
 	service.fireWebhook(ctx, "secret.rolled_back", envID, key, secret.Version, person)
 
 	return &SecretResponse{
 		ID:             secret.ID,
 		Key:            secret.Key,
-		Value:          string(plaintext),
+		Value:          &restored,
 		Version:        secret.Version,
 		Tags:           splitTags(secret.Tags),
 		CreatedAt:      secret.CreatedAt,
@@ -712,10 +835,12 @@ func (service *Service) importEnv(ctx context.Context, envID int64, content stri
 	result := &ImportResponse{}
 	var created, updated []importedSecret
 	denied := 0
+	conflictKey := ""
 
 	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		result.Created, result.Updated = 0, 0
 		created, updated, denied = nil, nil, 0
+		conflictKey = ""
 
 		var records []schemas.Secret
 		if err := tx.Where("environment_id = ?", envID).Find(&records).Error; err != nil {
@@ -773,6 +898,10 @@ func (service *Service) importEnv(ctx context.Context, envID int64, content stri
 				Version:        1,
 			}
 			if err := tx.Create(record).Error; err != nil {
+				if stderrors.Is(err, gorm.ErrDuplicatedKey) {
+					conflictKey = entry.key
+					return errDuplicateKey
+				}
 				return errors.Internal("failed to create secret", err)
 			}
 			if err := tx.Create(&schemas.SecretVersion{
@@ -790,6 +919,9 @@ func (service *Service) importEnv(ctx context.Context, envID int64, content stri
 		}
 		return nil
 	})
+	if stderrors.Is(err, errDuplicateKey) {
+		return nil, service.duplicateKeyError(ctx, envID, conflictKey)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -909,7 +1041,7 @@ func decodeEnvValue(value string) string {
 }
 
 func (service *Service) exportEnv(ctx context.Context, envID int64, person caller) (string, error) {
-	secrets, _, err := service.listSecrets(ctx, envID, person, "")
+	secrets, _, err := service.listSecrets(ctx, envID, person, secretRead{reveal: true, auditAction: auditActionExport})
 	if err != nil {
 		return "", err
 	}
@@ -918,29 +1050,39 @@ func (service *Service) exportEnv(ctx context.Context, envID int64, person calle
 	for _, s := range secrets {
 		sb.WriteString(s.Key)
 		sb.WriteString("=")
-		sb.WriteString(encodeEnvValue(s.Value))
+		sb.WriteString(encodeEnvValue(revealedValue(s)))
 		sb.WriteString("\n")
 	}
 	return sb.String(), nil
 }
 
+// revealedValue reads the plaintext off a response the service itself asked to
+// have revealed. Nothing but a bug can leave it nil there, and an empty string
+// is what a secret with no value would have produced anyway.
+func revealedValue(secret SecretResponse) string {
+	if secret.Value == nil {
+		return ""
+	}
+	return *secret.Value
+}
+
 func (service *Service) diffEnvironments(ctx context.Context, envA, envB int64, person caller) (*DiffResponse, error) {
-	secretsA, _, err := service.listSecrets(ctx, envA, person, "")
+	secretsA, _, err := service.listSecrets(ctx, envA, person, secretRead{reveal: true, auditAction: auditActionDiff})
 	if err != nil {
 		return nil, err
 	}
-	secretsB, _, err := service.listSecrets(ctx, envB, person, "")
+	secretsB, _, err := service.listSecrets(ctx, envB, person, secretRead{reveal: true, auditAction: auditActionDiff})
 	if err != nil {
 		return nil, err
 	}
 
 	mapA := make(map[string]string, len(secretsA))
 	for _, s := range secretsA {
-		mapA[s.Key] = s.Value
+		mapA[s.Key] = revealedValue(s)
 	}
 	mapB := make(map[string]string, len(secretsB))
 	for _, s := range secretsB {
-		mapB[s.Key] = s.Value
+		mapB[s.Key] = revealedValue(s)
 	}
 
 	seen := make(map[string]bool)
@@ -951,7 +1093,7 @@ func (service *Service) diffEnvironments(ctx context.Context, envA, envB int64, 
 		valB, exists := mapB[s.Key]
 		if !exists {
 			entries = append(entries, DiffEntry{Key: s.Key, Status: "removed"})
-		} else if s.Value != valB {
+		} else if revealedValue(s) != valB {
 			entries = append(entries, DiffEntry{Key: s.Key, Status: "changed"})
 		}
 	}
@@ -1069,6 +1211,11 @@ func (service *Service) deleteACL(ctx context.Context, envID int64, key string, 
 	return nil
 }
 
+// deleteSecret moves a secret to the trash rather than destroying it: the row
+// keeps its versions and its ACLs, disappears from every other route through
+// GORM's soft-delete scope, and stays restorable for the retention window. The
+// key remains reserved by the unique index while it sits there, so a restore
+// can never collide with a replacement created in the meantime.
 func (service *Service) deleteSecret(ctx context.Context, envID int64, key string, person caller) error {
 	secret, err := service.findSecret(ctx, envID, key)
 	if err != nil {
@@ -1079,8 +1226,9 @@ func (service *Service) deleteSecret(ctx context.Context, envID int64, key strin
 	}
 
 	result := service.orm.WithContext(ctx).
+		Model(&schemas.Secret{}).
 		Where("id = ?", secret.ID).
-		Delete(&schemas.Secret{})
+		Updates(map[string]any{"deleted_at": time.Now().UTC(), "deleted_by": person.logID()})
 	if result.Error != nil {
 		return errors.Internal("failed to delete secret", result.Error)
 	}
@@ -1088,7 +1236,226 @@ func (service *Service) deleteSecret(ctx context.Context, envID int64, key strin
 		return errors.NotFound("secret not found")
 	}
 
-	service.logger.Info("secrets.delete", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
-	service.fireWebhook(ctx, "secret.deleted", envID, key, 0, person)
+	service.logger.Info("secrets.trash", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
+	service.fireWebhook(ctx, "secret.trashed", envID, key, secret.Version, person)
 	return nil
+}
+
+// findTrashedSecret locates a secret that only the trash can see. Unscoped is
+// what makes it reachable at all: every other query in this module is filtered
+// by the soft-delete scope.
+func (service *Service) findTrashedSecret(ctx context.Context, envID int64, key string) (*schemas.Secret, error) {
+	var record schemas.Secret
+	err := service.orm.WithContext(ctx).
+		Unscoped().
+		Where("environment_id = ? AND key = ? AND deleted_at IS NOT NULL", envID, key).
+		First(&record).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.NotFound("secret not found in trash")
+	}
+	if err != nil {
+		return nil, errors.Internal("failed to find trashed secret", err)
+	}
+	return &record, nil
+}
+
+// listTrash reports what can still be recovered, and until when. Values are
+// never decrypted here: the trash answers "what did I delete", not "what was in
+// it". Per-secret ACLs hide a trashed secret exactly as they hide a live one.
+func (service *Service) listTrash(ctx context.Context, envID int64, person caller) (*TrashResponse, error) {
+	var records []schemas.Secret
+	err := service.orm.WithContext(ctx).
+		Unscoped().
+		Where("environment_id = ? AND deleted_at IS NOT NULL", envID).
+		Order("deleted_at desc").
+		Find(&records).Error
+	if err != nil {
+		return nil, errors.Internal("failed to list trashed secrets", err)
+	}
+
+	response := &TrashResponse{Secrets: []TrashedSecretResponse{}, RetentionDays: schemas.TrashRetentionDays}
+	if len(records) == 0 {
+		return response, nil
+	}
+
+	ids := make([]int64, len(records))
+	for i, r := range records {
+		ids[i] = r.ID
+	}
+	grants, err := service.secretGrants(ctx, service.orm, ids, person.userID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range records {
+		if !aclAllowsRead(person.role, grants[r.ID]) {
+			continue
+		}
+		response.Secrets = append(response.Secrets, TrashedSecretResponse{
+			ID:        r.ID,
+			Key:       r.Key,
+			Tags:      splitTags(r.Tags),
+			DeletedAt: r.DeletedAt.Time,
+			DeletedBy: r.DeletedBy,
+			PurgeAt:   purgeAt(r.DeletedAt.Time),
+		})
+	}
+
+	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
+	if service.audit != nil {
+		service.audit.Log(ctx, projectID, person.logID(), "", auditActionTrashList, "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(response.Secrets))+" secrets", person.clientIP)
+	}
+
+	return response, nil
+}
+
+// restoreSecret lifts a secret back out of the trash. Its versions and ACLs
+// were never touched, so clearing deleted_at is the whole of it.
+func (service *Service) restoreSecret(ctx context.Context, envID int64, key string, person caller) error {
+	secret, err := service.findTrashedSecret(ctx, envID, key)
+	if err != nil {
+		return err
+	}
+	if err := service.assertSecretWrite(ctx, secret.ID, person); err != nil {
+		return err
+	}
+
+	result := service.orm.WithContext(ctx).
+		Unscoped().
+		Model(&schemas.Secret{}).
+		Where("id = ?", secret.ID).
+		Updates(map[string]any{"deleted_at": nil, "deleted_by": ""})
+	if result.Error != nil {
+		return errors.Internal("failed to restore secret", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return errors.NotFound("secret not found in trash")
+	}
+
+	service.logger.Info("secrets.restore", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
+	service.fireWebhook(ctx, "secret.restored", envID, key, secret.Version, person)
+	return nil
+}
+
+// purgeSecret destroys a secret for good, whether it is live or already in the
+// trash. It is the only path that frees the key for reuse before the retention
+// window elapses, which is why the controller restricts it to owner and admin.
+func (service *Service) purgeSecret(ctx context.Context, envID int64, key string, person caller) error {
+	var secret schemas.Secret
+	err := service.orm.WithContext(ctx).
+		Unscoped().
+		Where("environment_id = ? AND key = ?", envID, key).
+		First(&secret).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.NotFound("secret not found")
+	}
+	if err != nil {
+		return errors.Internal("failed to find secret", err)
+	}
+	if err := service.assertSecretWrite(ctx, secret.ID, person); err != nil {
+		return err
+	}
+
+	if err := service.destroySecrets(ctx, []int64{secret.ID}); err != nil {
+		return err
+	}
+
+	service.logger.Info(auditActionPurge, slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
+	projectID, envSlug, refErr := service.environmentRef(ctx, envID)
+	if refErr == nil {
+		service.emitSecretEvent(ctx, projectID, envSlug, "secret.purged", key, secret.Version, person)
+	}
+	return nil
+}
+
+// destroySecrets removes secrets and everything that hangs off them in one
+// transaction. The children go first so a failure can never leave versions or
+// ACLs pointing at a secret that no longer exists.
+func (service *Service) destroySecrets(ctx context.Context, secretIDs []int64) error {
+	if len(secretIDs) == 0 {
+		return nil
+	}
+	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("secret_id IN ?", secretIDs).Delete(&schemas.SecretVersion{}).Error; err != nil {
+			return errors.Internal("failed to delete secret versions", err)
+		}
+		if err := tx.Where("secret_id IN ?", secretIDs).Delete(&schemas.SecretACL{}).Error; err != nil {
+			return errors.Internal("failed to delete secret ACLs", err)
+		}
+		if err := tx.Unscoped().Where("id IN ?", secretIDs).Delete(&schemas.Secret{}).Error; err != nil {
+			return errors.Internal("failed to delete secret", err)
+		}
+		return nil
+	})
+}
+
+// StartTrashPurge destroys secrets that have outlived the recovery window. It
+// runs for the life of the context the server is shut down with, the same way
+// the session cleanup loop does.
+func (service *Service) StartTrashPurge(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(trashPurgeInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				purged, err := service.purgeExpiredTrash(ctx, time.Now().UTC())
+				if err != nil {
+					service.logger.Error("secret trash purge failed", slog.Any("error", err))
+				} else if purged > 0 {
+					service.logger.Info("purged trashed secrets", slog.Int("count", purged))
+				}
+			}
+		}
+	}()
+}
+
+func (service *Service) purgeExpiredTrash(ctx context.Context, now time.Time) (int, error) {
+	var ids []int64
+	err := service.orm.WithContext(ctx).
+		Unscoped().
+		Model(&schemas.Secret{}).
+		Where("deleted_at IS NOT NULL AND deleted_at <= ?", trashCutoff(now)).
+		Pluck("id", &ids).Error
+	if err != nil {
+		return 0, errors.Internal("failed to select expired secrets", err)
+	}
+	if err := service.destroySecrets(ctx, ids); err != nil {
+		return 0, err
+	}
+	return len(ids), nil
+}
+
+// duplicateKeyError turns a unique-index violation on (environment_id, key)
+// into something the caller can act on. The index deliberately covers
+// soft-deleted rows, so the collision may well be with a secret sitting in the
+// trash, invisible to every route that would explain the failure.
+func (service *Service) duplicateKeyError(ctx context.Context, envID int64, key string) error {
+	var trashed int64
+	err := service.orm.WithContext(ctx).
+		Unscoped().
+		Model(&schemas.Secret{}).
+		Where("environment_id = ? AND key = ? AND deleted_at IS NOT NULL", envID, key).
+		Count(&trashed).Error
+	if err == nil && trashed > 0 {
+		return errors.Conflict("secret key '" + key + "' is in the trash: restore it or purge it before creating it again")
+	}
+	return errors.Conflict("secret key already exists in this environment")
+}
+
+// environmentProtected reports whether an environment demands owner or admin
+// for writes. It is read at the write choke point rather than carried on the
+// environment resolver, which only ever hands back an ID.
+func (service *Service) environmentProtected(ctx context.Context, envID int64) (bool, error) {
+	var protected bool
+	err := service.orm.WithContext(ctx).
+		Model(&schemas.Environment{}).
+		Where("id = ?", envID).
+		Pluck("protected", &protected).Error
+	if err != nil {
+		return false, errors.Internal("failed to read environment protection", err)
+	}
+	return protected, nil
 }

@@ -85,7 +85,8 @@
 > **Where this stands.** v6 and v7 are written, tested and committed as `5dd2c42` on the
 > branch **`hardening/authz-audit-2026-08`**, which is pushed but **not merged**. `main` has
 > `autoDeploy: true` in Dokploy, so merging deploys straight to production — run the
-> pre-deploy checks under "Shipped 2026-08-05" first. v6-5, v6-6, v8 and v9 are open.
+> pre-deploy checks under "Shipped 2026-08-05" first. **v6-5, v6-6 and most of v9 shipped
+> 2026-08-06** — see "Shipped 2026-08-06" at the end. v8 is still open.
 
 Source-level pass over `apps/api`, `apps/client/src/lib`, and the CLI surface. Every item
 below was traced end to end in the code, not inferred from docs. Crypto (`internal/crypto`),
@@ -134,10 +135,10 @@ Ordered. 1 and 2 were the ones that changed what Casier actually guarantees. 1-4
       `reset_token` verbatim at INFO, and Casier ships logs to Journal — log access is account
       takeover. There is no mailer, so that log line is the entire delivery mechanism. Either
       send a real email or disable the flow under `SSO_ONLY` and drop the log.
-- [ ] **v6-5 — Environment-level roles.** "Any `member` can write prod" is the wrong default
+- [x] **v6-5 — Environment-level roles.** *(2026-08-06, as a protection flag.)* "Any `member` can write prod" is the wrong default
       for a secrets manager. Prod should be gateable to admin without inventing a second
       project.
-- [~] **v6-6 — An authorization test table.** There are no HTTP-level tests; coverage today is
+- [x] **v6-6 — An authorization test table.** *(2026-08-06.)* There are no HTTP-level tests; coverage today is
       crypto, passwords, tokens, rotation grading, and OIDC parsing. One table-driven test over
       `(role, token scope, route) → expected status` would have caught v6-1 through v6-3, and
       is what keeps them fixed.
@@ -260,24 +261,24 @@ projects and environments controllers.
 
 ## v9 — Product
 
-- [ ] **A mailer.** v6-4 took the password reset token out of the logs without replacing the
+- [x] **A mailer.** *(2026-08-06.)* v6-4 took the password reset token out of the logs without replacing the
       delivery path, so password reset is inert until something can send mail. Moot while
       `SSO_ONLY=true`, blocking the moment it is not.
-- [ ] **Give `api_tokens.environments` a real foreign key.** It stores environment slugs as a
+- [x] **Give `api_tokens.environments` a real foreign key.** *(2026-08-06.)* It stores environment slugs as a
       comma-separated string with no referential integrity, so deleting an environment leaves
       its slug in every token scope that named it — and recreating an environment with the same
       slug silently re-grants those tokens. Uncovered while wiring v6-2.
-- [ ] **A test-database harness.** The blocker for v6-6: every scope decision is unit-tested as
+- [x] **A test-database harness.** *(2026-08-06.)* The blocker for v6-6: every scope decision is unit-tested as
       a pure function, but nothing exercises `(role, token scope, route) → status` over real
       HTTP against real rows. This is the highest-leverage missing piece in the repo.
-- [ ] **Trash for secrets.** `deleteSecret` cascades every version away with the row. Deleting
+- [x] **Trash for secrets.** *(2026-08-06.)* `deleteSecret` cascades every version away with the row. Deleting
       `PROD_DATABASE_URL` is currently permanent and silent. 30-day soft delete, restorable.
-- [ ] **Per-secret reveal endpoint.** `GET /secrets` returns every plaintext value and the
+- [x] **Per-secret reveal endpoint.** *(2026-08-06.)* `GET /secrets` returns every plaintext value and the
       dashboard masks them client-side with `••••••••` — the mask is theatre, the values are in
       the payload. It also means one audit row (`secrets.bulk_read`) covers a page load and a
       full production dump identically. A reveal-one endpoint fixes both the exposure and the
       audit trail.
-- [ ] **Scoped tokens as a shipped feature** (the visible half of v6-2): settable TTL — today
+- [x] **Scoped tokens as a shipped feature** *(2026-08-06.)* (the visible half of v6-2): settable TTL — today
       it is hard-coded to 365 days at `projects/service.go:597` — and revoke-rather-than-delete
       so a revoked token keeps its audit history.
 - [ ] **Rotation warnings that leave the app.** The grading is built and nothing ever tells
@@ -291,3 +292,58 @@ projects and environments controllers.
   (`SPEC.md`) — three-way merge protocol, recipient-in-ciphertext, escrow.
 - Secret leases for short-lived credentials
 - `casier history`/`undo` in the CLI on top of existing version history
+
+---
+
+## Shipped 2026-08-06
+
+Rebased onto `main` first: the branch was nine commits behind a move to the **tronc** chassis
+(`internal/httpjson`, `internal/errors` and `internal/logger` are now `tronc/*`, routes mount
+under `/api`, and one distroless container serves the API and the client). tronc went to
+**v0.8.0** — additive, and `errors.Unavailable` is exactly what the mailer needed.
+
+**v6-5, as a flag rather than a table.** `environments.protected` means writes need
+`owner|admin`. Flipping it is `owner|admin` in *either* direction, deleting a protected
+environment is `owner` only, and no machine token may touch protection. The stated need was
+"gate prod to admin without inventing a second project"; a per-environment role table is a
+bigger answer than the question, and how Doppler and Infisical solve it in practice is a
+per-environment grant on top of the project role, which this is the boolean case of.
+
+**v6-6 and the harness.** `apps/api/authz_test.go`: 58 routes × 14 caller identities — every
+project role, an outsider, an instance admin, read-only / write / environment-scoped /
+foreign-project / expired / revoked machine tokens, and two flavours of no credential —
+driven through the **real Chi router** against real Postgres. **812 assertions.** It asserts
+the error *code* as well as the status, so the deliberate `not_found`-rather-than-
+`permission_denied` answer for out-of-scope reads is pinned rather than left to be helpfully
+"corrected". A `chi.Walk` meta-test fails when a mounted route has no case, which is what
+stops the next endpoint from shipping unguarded — it caught the three routes the trash and
+reveal work added while that work was still in flight. `internal/testdb` gives each test
+package its own Postgres schema, because `go test ./...` runs packages concurrently and two
+of them truncating the same tables deadlock.
+
+**Token scopes are FK-backed and bounded.** `api_token_environments` replaces the
+comma-separated slug column, "every environment" is a stored flag rather than an inference
+from emptiness (cascading the last environment away used to *widen* a token to the whole
+project), lifetimes are caller-chosen and finite, and revoking keeps the row so audit history
+still resolves.
+
+**Trash, and values off the wire.** Secrets soft-delete with a 30-day window and an hourly
+purge; the unique index still covers trashed rows so a deleted key stays reserved. `GET
+/secrets` no longer ships plaintext — `?reveal=true` and a per-key reveal do, audited
+separately, so one `bulk_read` row no longer covers a page load and a production dump alike.
+
+**A mailer.** stdlib `net/smtp`, no new dependency. Reset tokens follow OWASP: 30-minute TTL,
+single use, every outstanding token invalidated on use, all sessions evicted, and
+`/auth/forgot-password` answers identically for a known and an unknown address. Without
+`SMTP_HOST` the flow answers **503** instead of pretending the mail went out.
+
+### Verified, not assumed
+
+The backfill migration was ambiguous SQL — `unnest(...) AS slug` colliding with
+`environments.slug`. Every Go test passed, because the statement is only a string until
+Postgres reads it, and `Migrate` failing is fatal at startup: `main` would have crash-looped
+behind a green deploy. Caught by running the compiled binary against a database rebuilt from
+production's schema. After the fix, and verified per branch: a comma-separated scope resolves
+to exactly its environments, empty or NULL becomes `all_environments`, a slug that no longer
+exists is dropped, spacing is trimmed, slugs resolve within the token's **own project**, a
+re-run is a no-op, and deleting an environment narrows a token instead of widening it.
