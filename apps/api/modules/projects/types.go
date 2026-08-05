@@ -68,21 +68,25 @@ type InvitesResponse struct {
 	Invites []InviteResponse `json:"invites"`
 }
 
+// ExpiresInDays is a pointer so that an older client omitting it still gets the
+// default lifetime rather than a token that expires the instant it is minted.
 type CreateApiTokenRequest struct {
-	Name         string `json:"name"`
-	Environments string `json:"environments"`
-	Permissions  string `json:"permissions"`
+	Name          string `json:"name"`
+	Environments  string `json:"environments"`
+	Permissions   string `json:"permissions"`
+	ExpiresInDays *int   `json:"expires_in_days"`
 }
 
 type ApiTokenResponse struct {
-	ID           int64     `json:"id"`
-	Token        string    `json:"token,omitempty"`
-	Name         string    `json:"name"`
-	Environments string    `json:"environments"`
-	Permissions  string    `json:"permissions"`
-	ExpiresAt    time.Time `json:"expires_at"`
-	LastUsedAt   time.Time `json:"last_used_at"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID           int64      `json:"id"`
+	Token        string     `json:"token,omitempty"`
+	Name         string     `json:"name"`
+	Environments string     `json:"environments"`
+	Permissions  string     `json:"permissions"`
+	ExpiresAt    time.Time  `json:"expires_at"`
+	LastUsedAt   time.Time  `json:"last_used_at"`
+	RevokedAt    *time.Time `json:"revoked_at"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type ApiTokensResponse struct {

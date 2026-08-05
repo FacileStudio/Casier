@@ -241,39 +241,43 @@ func (service *Service) Authenticate(ctx context.Context, authorization string) 
 
 // apiTokenScopeRow is the set of api_tokens columns that define what a token
 // may reach, kept separate from the identity columns so the mapping to a
-// TokenScope stays testable without a database.
+// TokenScope stays testable without a database. Environments arrives already
+// resolved from api_token_environments, so a grant whose environment was
+// deleted never reaches this function.
 type apiTokenScopeRow struct {
-	TokenID      int64
-	ProjectID    int64
-	Environments string
-	Permissions  string
+	TokenID         int64
+	ProjectID       int64
+	AllEnvironments bool
+	Environments    []string
+	Permissions     string
 }
 
 func scopeFromTokenRow(row apiTokenScopeRow) *authcontext.TokenScope {
 	return &authcontext.TokenScope{
-		TokenID:      row.TokenID,
-		ProjectID:    row.ProjectID,
-		Environments: authcontext.ParseScopeList(row.Environments),
-		Permissions:  authcontext.ParseScopeList(row.Permissions),
+		TokenID:         row.TokenID,
+		ProjectID:       row.ProjectID,
+		AllEnvironments: row.AllEnvironments,
+		Environments:    row.Environments,
+		Permissions:     authcontext.ParseScopeList(row.Permissions),
 	}
 }
 
 func (service *Service) authenticateApiToken(ctx context.Context, token string) (string, *Data, error) {
 	hashed := hashToken(token)
 	var out struct {
-		UserID       int64
-		Email        string
-		ExpiresAt    time.Time
-		TokenID      int64
-		ProjectID    int64
-		Environments string
-		Permissions  string
+		UserID          int64
+		Email           string
+		ExpiresAt       time.Time
+		TokenID         int64
+		ProjectID       int64
+		AllEnvironments bool
+		Permissions     string
 	}
 	err := service.orm.WithContext(ctx).
 		Table("api_tokens at").
-		Select("u.id as user_id, u.email as email, at.expires_at as expires_at, at.id as token_id, at.project_id as project_id, at.environments as environments, at.permissions as permissions").
+		Select("u.id as user_id, u.email as email, at.expires_at as expires_at, at.id as token_id, at.project_id as project_id, at.all_environments as all_environments, at.permissions as permissions").
 		Joins("join users u on u.id = at.created_by").
-		Where("at.token_hash = ?", hashed).
+		Where("at.token_hash = ? AND at.revoked_at IS NULL", hashed).
 		Scan(&out).Error
 	if err != nil {
 		return "", nil, errors.Internal("failed to validate API token", err)
@@ -285,6 +289,18 @@ func (service *Service) authenticateApiToken(ctx context.Context, token string) 
 		return "", nil, errors.Unauthorized("expired API token")
 	}
 
+	var environments []string
+	if !out.AllEnvironments {
+		if err := service.orm.WithContext(ctx).
+			Table("api_token_environments te").
+			Select("e.slug").
+			Joins("join environments e on e.id = te.environment_id").
+			Where("te.token_id = ?", out.TokenID).
+			Scan(&environments).Error; err != nil {
+			return "", nil, errors.Internal("failed to read token scope", err)
+		}
+	}
+
 	go func() {
 		service.orm.Model(&schemas.ApiToken{}).
 			Where("token_hash = ?", hashed).
@@ -292,10 +308,11 @@ func (service *Service) authenticateApiToken(ctx context.Context, token string) 
 	}()
 
 	scope := scopeFromTokenRow(apiTokenScopeRow{
-		TokenID:      out.TokenID,
-		ProjectID:    out.ProjectID,
-		Environments: out.Environments,
-		Permissions:  out.Permissions,
+		TokenID:         out.TokenID,
+		ProjectID:       out.ProjectID,
+		AllEnvironments: out.AllEnvironments,
+		Environments:    environments,
+		Permissions:     out.Permissions,
 	})
 
 	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email, Scope: scope}, nil
@@ -345,7 +362,7 @@ func (service *Service) forgotPassword(ctx context.Context, email string) error 
 	}
 
 	reset := &schemas.PasswordReset{
-		Token:     hashToken(token),
+		TokenHash: hashToken(token),
 		UserID:    user.ID,
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 	}
@@ -363,7 +380,7 @@ func (service *Service) forgotPassword(ctx context.Context, email string) error 
 func (service *Service) resetPassword(ctx context.Context, token string, newPassword string) error {
 	hashed := hashToken(token)
 	var reset schemas.PasswordReset
-	err := service.orm.WithContext(ctx).Where("token = ?", hashed).First(&reset).Error
+	err := service.orm.WithContext(ctx).Where("token_hash = ?", hashed).First(&reset).Error
 	if stderrors.Is(err, gorm.ErrRecordNotFound) {
 		return errors.Invalid("invalid or expired reset token")
 	}
@@ -383,7 +400,7 @@ func (service *Service) resetPassword(ctx context.Context, token string, newPass
 		if err := tx.Model(&schemas.User{}).Where("id = ?", reset.UserID).Update("password_hash", hash).Error; err != nil {
 			return errors.Internal("failed to update password", err)
 		}
-		if err := tx.Model(&schemas.PasswordReset{}).Where("token = ?", hashed).Update("used", true).Error; err != nil {
+		if err := tx.Model(&schemas.PasswordReset{}).Where("token_hash = ?", hashed).Update("used", true).Error; err != nil {
 			return errors.Internal("failed to mark token used", err)
 		}
 		if err := tx.Where("user_id = ?", reset.UserID).Delete(&schemas.Session{}).Error; err != nil {

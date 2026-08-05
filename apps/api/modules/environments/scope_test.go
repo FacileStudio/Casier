@@ -22,8 +22,9 @@ func TestScopeAllowsEnvironment(t *testing.T) {
 	}{
 		{"no identity at all", context.Background(), "prod", true},
 		{"user session has no scope", contextWithScope(nil), "prod", true},
-		{"unrestricted token", contextWithScope(&authcontext.TokenScope{}), "prod", true},
-		{"wildcard token", contextWithScope(&authcontext.TokenScope{Environments: []string{"*"}}), "prod", true},
+		{"token scoped to every environment", contextWithScope(&authcontext.TokenScope{AllEnvironments: true}), "prod", true},
+		{"token whose environments were all deleted reaches none", contextWithScope(&authcontext.TokenScope{}), "prod", false},
+		{"a literal star is a slug, not a wildcard", contextWithScope(&authcontext.TokenScope{Environments: []string{"*"}}), "prod", false},
 		{"scoped token on its own environment", contextWithScope(&authcontext.TokenScope{Environments: []string{"dev"}}), "dev", true},
 		{"scoped token on another environment", contextWithScope(&authcontext.TokenScope{Environments: []string{"dev"}}), "prod", false},
 		{"multi environment token", contextWithScope(&authcontext.TokenScope{Environments: []string{"dev", "staging"}}), "staging", true},

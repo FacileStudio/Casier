@@ -8,11 +8,19 @@ import (
 // TokenScope is the capability an API token carries. A nil scope means the
 // caller is a user session, which is bounded by project roles alone; every
 // method is nil-safe and answers "allowed" so session callers stay unaffected.
+//
+// AllEnvironments is a stored flag, not an inference from an empty list. While
+// "empty means every environment" was the rule, deleting the last environment a
+// token named would have widened that token to the whole project instead of
+// narrowing it to nothing. Environments is resolved at authentication time from
+// api_token_environments, so a grant to a deleted environment is simply absent,
+// and recreating an environment under the same slug does not resurrect it.
 type TokenScope struct {
-	TokenID      int64
-	ProjectID    int64
-	Environments []string
-	Permissions  []string
+	TokenID         int64
+	ProjectID       int64
+	AllEnvironments bool
+	Environments    []string
+	Permissions     []string
 }
 
 func (scope *TokenScope) AllowsProject(projectID int64) bool {
@@ -23,21 +31,19 @@ func (scope *TokenScope) AllowsProject(projectID int64) bool {
 }
 
 func (scope *TokenScope) AllowsEnvironment(slug string) bool {
-	if scope == nil || len(scope.Environments) == 0 {
+	if scope == nil || scope.AllEnvironments {
 		return true
 	}
 	for _, allowed := range scope.Environments {
-		if allowed == "*" || allowed == slug {
+		if allowed == slug {
 			return true
 		}
 	}
 	return false
 }
 
-// AllowsWrite fails closed where AllowsEnvironment fails open, and the
-// asymmetry is deliberate: an unset environment list is how every token minted
-// before scoping existed is stored, so it has to mean "every environment",
-// while an unset permission list must never be read as "may write".
+// AllowsWrite fails closed, as every scope check now does: an unset permission
+// list must never be read as "may write".
 func (scope *TokenScope) AllowsWrite() bool {
 	if scope == nil {
 		return true

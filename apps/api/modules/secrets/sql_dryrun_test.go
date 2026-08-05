@@ -30,7 +30,7 @@ func TestTagFilterSQL(t *testing.T) {
 		Find(&records).Statement
 
 	sql := statement.SQL.String()
-	want := `SELECT * FROM "secrets" WHERE environment_id = $1 AND ',' || tags || ',' LIKE $2 ESCAPE '\' ORDER BY key asc`
+	want := `SELECT * FROM "secrets" WHERE environment_id = $1 AND ',' || tags || ',' LIKE $2 ESCAPE '\' AND "secrets"."deleted_at" IS NULL ORDER BY key asc`
 	if sql != want {
 		t.Fatalf("tag filter SQL = %q, want %q", sql, want)
 	}

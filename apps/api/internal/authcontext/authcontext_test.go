@@ -60,21 +60,23 @@ func TestScopeAllowsProject(t *testing.T) {
 func TestScopeAllowsEnvironment(t *testing.T) {
 	cases := []struct {
 		name         string
+		all          bool
 		environments string
 		slug         string
 		want         bool
 	}{
-		{"unrestricted reaches prod", "", "prod", true},
-		{"star reaches prod", "*", "prod", true},
-		{"listed slug allowed", "dev,staging", "dev", true},
-		{"second listed slug allowed", "dev,staging", "staging", true},
-		{"unlisted slug denied", "dev,staging", "prod", false},
-		{"prefix is not a match", "dev", "development", false},
+		{"all environments reaches prod", true, "", "prod", true},
+		{"no grants left reaches nothing", false, "", "prod", false},
+		{"a star is a slug, not a wildcard", false, "*", "prod", false},
+		{"listed slug allowed", false, "dev,staging", "dev", true},
+		{"second listed slug allowed", false, "dev,staging", "staging", true},
+		{"unlisted slug denied", false, "dev,staging", "prod", false},
+		{"prefix is not a match", false, "dev", "development", false},
 	}
 
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			scope := &TokenScope{Environments: ParseScopeList(testCase.environments)}
+			scope := &TokenScope{AllEnvironments: testCase.all, Environments: ParseScopeList(testCase.environments)}
 			if got := scope.AllowsEnvironment(testCase.slug); got != testCase.want {
 				t.Fatalf("environments=%q slug=%q: got %v, want %v", testCase.environments, testCase.slug, got, testCase.want)
 			}

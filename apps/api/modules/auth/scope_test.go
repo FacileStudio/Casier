@@ -15,7 +15,7 @@ func TestScopeFromTokenRow(t *testing.T) {
 	}{
 		{
 			name:            "read only token cannot write",
-			row:             apiTokenScopeRow{TokenID: 1, ProjectID: 7, Environments: "dev", Permissions: "read"},
+			row:             apiTokenScopeRow{TokenID: 1, ProjectID: 7, Environments: []string{"dev"}, Permissions: "read"},
 			wantWrite:       false,
 			allowedEnvs:     []string{"dev"},
 			deniedEnvs:      []string{"prod"},
@@ -25,7 +25,7 @@ func TestScopeFromTokenRow(t *testing.T) {
 		},
 		{
 			name:          "read write token can write",
-			row:           apiTokenScopeRow{TokenID: 2, ProjectID: 7, Environments: "dev,staging", Permissions: "read,write"},
+			row:           apiTokenScopeRow{TokenID: 2, ProjectID: 7, Environments: []string{"dev", "staging"}, Permissions: "read,write"},
 			wantWrite:     true,
 			allowedEnvs:   []string{"dev", "staging"},
 			deniedEnvs:    []string{"prod"},
@@ -33,29 +33,20 @@ func TestScopeFromTokenRow(t *testing.T) {
 			wantTokenID:   2,
 		},
 		{
-			name:          "wildcard environments allow anything",
-			row:           apiTokenScopeRow{TokenID: 3, ProjectID: 9, Environments: "*", Permissions: "read,write"},
+			name:          "a token marked for every environment reaches all of them",
+			row:           apiTokenScopeRow{TokenID: 3, ProjectID: 9, AllEnvironments: true, Permissions: "read,write"},
 			wantWrite:     true,
 			allowedEnvs:   []string{"dev", "staging", "prod", "anything"},
 			wantProjectID: 9,
 			wantTokenID:   3,
 		},
 		{
-			name:          "empty environments allow anything",
-			row:           apiTokenScopeRow{TokenID: 4, ProjectID: 9, Environments: "", Permissions: "read"},
+			name:          "a scoped token whose grants are all gone reaches nothing",
+			row:           apiTokenScopeRow{TokenID: 4, ProjectID: 9, Permissions: "read"},
 			wantWrite:     false,
-			allowedEnvs:   []string{"dev", "prod"},
+			deniedEnvs:    []string{"dev", "prod"},
 			wantProjectID: 9,
 			wantTokenID:   4,
-		},
-		{
-			name:          "spaced list is trimmed",
-			row:           apiTokenScopeRow{TokenID: 5, ProjectID: 3, Environments: "dev, staging", Permissions: "read, write"},
-			wantWrite:     true,
-			allowedEnvs:   []string{"dev", "staging"},
-			deniedEnvs:    []string{"prod"},
-			wantProjectID: 3,
-			wantTokenID:   5,
 		},
 	}
 

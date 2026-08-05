@@ -272,7 +272,7 @@ func (controller *Controller) createApiToken(ctx context.Context, slug string, r
 	if req.Name == "" {
 		return nil, errors.Invalid("name is required")
 	}
-	return controller.service.createApiToken(ctx, slug, userID, req.Name, req.Environments, req.Permissions)
+	return controller.service.createApiToken(ctx, slug, userID, req.Name, req.Environments, req.Permissions, req.ExpiresInDays)
 }
 
 func (controller *Controller) listApiTokens(ctx context.Context, slug string) (*ApiTokensResponse, error) {

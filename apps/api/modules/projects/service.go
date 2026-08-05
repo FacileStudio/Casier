@@ -585,7 +585,7 @@ func (service *Service) GetProjectDataKey(ctx context.Context, projectID int64) 
 	return crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, service.keyring.Key())
 }
 
-func (service *Service) createApiToken(ctx context.Context, slug string, callerID int64, name, environments, permissions string) (*ApiTokenResponse, error) {
+func (service *Service) createApiToken(ctx context.Context, slug string, callerID int64, name, environments, permissions string, expiresInDays *int) (*ApiTokenResponse, error) {
 	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
@@ -597,6 +597,17 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 	var project schemas.Project
 	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
 		return nil, errors.Internal("failed to find project", err)
+	}
+
+	lifetime, err := tokenLifetime(expiresInDays)
+	if err != nil {
+		return nil, err
+	}
+
+	requested := authcontext.ParseScopeList(environments)
+	scoped, err := service.resolveScopeEnvironments(ctx, project.ID, requested)
+	if err != nil {
+		return nil, err
 	}
 
 	tokenBytes := make([]byte, 32)
@@ -612,27 +623,90 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 	}
 
 	apiToken := &schemas.ApiToken{
-		TokenHash:    tokenHash,
-		Name:         name,
-		ProjectID:    project.ID,
-		Environments: environments,
-		Permissions:  permissions,
-		CreatedBy:    callerID,
-		ExpiresAt:    time.Now().Add(365 * 24 * time.Hour),
+		TokenHash:       tokenHash,
+		Name:            name,
+		ProjectID:       project.ID,
+		AllEnvironments: len(requested) == 0,
+		Permissions:     permissions,
+		CreatedBy:       callerID,
+		ExpiresAt:       time.Now().Add(lifetime),
 	}
-	if err := service.orm.WithContext(ctx).Create(apiToken).Error; err != nil {
-		return nil, errors.Internal("failed to create API token", err)
+
+	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(apiToken).Error; err != nil {
+			return errors.Internal("failed to create API token", err)
+		}
+		for _, environment := range scoped {
+			grant := &schemas.ApiTokenEnvironment{TokenID: apiToken.ID, EnvironmentID: environment.ID}
+			if err := tx.Create(grant).Error; err != nil {
+				return errors.Internal("failed to bind token scope", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &ApiTokenResponse{
 		ID:           apiToken.ID,
 		Token:        rawToken,
 		Name:         apiToken.Name,
-		Environments: apiToken.Environments,
+		Environments: strings.Join(environmentSlugs(scoped), ","),
 		Permissions:  apiToken.Permissions,
 		ExpiresAt:    apiToken.ExpiresAt,
 		CreatedAt:    apiToken.CreatedAt,
 	}, nil
+}
+
+// tokenLifetime refuses a token that never expires. A machine credential whose
+// whole purpose is to sit in a CI runner is the one that most needs a horizon.
+func tokenLifetime(expiresInDays *int) (time.Duration, error) {
+	days := schemas.DefaultTokenDays
+	if expiresInDays != nil {
+		days = *expiresInDays
+	}
+	if days < 1 || days > schemas.MaxTokenDays {
+		return 0, errors.Invalid(fmt.Sprintf("expires_in_days must be between 1 and %d", schemas.MaxTokenDays))
+	}
+	return time.Duration(days) * 24 * time.Hour, nil
+}
+
+// resolveScopeEnvironments turns the requested slugs into environment rows, and
+// refuses a slug the project does not have. Silently dropping it would mint a
+// token narrower than the caller asked for, which reads as a broken deploy long
+// after anyone remembers creating it.
+func (service *Service) resolveScopeEnvironments(ctx context.Context, projectID int64, slugs []string) ([]schemas.Environment, error) {
+	if len(slugs) == 0 {
+		return nil, nil
+	}
+
+	var found []schemas.Environment
+	if err := service.orm.WithContext(ctx).
+		Where("project_id = ? AND slug IN ?", projectID, slugs).
+		Find(&found).Error; err != nil {
+		return nil, errors.Internal("failed to resolve environments", err)
+	}
+	if len(found) != len(slugs) {
+		known := make(map[string]bool, len(found))
+		for _, environment := range found {
+			known[environment.Slug] = true
+		}
+		for _, slug := range slugs {
+			if !known[slug] {
+				return nil, errors.Invalid(fmt.Sprintf("unknown environment %q", slug))
+			}
+		}
+	}
+	return found, nil
+}
+
+func environmentSlugs(environments []schemas.Environment) []string {
+	slugs := make([]string, len(environments))
+	for i, environment := range environments {
+		slugs[i] = environment.Slug
+	}
+	return slugs
 }
 
 func (service *Service) listApiTokens(ctx context.Context, slug string, callerID int64) ([]ApiTokenResponse, error) {
@@ -658,15 +732,34 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 		return nil, errors.Internal("failed to list tokens", err)
 	}
 
+	var grants []struct {
+		TokenID int64
+		Slug    string
+	}
+	if err := service.orm.WithContext(ctx).
+		Table("api_token_environments te").
+		Select("te.token_id, e.slug").
+		Joins("join environments e on e.id = te.environment_id").
+		Joins("join api_tokens t on t.id = te.token_id").
+		Where("t.project_id = ?", project.ID).
+		Scan(&grants).Error; err != nil {
+		return nil, errors.Internal("failed to read token scopes", err)
+	}
+	scopes := make(map[int64][]string, len(grants))
+	for _, grant := range grants {
+		scopes[grant.TokenID] = append(scopes[grant.TokenID], grant.Slug)
+	}
+
 	result := make([]ApiTokenResponse, len(tokens))
 	for i, t := range tokens {
 		result[i] = ApiTokenResponse{
 			ID:           t.ID,
 			Name:         t.Name,
-			Environments: t.Environments,
+			Environments: strings.Join(scopes[t.ID], ","),
 			Permissions:  t.Permissions,
 			ExpiresAt:    t.ExpiresAt,
 			LastUsedAt:   t.LastUsedAt,
+			RevokedAt:    t.RevokedAt,
 			CreatedAt:    t.CreatedAt,
 		}
 	}
@@ -687,9 +780,12 @@ func (service *Service) revokeApiToken(ctx context.Context, slug string, callerI
 		return errors.Internal("failed to find project", err)
 	}
 
+	// Revoke rather than delete: audit rows name the token that made a change,
+	// and deleting the row turns every one of them into an anonymous event.
 	result := service.orm.WithContext(ctx).
-		Where("id = ? AND project_id = ?", tokenID, project.ID).
-		Delete(&schemas.ApiToken{})
+		Model(&schemas.ApiToken{}).
+		Where("id = ? AND project_id = ? AND revoked_at IS NULL", tokenID, project.ID).
+		Update("revoked_at", time.Now())
 	if result.Error != nil {
 		return errors.Internal("failed to revoke token", result.Error)
 	}
