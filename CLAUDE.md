@@ -96,41 +96,37 @@ docker compose up --build
 | SMTP_FROM              | If SMTP  | Envelope sender, e.g. `Casier <no-reply@facile.studio>` |
 | TEST_DATABASE_URL      | No       | Test-only. Postgres for the HTTP authorization matrix; unset makes it skip loudly |
 
-## CLI (cli/)
+## CLI — a separate repo
 
-    casier login
-    casier projects
-    casier run -p <project> -e <env> -- <command>
+The `casier` CLI lives in **[FacileStudio/casier-cli](https://github.com/FacileStudio/casier-cli)**
+(checked out at `~/Projects/Facile/Code/casier-cli`), following the suite convention that every
+CLI is its own repo — as opus-cli, sablier-cli, nuage-cli, capsule-cli and ardoise-cli already
+are. It was split out of `cli/` on 2026-08-06 with `git subtree split`, so its history came
+with it. **This repo no longer builds, tests or ships the CLI**; its `CLAUDE.md` covers the
+client side.
 
-`login` resolves the server from `--server`, then `CASIER_SERVER_URL`, then the saved config,
-then a prompt defaulting to `https://casier.facile.studio/api`, and saves the winner to
-`<config_dir>/casier/config.toml`. Because Traefik serves the API under `/api` in production
-while dev serves it at the root, login probes `<url>/auth/config` and falls back to
-`<url>/api/auth/config`, saving whichever answers — so both `https://casier.facile.studio` and
-`.../api` work. Against a local API, override it: `casier login --server http://localhost:4000`.
+What matters here is the API surface it depends on. **None of these may change without a
+paired change in that repo**, and the two are versioned independently, so a mismatch is a real
+deployment state rather than a hypothetical:
 
-Against an SSO server the CLI opens a browser and receives the session token on an ephemeral
-`127.0.0.1` listener: it calls `/auth/oidc?cli_port=<port>&cli_state=<nonce>`, and after the
-OIDC round trip the API mints a **separate** session token and redirects to
-`http://127.0.0.1:<port>/callback`. The port and nonce are validated server-side and the
-redirect host is hard-coded, so the parameters cannot be turned into an open redirect. The
-nonce is checked by the CLI to reject token injection from other local processes.
-
-Tokens live in the OS keychain, keyed by server URL. `CASIER_TOKEN` overrides it for CI and
-containers, where no keychain exists.
-
-`keyring` must keep its per-target platform features in `cli/Cargo.toml` (`apple-native`,
-`windows-native`, `sync-secret-service`). With none of them enabled the crate silently falls
-back to an in-memory mock store: login prints "Logged in as …", writes the config, and the
-token disappears when the process exits, so every later command reports "Not logged in".
-`store_token` reads the token back after writing to make that failure loud if it ever returns.
-
-**`GET .../secrets` returns metadata only.** Values come from `?reveal=true` or
-`GET .../secrets/{key}/reveal`, which are audited separately. A CLI older than the server
-would therefore see values silently vanish and inject an empty environment, so
-`list_secrets_with_values` refuses a valueless answer instead of continuing — and the
-offline cache never stores a valueless entry. **Reinstall the CLI when the server is
-upgraded past this change.**
+- `GET /auth/config` — how `casier login` discovers whether the API answers at the root (dev)
+  or under `/api` (Traefik in production), and whether SSO is on.
+- `GET /auth/oidc?cli_port=<port>&cli_state=<nonce>` — the CLI opens a browser and listens on
+  an ephemeral `127.0.0.1` port. After the OIDC round trip the API mints a **separate** session
+  token and redirects to `http://127.0.0.1:<port>/callback`. The port and nonce are validated
+  server-side and the redirect host is hard-coded, so neither parameter can be turned into an
+  open redirect; the CLI re-checks the nonce to reject token injection from other local
+  processes.
+- `POST /auth/cli` — exchanges an OIDC ID token for a session token. Unlike the browser
+  callback it does **not** auto-provision an unknown user (403).
+- `GET .../secrets` returns **metadata only**. Values come from `?reveal=true` or
+  `GET .../secrets/{key}/reveal`, audited separately. This is the one change that already broke
+  the CLI once: an older binary does not know to ask, so every value comes back absent and a
+  naive client would inject an empty environment — the command runs, appears to work, and
+  connects to nothing. The CLI now models a revealed secret as its own type and refuses a
+  valueless answer outright. **Reinstall the CLI whenever this contract moves.**
+- `casier_…` API tokens authenticate every non-interactive call via `CASIER_TOKEN`, bounded by
+  the scope layer below.
 
 ## Authorization model
 

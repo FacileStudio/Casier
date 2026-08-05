@@ -18,7 +18,8 @@ working directory; a relative `./client` would resolve there and the dashboard w
 silently not be served. The `:nonroot` variant works because the container mounts no
 writable volume — every byte of state is in Postgres.
 
-The `cli/` directory is not part of the image. The CLI is a developer and CI tool, built
+The CLI is not part of the image, and no longer lives in this repo at all — it is a
+developer and CI tool in [FacileStudio/casier-cli](https://github.com/FacileStudio/casier-cli), built
 separately with `cargo build --release`.
 
 ## Compose topology
