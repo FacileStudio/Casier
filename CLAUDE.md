@@ -18,8 +18,11 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 apps/
   api/                  Go backend
     main.go             Entrypoint
+    authz_test.go       The authorization matrix (see below) — needs TEST_DATABASE_URL
     modules/            Domain modules (auth, projects, environments, secrets)
-    internal/           Shared infra (database, middleware, crypto, logger, etc.)
+    internal/           Shared infra: audit, authcontext, authcrypto, crypto, database,
+                        documentation, env, mailer, middleware, testdb, webhook.
+                        Logging, HTTP errors and JSON come from tronc, not from here.
     schemas/            GORM models and migrations
   client/               SvelteKit frontend
     src/
@@ -36,8 +39,12 @@ apps/
         theme.svelte.ts Light/dark/system preference
         components/     App components (shell chrome + project sections)
     static/fonts/       Goga typeface
+docs/                   Reference docs: api, architecture, configuration, deployment, development
+scripts/                check.sh (the quality gate) and the repo-local Postgres helpers
 Dockerfile              Multi-stage: bun build -> golang:1.25-alpine -> distroless
 docker-compose.yml      Full stack: db + app
+
+The CLI is **not** here — it lives in its own repo, see below.
 
 ## Commands
 
@@ -61,6 +68,22 @@ bun install
 bun run dev
 bun run build
 bun run check
+
+### The quality gate
+
+    sh scripts/check.sh            gofmt -l, go vet, go test, then the client type-check
+    sh scripts/check.sh --go-only  skip the client
+    sh scripts/check.sh --format   rewrite Go sources in place (the only writing mode)
+    mise run hooks                 enable .githooks, which runs the gate before every push
+
+It is deliberately not run through `mise`: `mise run` resolves every tool in the merged config
+before running a task body, so an unrelated broken tool in a global config would take the gate
+down with it. It also resolves `go` from `GOROOT` when set, because mise pins a version while
+leaving another `go` earlier on PATH, and a mismatch fails with
+`compile: version "X" does not match go tool version "Y"`.
+
+When `pg_ctl` is on PATH the gate starts the repo-local Postgres and exports
+`TEST_DATABASE_URL` itself, so the authorization matrix actually runs instead of skipping.
 
 ### Docker
 
@@ -253,9 +276,16 @@ self-hosted from `static/fonts`. Radius is `0.5rem`.
 ## Conventions
 
 - Go module pattern: each feature in modules/<name>/ has types.go, service.go, controller.go, router.go, documentation.go
-- Migrations run on startup via schemas.Migrate(db)
-- Client uses static adapter (Nginx in prod), pure SPA — no load functions, data is fetched in `$effect`
+- Cross-cutting HTTP plumbing comes from the **tronc** chassis (`httpx`, `httpjson`, `errors`,
+  `logger`, `health`, `healthcheck`, `spa`, `env`) — do not reintroduce a local copy
+- Migrations run on startup via `schemas.Migrate(db)`, and a failure is fatal. Raw SQL in a
+  migration is only a string until Postgres parses it, so **run the built binary against a
+  database with the pre-migration schema** before shipping one; unit tests cannot catch it
+- Client uses adapter-static, pure SPA — no load functions, data is fetched in `$effect`. In
+  production the **Go binary serves it** from one container via `tronc/spa`; there is no Nginx
 - Svelte 5 runes enforced
 - No inline comments in code
 - Secrets encrypted at rest with AES-256-GCM (per-secret random nonce)
-- Session tokens hashed with SHA-256 before storage
+- Session tokens, API tokens and password reset tokens are all SHA-256 hashed before storage
+- A new route is not done until it has a case in the authorization matrix — the `chi.Walk`
+  meta-test will fail the build until it does, which is the point
