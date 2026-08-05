@@ -1,7 +1,7 @@
 # Casier — API
 
 Every HTTP route the Go binary registers, plus the CLI command reference, taken from
-`apps/api/main.go`, each module's `router.go`, and `cli/src/main.rs`.
+`apps/api/main.go` and each module's `router.go`.
 
 Application routes live under `/api`. `/health`, `/ready`, and `/docs` sit at the root, and
 `/health` and `/ready` also answer under `/api`. Anything else falls through to the
@@ -189,7 +189,8 @@ continuously rather than resetting on a fixed window.
 
 ## CLI
 
-The `casier` binary in `cli/`. It resolves its server from `CASIER_SERVER_URL`, then
+The `casier` binary, which lives in [FacileStudio/casier-cli](https://github.com/FacileStudio/casier-cli).
+It resolves its server from `CASIER_SERVER_URL`, then
 `~/.config/casier/config.toml`, then the built-in default
 `https://casier.facile.studio/api`. Tokens live in the OS keychain under service `casier`,
 keyed by server URL, unless `CASIER_TOKEN` is set — which is the CI and container path,

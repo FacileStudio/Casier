@@ -9,7 +9,7 @@ every push.
 |---|---|---|
 | Go | 1.25 | `go 1.25.0` in `apps/api/go.mod`; the image builds on `golang:1.25-alpine` |
 | Bun | 1.x | Client install, dev server, type-check, build |
-| Rust | 2021 edition | The CLI in `cli/` |
+| Rust | 2021 edition | The CLI, in [its own repo](https://github.com/FacileStudio/casier-cli) |
 | mise | recommended | Task runner; this repo uses mise's monorepo mode |
 | Postgres | 16 | Either the repo-local instance or Docker |
 

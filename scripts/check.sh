@@ -15,7 +15,6 @@ set -eu
 
 GO_MODULES="apps/api"
 CLIENT_DIR="apps/client"
-CLI_DIR="cli"
 
 mode="all"
 case "${1:-}" in
@@ -103,20 +102,6 @@ if [ "$mode" = "all" ]; then
     bun run check
   ) || status=1
 
-  # The CLI speaks the same API as the client and breaks the same way when it
-  # drifts, but it was outside the gate entirely.
-  echo "==> $CLI_DIR"
-  (
-    cd "$CLI_DIR" || exit 1
-    if ! command -v cargo >/dev/null 2>&1; then
-      echo "check: no 'cargo' on PATH, skipping the CLI" >&2
-      exit 0
-    fi
-    s=0
-    cargo fmt --check || s=1
-    cargo test --quiet || s=1
-    exit "$s"
-  ) || status=1
 fi
 
 if [ "$status" -ne 0 ]; then

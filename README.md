@@ -87,7 +87,6 @@ apps/
   api/       Go backend — modules/ (auth, projects, environments, secrets),
              schemas/ (GORM models and migrations), internal/ (crypto, audit, mailer)
   client/    SvelteKit dashboard, built static and served by the Go binary
-cli/         Rust CLI — commands/ (login, run, sync, diff, check, push)
 scripts/     Repo-local Postgres helpers and the quality gate
 docs/        Architecture, configuration, development, deployment, API
 ```
