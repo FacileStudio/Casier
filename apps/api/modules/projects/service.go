@@ -15,8 +15,8 @@ import (
 
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
-	"github.com/FacileStudio/Casier/apps/api/internal/errors"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
 )

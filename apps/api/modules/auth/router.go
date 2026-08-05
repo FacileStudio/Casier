@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
-	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
 	"github.com/FacileStudio/Casier/apps/api/internal/middleware"
+	"github.com/FacileStudio/tronc/httpjson"
 
 	"github.com/go-chi/chi/v5"
 )

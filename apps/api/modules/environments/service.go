@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/FacileStudio/Casier/apps/api/internal/errors"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
 )

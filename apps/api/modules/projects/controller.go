@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
-	"github.com/FacileStudio/Casier/apps/api/internal/errors"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/tronc/errors"
 )
 
 type Controller struct {

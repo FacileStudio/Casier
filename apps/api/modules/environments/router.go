@@ -3,9 +3,9 @@ package environments
 import (
 	"net/http"
 
-	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
 	"github.com/FacileStudio/Casier/apps/api/internal/middleware"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
+	"github.com/FacileStudio/tronc/httpjson"
 
 	"github.com/go-chi/chi/v5"
 )
