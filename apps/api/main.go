@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -44,11 +45,15 @@ func main() {
 		return
 	}
 
+	os.Exit(run())
+}
+
+func run() int {
 	appEnv, err := env.Load()
 	appLogger := logger.New(logger.Config{})
 	if err != nil {
 		appLogger.Error("failed to load config", slog.Any("error", err))
-		return
+		return 1
 	}
 	var journalClient *journal.Client
 	appLogger = logger.New(logger.Config{
@@ -68,23 +73,23 @@ func main() {
 	encKey, err := crypto.KeyFromBase64(appEnv.EncryptionKey)
 	if err != nil {
 		appLogger.Error("invalid encryption key", slog.Any("error", err))
-		return
+		return 1
 	}
 
 	db, err := database.Open(appEnv.DatabaseURL)
 	if err != nil {
 		appLogger.Error("failed to open database", slog.Any("error", err))
-		return
+		return 1
 	}
 
 	if err := schemas.Migrate(db); err != nil {
 		appLogger.Error("failed to run migrations", slog.Any("error", err))
-		return
+		return 1
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		appLogger.Error("failed to access database handle", slog.Any("error", err))
-		return
+		return 1
 	}
 	defer func() {
 		if err := sqlDB.Close(); err != nil {
@@ -110,13 +115,6 @@ func main() {
 			environments.Documentation,
 			secrets.Documentation,
 		},
-	}
-
-	for _, origin := range appEnv.CORSAllowedOrigins {
-		if origin == "*" {
-			appLogger.Warn("CORS wildcard origin enabled — this is insecure in production")
-			break
-		}
 	}
 
 	router := httpx.NewRouter(httpx.Config{
@@ -148,7 +146,7 @@ func main() {
 		appLogger.Info("serving client", slog.String("dir", clientDir))
 	}
 
-	addr := ":" + appEnv.Port
+	addr := ":" + strconv.Itoa(appEnv.Port)
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           router,
@@ -170,6 +168,7 @@ func main() {
 	case err := <-serverErrCh:
 		if !errors.Is(err, http.ErrServerClosed) {
 			appLogger.Error("server stopped", slog.Any("error", err))
+			return 1
 		}
 	case <-shutdownSignal.Done():
 		appLogger.Info("server shutting down")
@@ -178,8 +177,10 @@ func main() {
 
 		if err := server.Shutdown(shutdownContext); err != nil {
 			appLogger.Error("server shutdown failed", slog.Any("error", err))
-			return
+			return 1
 		}
 		appLogger.Info("server stopped")
 	}
+
+	return 0
 }

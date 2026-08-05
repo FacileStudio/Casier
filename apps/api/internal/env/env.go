@@ -2,9 +2,8 @@ package env
 
 import (
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
+
+	troncenv "github.com/FacileStudio/tronc/env"
 )
 
 type OIDCConfig struct {
@@ -16,64 +15,43 @@ type OIDCConfig struct {
 }
 
 type Config struct {
-	DatabaseURL        string
-	Port               string
-	CORSAllowedOrigins []string
-	LogLevel           string
-	EncryptionKey      string
-	OIDC               *OIDCConfig
-	SSOOnly            bool
-	JournalURL         string
-	JournalToken       string
+	troncenv.Core
+	EncryptionKey string
+	OIDC          *OIDCConfig
+	SSOOnly       bool
 }
 
 func Load() (Config, error) {
-	env := Config{
-		DatabaseURL: os.Getenv("DATABASE_URL"),
-		Port:        valueOrDefault("PORT", "4000"),
-		LogLevel:    valueOrDefault("LOG_LEVEL", "info"),
-		CORSAllowedOrigins: csvOrDefault("CORS_ALLOWED_ORIGINS", []string{
-			"http://localhost:3000",
-			"http://127.0.0.1:3000",
-			"http://localhost:5173",
-			"http://127.0.0.1:5173",
-		}),
-		EncryptionKey: os.Getenv("ENCRYPTION_KEY"),
-		SSOOnly:       strings.ToLower(os.Getenv("SSO_ONLY")) == "true",
-		JournalURL:    os.Getenv("JOURNAL_URL"),
-		JournalToken:  os.Getenv("JOURNAL_TOKEN"),
+	core, err := troncenv.LoadCore()
+	if err != nil {
+		return Config{}, err
 	}
-
-	if env.DatabaseURL == "" {
-		return Config{}, fmt.Errorf("DATABASE_URL is required")
-	}
-	if env.EncryptionKey == "" {
-		return Config{}, fmt.Errorf("ENCRYPTION_KEY is required")
-	}
-
-	port, err := strconv.Atoi(env.Port)
-	if err != nil || port < 1 || port > 65535 {
+	if core.Port < 1 || core.Port > 65535 {
 		return Config{}, fmt.Errorf("PORT must be a valid TCP port")
 	}
-	if err := validateOrigins(env.CORSAllowedOrigins); err != nil {
-		return Config{}, err
-	}
-	if err := validateLogLevel(env.LogLevel); err != nil {
+
+	cfg := Config{Core: core}
+
+	if cfg.EncryptionKey, err = troncenv.Required("ENCRYPTION_KEY"); err != nil {
 		return Config{}, err
 	}
 
-	if issuer := os.Getenv("OIDC_ISSUER"); issuer != "" {
-		clientID := os.Getenv("OIDC_CLIENT_ID")
-		clientSecret := os.Getenv("OIDC_CLIENT_SECRET")
-		redirectURL := os.Getenv("OIDC_REDIRECT_URL")
+	if cfg.SSOOnly, err = troncenv.Bool("SSO_ONLY", false); err != nil {
+		return Config{}, err
+	}
+
+	if issuer := troncenv.String("OIDC_ISSUER", ""); issuer != "" {
+		clientID := troncenv.String("OIDC_CLIENT_ID", "")
+		clientSecret := troncenv.String("OIDC_CLIENT_SECRET", "")
+		redirectURL := troncenv.String("OIDC_REDIRECT_URL", "")
 		if clientID == "" || clientSecret == "" || redirectURL == "" {
 			return Config{}, fmt.Errorf("OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URL are required when OIDC_ISSUER is set")
 		}
-		successURL := os.Getenv("OIDC_SUCCESS_URL")
-		if successURL == "" && len(env.CORSAllowedOrigins) > 0 {
-			successURL = env.CORSAllowedOrigins[0]
+		successURL := troncenv.String("OIDC_SUCCESS_URL", "")
+		if successURL == "" && len(cfg.CORSAllowedOrigins) > 0 {
+			successURL = cfg.CORSAllowedOrigins[0]
 		}
-		env.OIDC = &OIDCConfig{
+		cfg.OIDC = &OIDCConfig{
 			Issuer:       issuer,
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
@@ -82,59 +60,5 @@ func Load() (Config, error) {
 		}
 	}
 
-	return env, nil
-}
-
-func valueOrDefault(key string, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return fallback
-}
-
-func csvOrDefault(key string, fallback []string) []string {
-	value := os.Getenv(key)
-	if value == "" {
-		return fallback
-	}
-
-	parts := strings.Split(value, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
-		}
-	}
-	if len(out) == 0 {
-		return []string{}
-	}
-	return out
-}
-
-func validateOrigins(origins []string) error {
-	if len(origins) == 0 {
-		return fmt.Errorf("CORS_ALLOWED_ORIGINS must contain at least one origin")
-	}
-
-	for _, origin := range origins {
-		if origin == "*" {
-			continue
-		}
-		if strings.HasPrefix(origin, "http://") || strings.HasPrefix(origin, "https://") {
-			continue
-		}
-		return fmt.Errorf("CORS_ALLOWED_ORIGINS contains invalid origin %q", origin)
-	}
-
-	return nil
-}
-
-func validateLogLevel(level string) error {
-	switch strings.ToLower(level) {
-	case "debug", "info", "warn", "error":
-		return nil
-	default:
-		return fmt.Errorf("LOG_LEVEL must be one of debug, info, warn, error")
-	}
+	return cfg, nil
 }

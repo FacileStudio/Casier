@@ -72,11 +72,14 @@ docker compose up --build
 
 | Variable               | Required | Description                              |
 |------------------------|----------|------------------------------------------|
-| DATABASE_URL           | Yes      | PostgreSQL connection string             |
+| DATABASE_URL           | Yes      | PostgreSQL connection string. The API exits 1 without it |
+| APP_ENV                | No       | development/staging/production (default: development). Never gates security behaviour |
 | PORT                   | No       | API port (default: 4000)                 |
 | LOG_LEVEL              | No       | debug/info/warn/error (default: info)    |
-| CORS_ALLOWED_ORIGINS   | No       | Comma-separated origins                  |
+| CORS_ALLOWED_ORIGINS   | No       | Comma-separated origins, read through `tronc/env`. `ALLOWED_ORIGINS`, `DOMAINS`, `DOMAIN`, `CORS_ORIGINS`, `TRUSTED_ORIGINS` and `CLIENT_ORIGIN` remain accepted fallbacks. Unset denies every cross-origin caller; `*` is refused at startup because the API sends credentials |
 | ENCRYPTION_KEY         | Yes      | Base64-encoded 32-byte key for AES-256-GCM |
+| JOURNAL_URL            | No       | Journal ingest URL — must end in `/api`, or every log line is silently dropped |
+| JOURNAL_TOKEN          | No       | Per-app Journal API key                  |
 | CLIENT_DIR             | No       | Built client directory served by the API (default: ./client) |
 | OIDC_ISSUER            | No       | OIDC provider URL (enables SSO)                  |
 | OIDC_CLIENT_ID         | If OIDC  | OIDC client ID                                   |
