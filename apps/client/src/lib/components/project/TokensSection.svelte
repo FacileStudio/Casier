@@ -2,7 +2,8 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type ApiToken, type ApiTokensResponse } from '$lib/backend';
 	import { formatDate, formatDateTime } from '$lib/format';
-	import { Alert, Badge, Button, Field, Input, Modal, Select, Skeleton, Spinner, Table } from '@facile/lib';
+	import { Alert, Badge, Button, Field, Input, Select, Skeleton, Spinner, Table } from '@facile/lib';
+	import Drawer from '$lib/components/Drawer.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
@@ -148,7 +149,7 @@
 					<th>Environments</th>
 					<th>Last used</th>
 					<th>Created</th>
-					<th class="w-1 text-right"><span class="sr-only">Actions</span></th>
+					<th class="w-1 text-right" aria-label="Actions"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -188,7 +189,7 @@
 	{/if}
 </section>
 
-<Modal bind:open={createOpen} title="Create API token">
+<Drawer bind:open={createOpen} title="Create API token">
 	{#if createdToken}
 		<div class="flex flex-col gap-4">
 			<Alert tone="info" title="Token created">
@@ -234,7 +235,7 @@
 			</div>
 		</form>
 	{/if}
-</Modal>
+</Drawer>
 
 <ConfirmDialog
 	bind:open={revokeOpen}

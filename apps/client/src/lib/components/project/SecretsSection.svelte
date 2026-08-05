@@ -10,9 +10,10 @@
 		type SecretVersion,
 		type SecretVersionsResponse,
 	} from '$lib/backend';
-	import { formatDate, formatDateTime } from '$lib/format';
-	import { Badge, Button, Field, Input, Modal, Skeleton, Spinner, Table, Textarea } from '@facile/lib';
+	import { daysSince, formatDate, formatDateTime } from '$lib/format';
+	import { Alert, Badge, Button, Field, Input, Skeleton, Spinner, Table, Textarea } from '@facile/lib';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import Drawer from '$lib/components/Drawer.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import { toast } from 'svelte-sonner';
@@ -28,9 +29,11 @@
 		'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
 
 	let secrets = $state<Secret[]>([]);
+	let rotationDays = $state(0);
 	let loading = $state(true);
 	let loadError = $state('');
 	let search = $state('');
+	let staleOnly = $state(false);
 	let revealed = $state<Set<number>>(new Set());
 
 	let addOpen = $state(false);
@@ -64,9 +67,16 @@
 		`/projects/${projectSlug}/environments/${environment.slug}/secrets`
 	);
 
+	let overdue = $derived(secrets.filter((s) => s.rotation_status === 'overdue'));
+	let dueSoon = $derived(secrets.filter((s) => s.rotation_status === 'due_soon'));
+	let needsAttention = $derived(overdue.length + dueSoon.length);
+
 	let filtered = $derived(
 		secrets
 			.filter((s) => {
+				if (staleOnly && s.rotation_status !== 'overdue' && s.rotation_status !== 'due_soon') {
+					return false;
+				}
 				const q = search.trim().toLowerCase();
 				if (!q) return true;
 				return (
@@ -89,9 +99,11 @@
 		loading = true;
 		loadError = '';
 		revealed = new Set();
+		staleOnly = false;
 		try {
 			const res = await api.get<SecretsResponse>(basePath, auth.token);
 			secrets = res.secrets ?? [];
+			rotationDays = res.rotation_days ?? 0;
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load secrets';
 		} finally {
@@ -278,7 +290,50 @@
 	});
 </script>
 
+{#snippet rotationBadge(secret: Secret)}
+	{@const age = daysSince(secret.rotated_at)}
+	{#if secret.rotation_status === 'overdue'}
+		<Badge class="border-foreground bg-foreground whitespace-nowrap text-background">
+			<iconify-icon icon="solar:danger-triangle-linear" width="12" aria-hidden="true"></iconify-icon>
+			Rotate{age === null ? '' : ` · ${age}d`}
+		</Badge>
+	{:else if secret.rotation_status === 'due_soon'}
+		<Badge class="border-border bg-transparent whitespace-nowrap text-muted-foreground">
+			<iconify-icon icon="solar:clock-circle-linear" width="12" aria-hidden="true"></iconify-icon>
+			Due soon{age === null ? '' : ` · ${age}d`}
+		</Badge>
+	{/if}
+{/snippet}
+
 <section class="flex flex-col gap-4" aria-label="Secrets">
+	{#if !loading && !loadError && rotationDays > 0 && needsAttention > 0}
+		<Alert tone="warning" class="flex flex-wrap items-center justify-between gap-3">
+			<p class="min-w-0">
+				{#if overdue.length > 0}
+					<span class="font-medium">
+						{overdue.length}
+						{overdue.length === 1 ? 'secret has' : 'secrets have'} gone more than {rotationDays} days
+						without being rotated.
+					</span>
+				{/if}
+				{#if dueSoon.length > 0}
+					<span class="text-muted-foreground">
+						{dueSoon.length}
+						{dueSoon.length === 1 ? 'is' : 'are'} due for rotation shortly.
+					</span>
+				{/if}
+			</p>
+			<Button
+				variant="outline"
+				size="sm"
+				class="h-8 shrink-0"
+				onclick={() => (staleOnly = !staleOnly)}
+			>
+				{staleOnly ? 'Show all secrets' : 'Review them'}
+			</Button>
+		</Alert>
+	{/if}
+
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="relative min-w-0 flex-1 sm:max-w-xs">
 			<iconify-icon
@@ -342,7 +397,12 @@
 			{/if}
 		</EmptyState>
 	{:else if filtered.length === 0}
-		<EmptyState title="No matches" description={`No secret matches "${search}".`} />
+		<EmptyState
+			title="No matches"
+			description={staleOnly && !search.trim()
+				? 'Every secret in this environment is within the rotation policy.'
+				: `No secret matches "${search}".`}
+		/>
 	{:else}
 		<Table>
 			<thead>
@@ -350,8 +410,8 @@
 					<th>Key</th>
 					<th>Value</th>
 					<th>Version</th>
-					<th>Updated</th>
-					<th class="w-1 text-right"><span class="sr-only">Actions</span></th>
+					<th>Last rotated</th>
+					<th class="w-1 text-right" aria-label="Actions"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -380,7 +440,14 @@
 							{/if}
 						</td>
 						<td class="whitespace-nowrap text-muted-foreground">v{secret.version}</td>
-						<td class="whitespace-nowrap text-muted-foreground">{formatDate(secret.updated_at)}</td>
+						<td>
+							<div class="flex flex-wrap items-center gap-2">
+								<span class="whitespace-nowrap text-muted-foreground">
+									{formatDate(secret.rotated_at)}
+								</span>
+								{@render rotationBadge(secret)}
+							</div>
+						</td>
 						<td>
 							<div class="flex items-center justify-end gap-0.5">
 								<button
@@ -438,7 +505,7 @@
 	{/if}
 </section>
 
-<Modal bind:open={addOpen} title="Add secret to {environment.name}">
+<Drawer bind:open={addOpen} title="Add secret to {environment.name}">
 	<form onsubmit={handleAdd} class="flex flex-col gap-4">
 		<Field label="Key" error={newKeyError}>
 			<Input placeholder="DATABASE_URL" bind:value={newKey} required disabled={adding} class="font-mono" />
@@ -459,9 +526,9 @@
 			</Button>
 		</div>
 	</form>
-</Modal>
+</Drawer>
 
-<Modal bind:open={editOpen} title="Edit {editTarget?.key}">
+<Drawer bind:open={editOpen} title="Edit {editTarget?.key}">
 	<form onsubmit={handleEdit} class="flex flex-col gap-4">
 		<Field label="Value" helper="Saving creates a new version">
 			<Textarea rows={4} bind:value={editValue} disabled={saving} class="font-mono" />
@@ -476,9 +543,9 @@
 			</Button>
 		</div>
 	</form>
-</Modal>
+</Drawer>
 
-<Modal bind:open={historyOpen} title="History of {historyTarget?.key}">
+<Drawer bind:open={historyOpen} title="History of {historyTarget?.key}">
 	{#if versionsLoading}
 		<div class="flex justify-center py-6">
 			<Spinner size="md" />
@@ -488,7 +555,7 @@
 	{:else if versions.length === 0}
 		<p class="py-4 text-center text-sm text-muted-foreground">No previous versions.</p>
 	{:else}
-		<ul class="flex max-h-72 flex-col gap-1 overflow-y-auto">
+		<ul class="flex flex-col gap-1">
 			{#each versions as version (version.version)}
 				<li class="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted">
 					<div class="min-w-0">
@@ -517,9 +584,9 @@
 			{/each}
 		</ul>
 	{/if}
-</Modal>
+</Drawer>
 
-<Modal bind:open={importOpen} title="Import into {environment.name}">
+<Drawer bind:open={importOpen} title="Import into {environment.name}">
 	<form onsubmit={handleImport} class="flex flex-col gap-4">
 		<Field label=".env content" helper="Paste KEY=value lines; existing keys are updated">
 			<Textarea
@@ -540,7 +607,7 @@
 			</Button>
 		</div>
 	</form>
-</Modal>
+</Drawer>
 
 <ConfirmDialog
 	bind:open={deleteOpen}

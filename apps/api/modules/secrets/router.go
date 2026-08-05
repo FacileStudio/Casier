@@ -29,6 +29,15 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		httpjson.WriteJSON(w, http.StatusOK, resp)
 	})
 
+	router.With(middleware.RequireAuth(authService)).Get("/projects/{slug}/secrets/rotation", func(w http.ResponseWriter, request *http.Request) {
+		resp, err := service.controller.rotation(request.Context(), chi.URLParam(request, "slug"))
+		if err != nil {
+			httpjson.WriteError(w, err)
+			return
+		}
+		httpjson.WriteJSON(w, http.StatusOK, resp)
+	})
+
 	router.Route("/projects/{slug}/environments/{envSlug}/secrets", func(router chi.Router) {
 		router.Use(middleware.RequireAuth(authService))
 

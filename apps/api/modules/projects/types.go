@@ -10,6 +10,9 @@ type CreateRequest struct {
 type UpdateRequest struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	// RotationDays is optional: a request that omits it leaves the existing
+	// rotation policy alone rather than silently disabling it.
+	RotationDays *int `json:"rotation_days"`
 }
 
 type AddMemberRequest struct {
@@ -18,13 +21,14 @@ type AddMemberRequest struct {
 }
 
 type ProjectResponse struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Slug        string    `json:"slug"`
-	Description string    `json:"description"`
-	Role        string    `json:"role"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           int64     `json:"id"`
+	Name         string    `json:"name"`
+	Slug         string    `json:"slug"`
+	Description  string    `json:"description"`
+	Role         string    `json:"role"`
+	RotationDays int       `json:"rotation_days"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type ListResponse struct {

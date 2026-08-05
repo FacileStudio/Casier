@@ -128,6 +128,23 @@ Casier's own container is a **Project** — it groups environments, which group 
 Membership, invites, API tokens, webhooks and audit logs all hang off a Project. If a team
 layer is added later, follow Sablier's model: a `Space` above `Project`, never a rename back.
 
+## Rotation policy
+
+`Project.rotation_days` (default 90, `0` disables, max 3650) is how long a secret value may
+sit unchanged before Casier flags it. `modules/secrets/rotation.go` grades each secret as
+`ok` / `due_soon` / `overdue`; the "due soon" window is a quarter of the period, capped at
+14 days, so a short policy does not warn permanently.
+
+Age is measured from **`secret_versions`**, not `secrets.updated_at` — a tag edit touches the
+row without changing the value and must not reset the clock. `GET .../secrets` returns
+`rotated_at` + `rotation_status` per secret plus the project's `rotation_days`;
+`GET /projects/{slug}/secrets/rotation` counts stale secrets per environment so the UI can
+flag an environment the user is not currently looking at.
+
+`PUT /projects/{slug}` treats an absent `rotation_days` as "leave it alone" — the field is a
+`*int` precisely so an older client that PUTs only name and description cannot silently
+disable a project's warnings.
+
 Renamed from `space` on 2026-08-04. `schemas.renameSpacesToProjects` migrates pre-rename
 databases in place on startup and is a no-op afterwards.
 
@@ -141,9 +158,18 @@ self-hosted from `static/fonts`. Radius is `0.5rem`.
 - Suite tokens (`bg-background`, `text-muted-foreground`, `border-border`, `bg-primary`, …)
   are the vocabulary. Never hardcode a hex, never use a Tailwind colour utility.
 - muse's `fc-*` tokens are aliased onto the same values in `app.css`, so `@facile/lib`
-  primitives (Modal, Table, Badge, Field, Input, …) render in suite colours automatically.
+  primitives (Table, Badge, Field, Input, …) render in suite colours automatically.
 - Icons are Iconify **Solar** via the `<iconify-icon>` web component loaded in `app.html`:
   `-bold-duotone` for brand marks, `-linear` for UI chrome. Do not add `@lucide/svelte`.
+  The brand mark is `solar:safe-square-bold-duotone` (`Logo.svelte`), and `static/favicon.svg`
+  is the same glyph — solid plate, mark knocked out, inverted by `prefers-color-scheme` so it
+  stays legible on a light or dark tab strip.
+- **Overlays are `src/lib/components/Drawer.svelte`, never muse's `Modal`.** That `Modal` is a
+  native `<dialog>`, and Tailwind's preflight `margin: 0` kills the `margin: auto` that centres
+  one — it renders in the top-left corner. The drawer is a right-anchored panel built on the
+  bits-ui `Dialog` (already a dependency; it is what shadcn-svelte builds on too), full-width
+  below `sm`. Its slide/fade keyframes live at the bottom of `app.css` because bits-ui renders
+  the overlay and panel itself, out of reach of scoped styles.
 - Dark mode is a `.dark` class on `<html>`, resolved before first paint by an inline script
   in `app.html` and driven by `src/lib/theme.svelte.ts` (light / dark / system).
 - Active navigation is inverted (`bg-foreground text-background`), not tinted. Separation is

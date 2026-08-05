@@ -23,6 +23,7 @@
 
 	let name = $state('');
 	let description = $state('');
+	let rotationDays = $state(0);
 	let saving = $state(false);
 
 	let newEnvName = $state('');
@@ -37,10 +38,18 @@
 
 	let dirty = $derived(
 		ctx.project !== null &&
-			(name.trim() !== ctx.project.name || description.trim() !== ctx.project.description)
+			(name.trim() !== ctx.project.name ||
+				description.trim() !== ctx.project.description ||
+				rotationDays !== ctx.project.rotation_days)
 	);
 
-	let canSave = $derived(dirty && name.trim().length >= 2 && !saving);
+	let rotationError = $derived(
+		Number.isInteger(rotationDays) && rotationDays >= 0 && rotationDays <= 3650
+			? ''
+			: 'Use a whole number of days between 0 and 3650'
+	);
+
+	let canSave = $derived(dirty && name.trim().length >= 2 && !rotationError && !saving);
 
 	$effect(() => {
 		if (ctx.project && !ctx.canAdmin) {
@@ -53,6 +62,7 @@
 		if (!project) return;
 		name = project.name;
 		description = project.description;
+		rotationDays = project.rotation_days;
 	});
 
 	async function handleSave(event: Event) {
@@ -62,7 +72,11 @@
 		try {
 			const updated = await api.put<Project>(
 				`/projects/${ctx.slug}`,
-				{ name: name.trim(), description: description.trim() },
+				{
+					name: name.trim(),
+					description: description.trim(),
+					rotation_days: rotationDays,
+				},
 				auth.token
 			);
 			toast.success('Project updated');
@@ -170,6 +184,34 @@
 							placeholder="What lives in this project?"
 							class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
 						></textarea>
+					</div>
+					<div class="space-y-1.5">
+						<label for="project-rotation" class="block text-sm font-medium">
+							Rotation reminder
+						</label>
+						<div class="flex items-center gap-2">
+							<input
+								id="project-rotation"
+								type="number"
+								min="0"
+								max="3650"
+								step="1"
+								bind:value={rotationDays}
+								disabled={saving}
+								class="flex h-10 w-28 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-50"
+							/>
+							<span class="text-sm text-muted-foreground">days</span>
+						</div>
+						<p class="text-xs text-muted-foreground">
+							{#if rotationError}
+								<span class="text-destructive">{rotationError}</span>
+							{:else if rotationDays === 0}
+								Rotation reminders are off. Secrets are never flagged as stale.
+							{:else}
+								Secrets whose value has not changed in {rotationDays} days are flagged for rotation
+								in every environment of this project.
+							{/if}
+						</p>
 					</div>
 					<button
 						type="submit"

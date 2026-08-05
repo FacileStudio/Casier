@@ -27,11 +27,23 @@ func (controller *Controller) list(ctx context.Context, projectSlug, envSlug, ta
 		return nil, err
 	}
 
-	secrets, err := controller.service.listSecrets(ctx, envID, identity.UserID, identity.ClientIP, tagFilter)
+	secrets, rotationDays, err := controller.service.listSecrets(ctx, envID, identity.UserID, identity.ClientIP, tagFilter)
 	if err != nil {
 		return nil, err
 	}
-	return &ListResponse{Secrets: secrets}, nil
+	return &ListResponse{Secrets: secrets, RotationDays: rotationDays}, nil
+}
+
+func (controller *Controller) rotation(ctx context.Context, projectSlug string) (*RotationSummaryResponse, error) {
+	userID, err := extractUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID)
+	if err != nil {
+		return nil, err
+	}
+	return controller.service.rotationSummary(ctx, projectID)
 }
 
 func (controller *Controller) create(ctx context.Context, projectSlug, envSlug string, req *CreateRequest) (*SecretResponse, error) {

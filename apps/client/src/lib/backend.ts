@@ -65,6 +65,7 @@ export type Project = {
 	slug: string;
 	description: string;
 	role: ProjectRole;
+	rotation_days: number;
 	created_at: string;
 	updated_at: string;
 };
@@ -86,6 +87,8 @@ export type EnvironmentsResponse = {
 	environments: Environment[] | null;
 };
 
+export type RotationStatus = '' | 'ok' | 'due_soon' | 'overdue';
+
 export type Secret = {
 	id: number;
 	key: string;
@@ -94,10 +97,25 @@ export type Secret = {
 	tags: string[] | null;
 	created_at: string;
 	updated_at: string;
+	rotated_at: string;
+	rotation_status: RotationStatus;
 };
 
 export type SecretsResponse = {
 	secrets: Secret[] | null;
+	rotation_days: number;
+};
+
+export type EnvironmentRotation = {
+	slug: string;
+	name: string;
+	overdue: number;
+	due_soon: number;
+};
+
+export type RotationSummary = {
+	rotation_days: number;
+	environments: EnvironmentRotation[] | null;
 };
 
 export type SecretVersion = {

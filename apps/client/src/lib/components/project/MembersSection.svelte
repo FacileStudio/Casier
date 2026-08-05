@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { auth } from '$lib/auth.svelte';
 	import { api, type Member, type MembersResponse } from '$lib/backend';
-	import { Avatar, Badge, Button, Field, Input, Modal, Select, Skeleton, Spinner } from '@facile/lib';
+	import { Avatar, Badge, Button, Field, Input, Select, Skeleton, Spinner } from '@facile/lib';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import Drawer from '$lib/components/Drawer.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import { toast } from 'svelte-sonner';
@@ -153,7 +154,7 @@
 	{/if}
 </section>
 
-<Modal bind:open={addOpen} title="Add member">
+<Drawer bind:open={addOpen} title="Add member">
 	<form onsubmit={handleAdd} class="flex flex-col gap-4">
 		<Field label="Email" helper="Must be an existing Casier account">
 			<Input
@@ -181,7 +182,7 @@
 			</Button>
 		</div>
 	</form>
-</Modal>
+</Drawer>
 
 <ConfirmDialog
 	bind:open={removeOpen}

@@ -17,17 +17,32 @@ type UpdateTagsRequest struct {
 }
 
 type SecretResponse struct {
-	ID        int64     `json:"id"`
-	Key       string    `json:"key"`
-	Value     string    `json:"value"`
-	Version   int       `json:"version"`
-	Tags      []string  `json:"tags"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID             int64     `json:"id"`
+	Key            string    `json:"key"`
+	Value          string    `json:"value"`
+	Version        int       `json:"version"`
+	Tags           []string  `json:"tags"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+	RotatedAt      time.Time `json:"rotated_at"`
+	RotationStatus string    `json:"rotation_status"`
 }
 
 type ListResponse struct {
-	Secrets []SecretResponse `json:"secrets"`
+	Secrets      []SecretResponse `json:"secrets"`
+	RotationDays int              `json:"rotation_days"`
+}
+
+type EnvironmentRotation struct {
+	Slug    string `json:"slug"`
+	Name    string `json:"name"`
+	Overdue int    `json:"overdue"`
+	DueSoon int    `json:"due_soon"`
+}
+
+type RotationSummaryResponse struct {
+	RotationDays int                   `json:"rotation_days"`
+	Environments []EnvironmentRotation `json:"environments"`
 }
 
 type VersionResponse struct {

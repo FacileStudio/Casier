@@ -56,13 +56,14 @@ func (service *Service) listProjects(ctx context.Context, userID int64) ([]Proje
 	projects := make([]ProjectResponse, len(results))
 	for i, r := range results {
 		projects[i] = ProjectResponse{
-			ID:          r.ID,
-			Name:        r.Name,
-			Slug:        r.Slug,
-			Description: r.Description,
-			Role:        r.Role,
-			CreatedAt:   r.CreatedAt,
-			UpdatedAt:   r.UpdatedAt,
+			ID:           r.ID,
+			Name:         r.Name,
+			Slug:         r.Slug,
+			Description:  r.Description,
+			Role:         r.Role,
+			RotationDays: r.RotationDays,
+			CreatedAt:    r.CreatedAt,
+			UpdatedAt:    r.UpdatedAt,
 		}
 	}
 	return projects, nil
@@ -90,6 +91,7 @@ func (service *Service) createProject(ctx context.Context, userID int64, name, d
 		Description:      description,
 		EncryptedDataKey: encDataKey,
 		DataKeyNonce:     nonce,
+		RotationDays:     schemas.DefaultRotationDays,
 	}
 
 	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -127,13 +129,14 @@ func (service *Service) createProject(ctx context.Context, userID int64, name, d
 	}
 
 	return &ProjectResponse{
-		ID:          project.ID,
-		Name:        project.Name,
-		Slug:        project.Slug,
-		Description: project.Description,
-		Role:        "owner",
-		CreatedAt:   project.CreatedAt,
-		UpdatedAt:   project.UpdatedAt,
+		ID:           project.ID,
+		Name:         project.Name,
+		Slug:         project.Slug,
+		Description:  project.Description,
+		Role:         "owner",
+		RotationDays: project.RotationDays,
+		CreatedAt:    project.CreatedAt,
+		UpdatedAt:    project.UpdatedAt,
 	}, nil
 }
 
@@ -157,17 +160,18 @@ func (service *Service) getProject(ctx context.Context, slug string, userID int6
 	}
 
 	return &ProjectResponse{
-		ID:          result.ID,
-		Name:        result.Name,
-		Slug:        result.Slug,
-		Description: result.Description,
-		Role:        result.Role,
-		CreatedAt:   result.CreatedAt,
-		UpdatedAt:   result.UpdatedAt,
+		ID:           result.ID,
+		Name:         result.Name,
+		Slug:         result.Slug,
+		Description:  result.Description,
+		Role:         result.Role,
+		RotationDays: result.RotationDays,
+		CreatedAt:    result.CreatedAt,
+		UpdatedAt:    result.UpdatedAt,
 	}, nil
 }
 
-func (service *Service) updateProject(ctx context.Context, slug string, userID int64, name, description string) (*ProjectResponse, error) {
+func (service *Service) updateProject(ctx context.Context, slug string, userID int64, name, description string, rotationDays *int) (*ProjectResponse, error) {
 	project, role, err := service.getProjectWithRole(ctx, slug, userID)
 	if err != nil {
 		return nil, err
@@ -178,18 +182,22 @@ func (service *Service) updateProject(ctx context.Context, slug string, userID i
 
 	project.Name = name
 	project.Description = description
+	if rotationDays != nil {
+		project.RotationDays = *rotationDays
+	}
 	if err := service.orm.WithContext(ctx).Save(project).Error; err != nil {
 		return nil, errors.Internal("failed to update project", err)
 	}
 
 	return &ProjectResponse{
-		ID:          project.ID,
-		Name:        project.Name,
-		Slug:        project.Slug,
-		Description: project.Description,
-		Role:        role,
-		CreatedAt:   project.CreatedAt,
-		UpdatedAt:   project.UpdatedAt,
+		ID:           project.ID,
+		Name:         project.Name,
+		Slug:         project.Slug,
+		Description:  project.Description,
+		Role:         role,
+		RotationDays: project.RotationDays,
+		CreatedAt:    project.CreatedAt,
+		UpdatedAt:    project.UpdatedAt,
 	}, nil
 }
 

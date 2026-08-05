@@ -51,7 +51,7 @@
 {#if auth.isAuthenticated}
 	<div class="flex h-[100dvh] w-full overflow-hidden">
 		<Sidebar email={auth.email} {projects} onlogout={handleLogout} />
-		<main class="flex-1 overflow-auto pb-24 md:pb-0">
+		<main class="min-w-0 flex-1 overflow-auto pb-24 md:pb-0">
 			{@render children?.()}
 		</main>
 		<MobileNav />

@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
-	import type { Environment, Project } from '$lib/backend';
+	import { auth } from '$lib/auth.svelte';
+	import {
+		api,
+		type Environment,
+		type EnvironmentRotation,
+		type Project,
+		type RotationSummary,
+	} from '$lib/backend';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import SecretsSection from '$lib/components/project/SecretsSection.svelte';
 
@@ -22,10 +29,35 @@
 		ctx.environments.find((env) => env.slug === selectedEnvSlug) ?? null
 	);
 
+	let rotation = $state<Record<string, EnvironmentRotation>>({});
+
+	function staleCount(envSlug: string): number {
+		const entry = rotation[envSlug];
+		if (!entry) return 0;
+		return entry.overdue + entry.due_soon;
+	}
+
+	async function loadRotation() {
+		try {
+			const res = await api.get<RotationSummary>(
+				`/projects/${ctx.slug}/secrets/rotation`,
+				auth.token
+			);
+			rotation = Object.fromEntries((res.environments ?? []).map((env) => [env.slug, env]));
+		} catch {
+			rotation = {};
+		}
+	}
+
 	$effect(() => {
 		if (!ctx.environments.some((env) => env.slug === selectedEnvSlug)) {
 			selectedEnvSlug = ctx.environments[0]?.slug ?? null;
 		}
+	});
+
+	$effect(() => {
+		ctx.slug;
+		loadRotation();
 	});
 </script>
 
@@ -60,16 +92,25 @@
 				aria-label="Environments"
 			>
 				{#each ctx.environments as env (env.id)}
+					{@const stale = staleCount(env.slug)}
 					<button
 						type="button"
 						aria-pressed={selectedEnvSlug === env.slug}
-						class="shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors {selectedEnvSlug ===
+						class="inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors {selectedEnvSlug ===
 						env.slug
 							? 'bg-background text-foreground shadow-sm'
 							: 'text-muted-foreground hover:text-foreground'}"
 						onclick={() => (selectedEnvSlug = env.slug)}
 					>
 						{env.name}
+						{#if stale > 0}
+							<span
+								class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-border px-1.5 text-xs tabular-nums"
+								title="{stale} {stale === 1 ? 'secret needs' : 'secrets need'} rotating"
+							>
+								{stale}
+							</span>
+						{/if}
 					</button>
 				{/each}
 			</div>

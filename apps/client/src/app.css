@@ -254,3 +254,55 @@
 		outline-offset: 2px;
 	}
 }
+
+/*
+ * Drawer transitions. bits-ui renders the overlay and panel itself, so these
+ * cannot live in the component's scoped styles; it keeps the element mounted
+ * until the closing animation ends, which is what `data-state="closed"` drives.
+ */
+@keyframes drawer-fade-in {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes drawer-fade-out {
+	to {
+		opacity: 0;
+	}
+}
+
+@keyframes drawer-slide-in {
+	from {
+		transform: translateX(100%);
+	}
+}
+
+@keyframes drawer-slide-out {
+	to {
+		transform: translateX(100%);
+	}
+}
+
+.drawer-overlay[data-state='open'] {
+	animation: drawer-fade-in 200ms var(--ease-fc);
+}
+
+.drawer-overlay[data-state='closed'] {
+	animation: drawer-fade-out 160ms var(--ease-fc);
+}
+
+.drawer-panel[data-state='open'] {
+	animation: drawer-slide-in 240ms var(--ease-fc);
+}
+
+.drawer-panel[data-state='closed'] {
+	animation: drawer-slide-out 200ms var(--ease-fc);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.drawer-overlay,
+	.drawer-panel {
+		animation-duration: 1ms;
+	}
+}

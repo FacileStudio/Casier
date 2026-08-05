@@ -10,7 +10,7 @@ var Documentation = documentation.Module{
 			Method:      "GET",
 			Path:        "/projects/{slug}/environments/{envSlug}/secrets",
 			Summary:     "List secrets",
-			Description: "Returns all secrets in the environment with decrypted values.",
+			Description: "Returns all secrets in the environment with decrypted values, when each value was last changed, and how it grades against the project's rotation policy.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
@@ -19,6 +19,20 @@ var Documentation = documentation.Module{
 			ResponseBody: "ListResponse",
 			Errors: []documentation.Error{
 				{Status: 404, Code: "not_found", Description: "Project or environment not found."},
+			},
+		},
+		{
+			Method:      "GET",
+			Path:        "/projects/{slug}/secrets/rotation",
+			Summary:     "Rotation summary",
+			Description: "Counts the secrets that are overdue or nearly due for rotation in each environment of the project. Returns zeroes when the project's rotation policy is disabled.",
+			Auth:        "bearer token required",
+			PathParams: []documentation.Field{
+				{Name: "slug", Type: "string", Description: "Project slug."},
+			},
+			ResponseBody: "RotationSummaryResponse",
+			Errors: []documentation.Error{
+				{Status: 404, Code: "not_found", Description: "Project not found."},
 			},
 		},
 		{

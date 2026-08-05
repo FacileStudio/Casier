@@ -50,7 +50,7 @@ var Documentation = documentation.Module{
 			Method:      "PUT",
 			Path:        "/projects/{slug}",
 			Summary:     "Update a project",
-			Description: "Updates project name and description. Requires owner or admin role.",
+			Description: "Updates project name, description and rotation policy. Requires owner or admin role. Omitting rotation_days leaves the current policy in place; sending 0 disables rotation warnings.",
 			Auth:        "bearer token required",
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},

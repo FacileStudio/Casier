@@ -5,6 +5,7 @@ import (
 
 	"casier/internal/authcontext"
 	"casier/internal/errors"
+	"casier/schemas"
 )
 
 type Controller struct {
@@ -75,8 +76,11 @@ func (controller *Controller) update(ctx context.Context, slug string, req *Upda
 	if req.Name == "" {
 		return nil, errors.Invalid("name is required")
 	}
+	if req.RotationDays != nil && (*req.RotationDays < 0 || *req.RotationDays > schemas.MaxRotationDays) {
+		return nil, errors.Invalid("rotation_days must be between 0 and 3650")
+	}
 
-	return controller.service.updateProject(ctx, slug, userID, req.Name, req.Description)
+	return controller.service.updateProject(ctx, slug, userID, req.Name, req.Description, req.RotationDays)
 }
 
 func (controller *Controller) delete(ctx context.Context, slug string) error {

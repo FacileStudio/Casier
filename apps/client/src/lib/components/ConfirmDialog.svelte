@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { Modal, Button } from '@facile/lib';
+	import { Button } from '@facile/lib';
+	import Drawer from '$lib/components/Drawer.svelte';
 
 	let {
 		open = $bindable(false),
@@ -18,7 +19,7 @@
 	} = $props();
 </script>
 
-<Modal bind:open {title}>
+<Drawer bind:open {title}>
 	<p class="text-sm text-muted-foreground">{message}</p>
 	<div class="flex justify-end gap-2 pt-4">
 		<Button variant="ghost" class="h-9" disabled={loading} onclick={() => (open = false)}>Cancel</Button>
@@ -26,4 +27,4 @@
 			{loading ? 'Working…' : confirmLabel}
 		</Button>
 	</div>
-</Modal>
+</Drawer>

@@ -138,7 +138,7 @@ func (service *Service) resolveDataKey(ctx context.Context, envID int64) ([]byte
 	return dataKey, nil
 }
 
-func (service *Service) listSecrets(ctx context.Context, envID int64, userID, clientIP, tagFilter string) ([]SecretResponse, error) {
+func (service *Service) listSecrets(ctx context.Context, envID int64, userID, clientIP, tagFilter string) ([]SecretResponse, int, error) {
 	query := service.orm.WithContext(ctx).Where("environment_id = ?", envID)
 	if tagFilter != "" {
 		query = query.Where("tags LIKE ?", "%"+tagFilter+"%")
@@ -146,37 +146,51 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 	var records []schemas.Secret
 	err := query.Order("key asc").Find(&records).Error
 	if err != nil {
-		return nil, errors.Internal("failed to list secrets", err)
+		return nil, 0, errors.Internal("failed to list secrets", err)
 	}
 
 	service.logger.Info("secrets.list", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.Int("count", len(records)))
 
+	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
+	rotationDays := service.rotationDays(ctx, projectID)
+
 	if len(records) == 0 {
-		return []SecretResponse{}, nil
+		return []SecretResponse{}, rotationDays, nil
 	}
 
 	dataKey, err := service.resolveDataKey(ctx, envID)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
+	ids := make([]int64, len(records))
+	for i, r := range records {
+		ids[i] = r.ID
+	}
+	rotations := service.lastRotations(ctx, ids)
+	now := time.Now().UTC()
 
 	secrets := make([]SecretResponse, len(records))
 	for i, r := range records {
 		plaintext, err := crypto.Decrypt(r.EncryptedValue, r.Nonce, dataKey)
 		if err != nil {
-			return nil, errors.Internal("failed to decrypt secret", err)
+			return nil, 0, errors.Internal("failed to decrypt secret", err)
 		}
 		resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, 0)
+		rotatedAt, ok := rotations[r.ID]
+		if !ok {
+			rotatedAt = r.UpdatedAt
+		}
 		secrets[i] = SecretResponse{
-			ID:        r.ID,
-			Key:       r.Key,
-			Value:     resolved,
-			Version:   r.Version,
-			Tags:      splitTags(r.Tags),
-			CreatedAt: r.CreatedAt,
-			UpdatedAt: r.UpdatedAt,
+			ID:             r.ID,
+			Key:            r.Key,
+			Value:          resolved,
+			Version:        r.Version,
+			Tags:           splitTags(r.Tags),
+			CreatedAt:      r.CreatedAt,
+			UpdatedAt:      r.UpdatedAt,
+			RotatedAt:      rotatedAt,
+			RotationStatus: rotationStatus(rotatedAt, rotationDays, now),
 		}
 	}
 
@@ -184,7 +198,113 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 		service.audit.Log(ctx, projectID, userID, "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(records))+" secrets", clientIP)
 	}
 
-	return secrets, nil
+	return secrets, rotationDays, nil
+}
+
+// rotationSummary grades every secret in the project so the UI can flag a stale
+// environment the user is not currently looking at. Values stay encrypted here:
+// only timestamps are read.
+func (service *Service) rotationSummary(ctx context.Context, projectID int64) (*RotationSummaryResponse, error) {
+	rotationDays := service.rotationDays(ctx, projectID)
+
+	var environments []schemas.Environment
+	err := service.orm.WithContext(ctx).
+		Where("project_id = ?", projectID).
+		Order("position asc").
+		Find(&environments).Error
+	if err != nil {
+		return nil, errors.Internal("failed to list environments", err)
+	}
+
+	summary := &RotationSummaryResponse{
+		RotationDays: rotationDays,
+		Environments: make([]EnvironmentRotation, len(environments)),
+	}
+	for i, env := range environments {
+		summary.Environments[i] = EnvironmentRotation{Slug: env.Slug, Name: env.Name}
+	}
+	if rotationDays <= 0 || len(environments) == 0 {
+		return summary, nil
+	}
+
+	var rows []struct {
+		EnvironmentID int64
+		RotatedAt     time.Time
+	}
+	err = service.orm.WithContext(ctx).
+		Table("secrets s").
+		Select("s.environment_id, coalesce(max(v.created_at), s.updated_at) as rotated_at").
+		Joins("join environments e on e.id = s.environment_id").
+		Joins("left join secret_versions v on v.secret_id = s.id").
+		Where("e.project_id = ?", projectID).
+		Group("s.id, s.environment_id, s.updated_at").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, errors.Internal("failed to summarise rotation", err)
+	}
+
+	index := make(map[int64]int, len(environments))
+	for i, env := range environments {
+		index[env.ID] = i
+	}
+
+	now := time.Now().UTC()
+	for _, row := range rows {
+		position, ok := index[row.EnvironmentID]
+		if !ok {
+			continue
+		}
+		switch rotationStatus(row.RotatedAt, rotationDays, now) {
+		case RotationStatusOverdue:
+			summary.Environments[position].Overdue++
+		case RotationStatusDueSoon:
+			summary.Environments[position].DueSoon++
+		}
+	}
+
+	return summary, nil
+}
+
+// rotationDays reads the project's rotation policy. A project that predates the
+// column, or one whose policy is unreadable, simply gets no warnings.
+func (service *Service) rotationDays(ctx context.Context, projectID int64) int {
+	if projectID == 0 {
+		return 0
+	}
+	var days int
+	err := service.orm.WithContext(ctx).
+		Model(&schemas.Project{}).
+		Where("id = ?", projectID).
+		Pluck("rotation_days", &days).Error
+	if err != nil {
+		return 0
+	}
+	return days
+}
+
+// lastRotations maps each secret to the moment its value last changed. The
+// version table is the only honest source for that: the secrets row is also
+// touched by tag edits, which are not rotations.
+func (service *Service) lastRotations(ctx context.Context, secretIDs []int64) map[int64]time.Time {
+	var rows []struct {
+		SecretID  int64
+		RotatedAt time.Time
+	}
+	err := service.orm.WithContext(ctx).
+		Model(&schemas.SecretVersion{}).
+		Select("secret_id, max(created_at) as rotated_at").
+		Where("secret_id IN ?", secretIDs).
+		Group("secret_id").
+		Scan(&rows).Error
+	if err != nil {
+		return map[int64]time.Time{}
+	}
+
+	rotations := make(map[int64]time.Time, len(rows))
+	for _, row := range rows {
+		rotations[row.SecretID] = row.RotatedAt
+	}
+	return rotations
 }
 
 func (service *Service) updateTags(ctx context.Context, envID int64, key string, tags []string) error {
@@ -243,13 +363,15 @@ func (service *Service) createSecret(ctx context.Context, envID int64, key, valu
 	service.fireWebhook(ctx, "secret.created", envID, key, 1, userID, clientIP)
 
 	return &SecretResponse{
-		ID:        record.ID,
-		Key:       record.Key,
-		Value:     value,
-		Version:   record.Version,
-		Tags:      splitTags(record.Tags),
-		CreatedAt: record.CreatedAt,
-		UpdatedAt: record.UpdatedAt,
+		ID:             record.ID,
+		Key:            record.Key,
+		Value:          value,
+		Version:        record.Version,
+		Tags:           splitTags(record.Tags),
+		CreatedAt:      record.CreatedAt,
+		UpdatedAt:      record.UpdatedAt,
+		RotatedAt:      record.UpdatedAt,
+		RotationStatus: RotationStatusOK,
 	}, nil
 }
 
@@ -299,13 +421,15 @@ func (service *Service) updateSecret(ctx context.Context, envID int64, key, valu
 	service.fireWebhook(ctx, "secret.updated", envID, key, record.Version, userID, clientIP)
 
 	return &SecretResponse{
-		ID:        record.ID,
-		Key:       record.Key,
-		Value:     value,
-		Version:   record.Version,
-		Tags:      splitTags(record.Tags),
-		CreatedAt: record.CreatedAt,
-		UpdatedAt: record.UpdatedAt,
+		ID:             record.ID,
+		Key:            record.Key,
+		Value:          value,
+		Version:        record.Version,
+		Tags:           splitTags(record.Tags),
+		CreatedAt:      record.CreatedAt,
+		UpdatedAt:      record.UpdatedAt,
+		RotatedAt:      record.UpdatedAt,
+		RotationStatus: RotationStatusOK,
 	}, nil
 }
 
@@ -396,13 +520,15 @@ func (service *Service) rollbackSecret(ctx context.Context, envID int64, key str
 	service.logger.Info("secrets.rollback", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.String("key", key), slog.Int("to_version", targetVersion), slog.Int("new_version", secret.Version))
 
 	return &SecretResponse{
-		ID:        secret.ID,
-		Key:       secret.Key,
-		Value:     string(plaintext),
-		Version:   secret.Version,
-		Tags:      splitTags(secret.Tags),
-		CreatedAt: secret.CreatedAt,
-		UpdatedAt: secret.UpdatedAt,
+		ID:             secret.ID,
+		Key:            secret.Key,
+		Value:          string(plaintext),
+		Version:        secret.Version,
+		Tags:           splitTags(secret.Tags),
+		CreatedAt:      secret.CreatedAt,
+		UpdatedAt:      secret.UpdatedAt,
+		RotatedAt:      secret.UpdatedAt,
+		RotationStatus: RotationStatusOK,
 	}, nil
 }
 
@@ -485,7 +611,7 @@ func (service *Service) importEnv(ctx context.Context, envID int64, content, use
 }
 
 func (service *Service) exportEnv(ctx context.Context, envID int64, userID, clientIP string) (string, error) {
-	secrets, err := service.listSecrets(ctx, envID, userID, clientIP, "")
+	secrets, _, err := service.listSecrets(ctx, envID, userID, clientIP, "")
 	if err != nil {
 		return "", err
 	}
@@ -507,11 +633,11 @@ func (service *Service) exportEnv(ctx context.Context, envID int64, userID, clie
 }
 
 func (service *Service) diffEnvironments(ctx context.Context, envA, envB int64, userID, clientIP string) (*DiffResponse, error) {
-	secretsA, err := service.listSecrets(ctx, envA, userID, clientIP, "")
+	secretsA, _, err := service.listSecrets(ctx, envA, userID, clientIP, "")
 	if err != nil {
 		return nil, err
 	}
-	secretsB, err := service.listSecrets(ctx, envB, userID, clientIP, "")
+	secretsB, _, err := service.listSecrets(ctx, envB, userID, clientIP, "")
 	if err != nil {
 		return nil, err
 	}
