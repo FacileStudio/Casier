@@ -9,6 +9,8 @@
 		type SecretsResponse,
 		type SecretVersion,
 		type SecretVersionsResponse,
+		type TrashedSecret,
+		type TrashResponse,
 	} from '$lib/backend';
 	import { daysSince, formatDate, formatDateTime } from '$lib/format';
 	import { Alert, Badge, Button, Field, Input, Skeleton, Spinner, Table, Textarea } from '@facile/lib';
@@ -35,6 +37,8 @@
 	let search = $state('');
 	let staleOnly = $state(false);
 	let revealed = $state<Set<number>>(new Set());
+	let revealing = $state<Set<number>>(new Set());
+	let values = $state<Map<number, string>>(new Map());
 
 	let addOpen = $state(false);
 	let newKey = $state('');
@@ -45,6 +49,7 @@
 	let editTarget = $state<Secret | null>(null);
 	let editOpen = $state(false);
 	let editValue = $state('');
+	let editLoading = $state(false);
 	let saving = $state(false);
 
 	let deleteTarget = $state<Secret | null>(null);
@@ -57,6 +62,12 @@
 	let versionsLoading = $state(false);
 	let versionsError = $state('');
 	let rollingBack = $state<number | null>(null);
+
+	let trashOpen = $state(false);
+	let trashed = $state<TrashedSecret[]>([]);
+	let trashLoading = $state(false);
+	let trashError = $state('');
+	let restoring = $state<number | null>(null);
 
 	let importOpen = $state(false);
 	let importContent = $state('');
@@ -99,6 +110,7 @@
 		loading = true;
 		loadError = '';
 		revealed = new Set();
+		values = new Map();
 		staleOnly = false;
 		try {
 			const res = await api.get<SecretsResponse>(basePath, auth.token);
@@ -111,22 +123,78 @@
 		}
 	}
 
-	function toggleReveal(id: number) {
-		const next = new Set(revealed);
-		if (next.has(id)) {
-			next.delete(id);
-		} else {
-			next.add(id);
+	// Listing no longer carries plaintext, so a value is fetched the moment it is
+	// actually needed and each fetch is audited on its own. Values are cached per
+	// key only for the life of this view, and dropped whenever the list reloads.
+	async function fetchValue(secret: Secret): Promise<string> {
+		const cached = values.get(secret.id);
+		if (cached !== undefined) return cached;
+
+		const revealedSecret = await api.get<Secret>(
+			`${basePath}/${encodeURIComponent(secret.key)}/reveal`,
+			auth.token
+		);
+		const value = revealedSecret.value ?? '';
+		values = new Map(values).set(secret.id, value);
+		return value;
+	}
+
+	async function toggleReveal(secret: Secret) {
+		if (revealed.has(secret.id)) {
+			const next = new Set(revealed);
+			next.delete(secret.id);
+			revealed = next;
+			return;
 		}
-		revealed = next;
+
+		revealing = new Set(revealing).add(secret.id);
+		try {
+			await fetchValue(secret);
+			revealed = new Set(revealed).add(secret.id);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : `Failed to reveal ${secret.key}`);
+		} finally {
+			const next = new Set(revealing);
+			next.delete(secret.id);
+			revealing = next;
+		}
 	}
 
 	async function copyValue(secret: Secret) {
 		try {
-			await navigator.clipboard.writeText(secret.value);
+			const value = await fetchValue(secret);
+			await navigator.clipboard.writeText(value);
 			toast.success(`Copied ${secret.key} to clipboard`);
-		} catch {
-			toast.error('Clipboard unavailable');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Clipboard unavailable');
+		}
+	}
+
+	async function openTrash() {
+		trashOpen = true;
+		trashLoading = true;
+		trashError = '';
+		try {
+			const res = await api.get<TrashResponse>(`${basePath}/trash`, auth.token);
+			trashed = res.secrets ?? [];
+		} catch (err) {
+			trashError = err instanceof Error ? err.message : 'Failed to load the trash';
+		} finally {
+			trashLoading = false;
+		}
+	}
+
+	async function handleRestore(secret: TrashedSecret) {
+		restoring = secret.id;
+		try {
+			await api.post(`${basePath}/${encodeURIComponent(secret.key)}/restore`, {}, auth.token);
+			trashed = trashed.filter((s) => s.id !== secret.id);
+			toast.success(`Secret ${secret.key} restored`);
+			await loadSecrets();
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : `Failed to restore ${secret.key}`);
+		} finally {
+			restoring = null;
 		}
 	}
 
@@ -158,10 +226,23 @@
 		}
 	}
 
-	function openEdit(secret: Secret) {
+	// The editor has to start from the current value, and the listing no longer
+	// carries it. Opening the drawer before the fetch resolves would let someone
+	// save an empty textarea over a live secret.
+	async function openEdit(secret: Secret) {
 		editTarget = secret;
-		editValue = secret.value;
+		editValue = '';
+		editLoading = true;
 		editOpen = true;
+		try {
+			editValue = await fetchValue(secret);
+		} catch (err) {
+			editOpen = false;
+			editTarget = null;
+			toast.error(err instanceof Error ? err.message : `Failed to read ${secret.key}`);
+		} finally {
+			editLoading = false;
+		}
 	}
 
 	async function handleEdit(e: Event) {
@@ -175,6 +256,7 @@
 				auth.token
 			);
 			secrets = secrets.map((s) => (s.id === updated.id ? updated : s));
+			values = new Map(values).set(updated.id, editValue);
 			toast.success(`Secret ${editTarget.key} updated`);
 			editOpen = false;
 		} catch (err) {
@@ -351,6 +433,10 @@
 			/>
 		</div>
 		<div class="ml-auto flex items-center gap-2">
+			<Button variant="outline" class="h-9" onclick={openTrash}>
+				<iconify-icon icon="solar:trash-bin-trash-linear" width="16" aria-hidden="true"></iconify-icon>
+				Trash
+			</Button>
 			<Button
 				variant="outline"
 				class="h-9"
@@ -429,10 +515,12 @@
 							{#if revealed.has(secret.id)}
 								<code
 									class="block max-w-64 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground"
-									title={secret.value}
+									title={values.get(secret.id) ?? ''}
 								>
-									{secret.value}
+									{values.get(secret.id) ?? ''}
 								</code>
+							{:else if revealing.has(secret.id)}
+								<Spinner size="sm" />
 							{:else}
 								<span class="select-none font-mono text-sm text-muted-foreground" aria-label="Hidden value">
 									{MASK}
@@ -454,7 +542,7 @@
 									type="button"
 									class={actionButton}
 									aria-label={revealed.has(secret.id) ? `Hide ${secret.key}` : `Reveal ${secret.key}`}
-									onclick={() => toggleReveal(secret.id)}
+									onclick={() => toggleReveal(secret)}
 								>
 									{#if revealed.has(secret.id)}
 										<iconify-icon icon="solar:eye-closed-linear" width="16" aria-hidden="true"></iconify-icon>
@@ -528,18 +616,69 @@
 	</form>
 </Drawer>
 
+<Drawer bind:open={trashOpen} title="Trash — {environment.name}">
+	{#if trashLoading}
+		<div class="flex flex-col gap-2">
+			{#each Array(3) as _, i (i)}
+				<Skeleton class="h-9 w-full" />
+			{/each}
+		</div>
+	{:else if trashError}
+		<ErrorState message={trashError} onretry={openTrash} />
+	{:else if trashed.length === 0}
+		<EmptyState
+			title="Nothing in the trash"
+			description="Deleted secrets stay here for 30 days before they are destroyed."
+		>
+			{#snippet icon()}
+				<iconify-icon icon="solar:trash-bin-trash-linear" width="32" aria-hidden="true"></iconify-icon>
+			{/snippet}
+		</EmptyState>
+	{:else}
+		<div class="flex flex-col gap-3">
+			<p class="text-sm text-muted-foreground">
+				A deleted key stays reserved until it is restored or purged, so it cannot be recreated
+				from scratch while it sits here.
+			</p>
+			{#each trashed as secret (secret.id)}
+				<div class="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+					<div class="flex min-w-0 flex-col gap-1">
+						<code class="w-fit rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
+							{secret.key}
+						</code>
+						<span class="text-xs text-muted-foreground">
+							Deleted {formatDateTime(secret.deleted_at)} · purged {formatDate(secret.purge_at)}
+						</span>
+					</div>
+					{#if canWrite}
+						<Button
+							variant="outline"
+							class="h-8 shrink-0"
+							disabled={restoring === secret.id}
+							onclick={() => handleRestore(secret)}
+						>
+							{#if restoring === secret.id}<Spinner size="sm" />{/if}
+							Restore
+						</Button>
+					{/if}
+				</div>
+			{/each}
+		</div>
+	{/if}
+</Drawer>
+
 <Drawer bind:open={editOpen} title="Edit {editTarget?.key}">
 	<form onsubmit={handleEdit} class="flex flex-col gap-4">
 		<Field label="Value" helper="Saving creates a new version">
-			<Textarea rows={4} bind:value={editValue} disabled={saving} class="font-mono" />
+			<Textarea rows={4} bind:value={editValue} disabled={saving || editLoading} class="font-mono" />
 		</Field>
 		<div class="flex justify-end gap-2 pt-1">
 			<Button type="button" variant="ghost" class="h-9" disabled={saving} onclick={() => (editOpen = false)}>
 				Cancel
 			</Button>
-			<Button type="submit" class="h-9" disabled={saving}>
-				{#if saving}<Spinner size="sm" />{/if}
-				{saving ? 'Saving…' : 'Save'}
+			<Button type="submit" class="h-9" disabled={saving || editLoading}>
+				{#if saving || editLoading}<Spinner size="sm" />{/if}
+				{editLoading ? 'Loading…' : saving ? 'Saving…' : 'Save'}
 			</Button>
 		</div>
 	</form>
@@ -612,7 +751,7 @@
 <ConfirmDialog
 	bind:open={deleteOpen}
 	title="Delete secret"
-	message={`This permanently deletes ${deleteTarget?.key} from the ${environment.name} environment, along with its version history. Anything reading it will break. This cannot be undone.`}
+	message={`This moves ${deleteTarget?.key} out of the ${environment.name} environment and into the trash, where it can be restored for 30 days before it is destroyed for good. Anything reading it will break immediately. The key stays reserved until it is restored or purged.`}
 	confirmLabel="Delete secret"
 	loading={deleting}
 	onconfirm={handleDelete}

@@ -141,10 +141,13 @@ export type EnvironmentsResponse = {
 
 export type RotationStatus = '' | 'ok' | 'due_soon' | 'overdue';
 
+// `value` is absent unless it was explicitly revealed. Listing no longer ships
+// plaintext, so masking in the browser is no longer theatre over a value that
+// was in the payload all along.
 export type Secret = {
 	id: number;
 	key: string;
-	value: string;
+	value?: string;
 	version: number;
 	tags: string[] | null;
 	created_at: string;
@@ -156,6 +159,20 @@ export type Secret = {
 export type SecretsResponse = {
 	secrets: Secret[] | null;
 	rotation_days: number;
+};
+
+export type TrashedSecret = {
+	id: number;
+	key: string;
+	tags: string[] | null;
+	deleted_at: string;
+	deleted_by: string;
+	purge_at: string;
+};
+
+export type TrashResponse = {
+	secrets: TrashedSecret[] | null;
+	retention_days: number;
 };
 
 export type EnvironmentRotation = {

@@ -147,8 +147,14 @@ and 3 were stored but never read.
    `resolveProjectID` (project), `environments.Service.resolveEnvironmentID` (environment),
    and `secrets.Controller.resolveEnvWithWrite` (write permission). Scoped tokens are refused
    outright on the project administration routes — a CI credential never manages members.
-   Out-of-scope reads return `not_found`, not `permission_denied`, so a token cannot
-   enumerate what it cannot reach.
+   **A token cannot enumerate what it cannot reach**, because each layer answers
+   out-of-scope and does-not-exist *identically*. The two layers pick different answers and
+   that is fine as long as each is uniform: `environments.resolveEnvironmentID` says
+   `not_found` for both, `secrets.resolveEnvFor` says `permission_denied` for both (its scope
+   check runs before the lookup, so a slug that does not exist never gets as far as a 404).
+   Verified end to end — probing a real out-of-scope environment and a made-up one through
+   the secrets routes returns the same status. If you touch either helper, keep it uniform;
+   the indistinguishability is the property, not the specific code.
    **Every scope check now fails closed.** "Every environment" is the stored
    `all_environments` flag, never an inference from an empty list — while empty meant
    everything, cascading away the last environment a token named *widened* it to the whole
