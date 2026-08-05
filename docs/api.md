@@ -3,8 +3,9 @@
 Every HTTP route the Go binary registers, plus the CLI command reference, taken from
 `apps/api/main.go` and each module's `router.go`.
 
-Application routes live under `/api`. `/health`, `/ready`, and `/docs` sit at the root, and
-`/health` and `/ready` also answer under `/api`. Anything else falls through to the
+Application routes live under `/api`. `/health`, `/ready`, `/docs` and `/docs/openapi.json`
+sit at the root, and `/health` and `/ready` also answer under `/api`. Anything else falls
+through to the
 dashboard's index document. There is no strip-prefix middleware in front, so the paths below
 are what the server sees and what a public URL contains.
 
@@ -25,10 +26,15 @@ when the header is absent.
 | GET | `/health`, `/api/health` | public |
 | GET | `/ready`, `/api/ready` | public |
 | GET | `/docs` | public |
+| GET | `/docs/openapi.json` | public |
 
-`GET /docs` returns a JSON description of every module, assembled at startup from each
-module's `documentation.go`. It is the API describing itself — there is no checked-in
-OpenAPI spec and no generator.
+`GET /docs` is the API reference — a Scalar UI over `GET /docs/openapi.json`, an OpenAPI 3.1
+document generated at startup from each module's `documentation.go`. Both are served by
+`tronc/apiref`, so every Facile backend answers on the same two paths. There is no
+checked-in spec file: the document is the registry, rendered.
+
+`apps/api/apiref_test.go` walks the mounted routes and fails if one is missing from the
+registry, so the reference cannot drift from the code the way a hand-maintained spec does.
 
 `GET /spaces` and `GET /spaces/*` answer `301` to the matching `/projects` path, left from
 the 2026-08-04 rename.

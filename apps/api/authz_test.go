@@ -23,7 +23,6 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
-	documentation "github.com/FacileStudio/Casier/apps/api/internal/documentation"
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
 	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
@@ -34,8 +33,8 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
+	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/health"
-	"github.com/FacileStudio/tronc/httpjson"
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
@@ -165,7 +164,7 @@ type fixture struct {
 
 var (
 	testDB       *gorm.DB
-	testRouter   http.Handler
+	testRouter   chi.Router
 	testKeyring  *crypto.Keyring
 	passwordHash string
 	databaseOn   bool
@@ -219,7 +218,7 @@ func (discardMailer) Send(context.Context, mailer.Message) error { return nil }
 // It tolerates a nil database so the route-coverage test can walk the mounted
 // routes without Postgres: no service touches the handle until a request
 // arrives.
-func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) http.Handler {
+func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	appEnv := env.Config{
 		EncryptionKey: seedRootKey,
@@ -236,20 +235,9 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) http.H
 	environmentsService := environments.NewService(db, projectsService)
 	secretsService := secrets.NewService(db, logger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
 
-	docs := documentation.Response{
-		Modules: []documentation.Module{
-			auth.Documentation,
-			projects.Documentation,
-			environments.Documentation,
-			secrets.Documentation,
-		},
-	}
-
 	router := httpx.NewRouter(httpx.Config{Logger: logger})
 	health.Mount(router, health.DB(sqlDB))
-	router.Get("/docs", func(w http.ResponseWriter, _ *http.Request) {
-		httpjson.WriteJSON(w, http.StatusOK, docs)
-	})
+	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
 		auth.RegisterRoutes(r, authService, appEnv)
@@ -530,6 +518,10 @@ func routeCases(f fixture) []routeCase {
 		},
 		{
 			name: "api documentation", method: "GET", pattern: "/docs", path: "/docs",
+			outcomes: []outcome{ok(200, everyone...)},
+		},
+		{
+			name: "api specification", method: "GET", pattern: "/docs/openapi.json", path: "/docs/openapi.json",
 			outcomes: []outcome{ok(200, everyone...)},
 		},
 		{

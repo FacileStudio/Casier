@@ -26,9 +26,9 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
 	"github.com/FacileStudio/Journal/sdk/journal"
+	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/health"
 	"github.com/FacileStudio/tronc/healthcheck"
-	"github.com/FacileStudio/tronc/httpjson"
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
@@ -39,6 +39,29 @@ import (
 func redirectToProjects(w http.ResponseWriter, request *http.Request) {
 	target := "/projects" + strings.TrimPrefix(request.URL.Path, "/spaces")
 	http.Redirect(w, request, target, http.StatusMovedPermanently)
+}
+
+// registry is the hand-written route inventory the reference at /docs is
+// generated from. Each module owns its own entry; a route absent from it fails
+// TestEveryRouteIsDocumented.
+func registry() documentation.Response {
+	return documentation.Response{
+		Modules: []documentation.Module{
+			auth.Documentation,
+			projects.Documentation,
+			environments.Documentation,
+			secrets.Documentation,
+		},
+	}
+}
+
+func refConfig() apiref.Config {
+	return apiref.Config{
+		Title:       "Casier API",
+		Description: "Self-hosted secrets and environment variable manager for teams.",
+		Servers:     []string{"/api"},
+		Registry:    registry(),
+	}
 }
 
 func main() {
@@ -117,15 +140,6 @@ func run() int {
 	secretsService := secrets.NewService(db, appLogger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
 	secretsService.StartTrashPurge(shutdownCtx)
 
-	docs := documentation.Response{
-		Modules: []documentation.Module{
-			auth.Documentation,
-			projects.Documentation,
-			environments.Documentation,
-			secrets.Documentation,
-		},
-	}
-
 	router := httpx.NewRouter(httpx.Config{
 		Logger: appLogger,
 		CORS: troncmiddleware.CORSConfig{
@@ -135,9 +149,7 @@ func run() int {
 	})
 
 	health.Mount(router, health.DB(sqlDB))
-	router.Get("/docs", func(w http.ResponseWriter, request *http.Request) {
-		httpjson.WriteJSON(w, http.StatusOK, docs)
-	})
+	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
 		auth.RegisterRoutes(r, authService, appEnv)

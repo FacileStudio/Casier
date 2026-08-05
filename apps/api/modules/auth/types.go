@@ -2,6 +2,12 @@ package auth
 
 import "github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 
+type AuthConfigResponse struct {
+	SSOOnly              bool `json:"sso_only"`
+	OIDCEnabled          bool `json:"oidc_enabled"`
+	PasswordResetEnabled bool `json:"password_reset_enabled"`
+}
+
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`

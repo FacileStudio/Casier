@@ -7,6 +7,14 @@ var Documentation = documentation.Module{
 	Description: "Authentication routes.",
 	Routes: []documentation.Route{
 		{
+			Method:       "GET",
+			Path:         "/auth/config",
+			Summary:      "Describe the authentication modes",
+			Description:  "Returns {sso_only, oidc_enabled, password_reset_enabled} so a client knows which sign-in paths exist before offering them. password_reset_enabled is true only when passwords are on and a mailer is configured, so the login screen never offers a reset that cannot be delivered.",
+			Auth:         "public",
+			ResponseBody: "AuthConfigResponse",
+		},
+		{
 			Method:       "POST",
 			Path:         "/auth/register",
 			Summary:      "Register a new user",

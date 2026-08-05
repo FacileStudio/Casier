@@ -19,10 +19,10 @@ func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 
 	router.Route("/auth", func(router chi.Router) {
 		router.Get("/config", func(w http.ResponseWriter, r *http.Request) {
-			httpjson.WriteJSON(w, http.StatusOK, map[string]bool{
-				"sso_only":               appEnv.SSOOnly,
-				"oidc_enabled":           oidcEnabled,
-				"password_reset_enabled": !appEnv.SSOOnly && service.mailer != nil,
+			httpjson.WriteJSON(w, http.StatusOK, AuthConfigResponse{
+				SSOOnly:              appEnv.SSOOnly,
+				OIDCEnabled:          oidcEnabled,
+				PasswordResetEnabled: !appEnv.SSOOnly && service.mailer != nil,
 			})
 		})
 
