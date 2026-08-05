@@ -57,7 +57,7 @@
 - [ ] TypeScript SDK (`@facile/casier-ts`) for runtime secret fetching
 - [ ] CI/CD integrations (GitHub Actions, Docker build args)
 
-## v5 — Casier (current)
+## v5 — Casier
 
 - [x] Rename Clef → Casier across repo, deployment, and infrastructure
 - [x] CLI: offline cache — network-first with last-known-good fallback, making
@@ -80,21 +80,31 @@
 
 ---
 
-# Audit 2026-08-05
+# Audit 2026-08-05 (current)
+
+> **Where this stands.** v6 and v7 are written, tested and committed as `5dd2c42` on the
+> branch **`hardening/authz-audit-2026-08`**, which is pushed but **not merged**. `main` has
+> `autoDeploy: true` in Dokploy, so merging deploys straight to production — run the
+> pre-deploy checks under "Shipped 2026-08-05" first. v6-5, v6-6, v8 and v9 are open.
 
 Source-level pass over `apps/api`, `apps/client/src/lib`, and the CLI surface. Every item
 below was traced end to end in the code, not inferred from docs. Crypto (`internal/crypto`),
-the key hierarchy, the schema, and the rotation grading are sound. **The authorization layer
-is where the work is:** RBAC is enforced only inside the project/environment/secret
-controllers, via `ResolveProjectID(..., requiredRoles...)`. Three things route around it.
+the key hierarchy, the schema, and the rotation grading were sound. **The authorization layer
+was where the work was:** RBAC was enforced only inside the project/environment/secret
+controllers, via `ResolveProjectID(..., requiredRoles...)`, and three things routed around it.
 
-The shared root cause of v6-1 through v6-3: `authcontext.Identity` carries `UserID`, `Email`,
-`ClientIP` and nothing else. A caller's *capability* has nowhere to live, so scope enforcement
-has no home to be written into. Widening that struct is the enabling change for the rest.
+The shared root cause of v6-1 through v6-3: `authcontext.Identity` carried `UserID`, `Email`,
+`ClientIP` and nothing else. A caller's *capability* had nowhere to live, so scope enforcement
+had no home to be written into. Widening that struct was the enabling change for the rest.
 
-## v6 — Authorization (shipped 2026-08-05)
+The v6 and v7 entries below are kept in their original problem-statement form deliberately —
+they are the record of what was wrong and why it mattered. What was actually built is under
+"Shipped 2026-08-05".
 
-Ordered. 1 and 2 are the ones that change what Casier actually guarantees.
+## v6 — Authorization
+
+Ordered. 1 and 2 were the ones that changed what Casier actually guarantees. 1-4 shipped
+2026-08-05; 5 and 6 are open.
 
 - [x] **v6-1 — Gate `POST /admin/rotate-key`.** `modules/projects/router.go:17` wraps the
       handler in `RequireAuth` and nothing else. Any authenticated user — a `viewer` on one
@@ -132,7 +142,7 @@ Ordered. 1 and 2 are the ones that change what Casier actually guarantees.
       `(role, token scope, route) → expected status` would have caught v6-1 through v6-3, and
       is what keeps them fixed.
 
-## v7 — Correctness (shipped 2026-08-05)
+## v7 — Correctness (all shipped 2026-08-05)
 
 - [x] **Client swallows every API error.** The API writes `{"error":{"code","message"}}`;
       `apps/client/src/lib/backend.ts:31` reads `error.message`, which is therefore always
@@ -231,6 +241,11 @@ credentials, and a global redirect would eat the login form's own error.
 
 ## v8 — Refactors that pay rent
 
+Nothing here shipped in the 2026-08-05 batch. The one that moved: `secrets/controller.go` now
+funnels every route through `resolveEnvFor` / `resolveEnvWithRoles`, which is the seam the
+first item below wants — the remaining duplication is the identity-extract preamble in the
+projects and environments controllers.
+
 - [ ] **Collapse controller boilerplate.** ~30 handlers repeat identity-extract → parse → call.
       One helper removes the repetition and, more usefully, creates the single seam where v6-2's
       scope check belongs.
@@ -245,6 +260,16 @@ credentials, and a global redirect would eat the login form's own error.
 
 ## v9 — Product
 
+- [ ] **A mailer.** v6-4 took the password reset token out of the logs without replacing the
+      delivery path, so password reset is inert until something can send mail. Moot while
+      `SSO_ONLY=true`, blocking the moment it is not.
+- [ ] **Give `api_tokens.environments` a real foreign key.** It stores environment slugs as a
+      comma-separated string with no referential integrity, so deleting an environment leaves
+      its slug in every token scope that named it — and recreating an environment with the same
+      slug silently re-grants those tokens. Uncovered while wiring v6-2.
+- [ ] **A test-database harness.** The blocker for v6-6: every scope decision is unit-tested as
+      a pure function, but nothing exercises `(role, token scope, route) → status` over real
+      HTTP against real rows. This is the highest-leverage missing piece in the repo.
 - [ ] **Trash for secrets.** `deleteSecret` cascades every version away with the row. Deleting
       `PROD_DATABASE_URL` is currently permanent and silent. 30-day soft delete, restorable.
 - [ ] **Per-secret reveal endpoint.** `GET /secrets` returns every plaintext value and the
