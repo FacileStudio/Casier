@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -128,8 +129,25 @@ func (service *Service) deleteEnvironment(ctx context.Context, projectID int64, 
 			return errors.Internal("failed to find environment", err)
 		}
 
-		if err := tx.Where("environment_id = ?", env.ID).Delete(&schemas.Secret{}).Error; err != nil {
-			return errors.Internal("failed to delete secrets", err)
+		var secretIDs []int64
+		if err := tx.Model(&schemas.Secret{}).
+			Where("environment_id = ?", env.ID).
+			Pluck("id", &secretIDs).Error; err != nil {
+			return errors.Internal("failed to list secrets", err)
+		}
+
+		if len(secretIDs) > 0 {
+			if err := tx.Where("secret_id IN ?", secretIDs).Delete(&schemas.SecretVersion{}).Error; err != nil {
+				return errors.Internal("failed to delete secret versions", err)
+			}
+
+			if err := tx.Where("secret_id IN ?", secretIDs).Delete(&schemas.SecretACL{}).Error; err != nil {
+				return errors.Internal("failed to delete secret acls", err)
+			}
+
+			if err := tx.Where("id IN ?", secretIDs).Delete(&schemas.Secret{}).Error; err != nil {
+				return errors.Internal("failed to delete secrets", err)
+			}
 		}
 
 		if err := tx.Delete(&env).Error; err != nil {
@@ -140,6 +158,10 @@ func (service *Service) deleteEnvironment(ctx context.Context, projectID int64, 
 	})
 }
 
+// resolveEnvironmentID is the choke point every secret read and write funnels
+// through, so it is where an API token's environment scope is enforced. A token
+// outside its scope gets the same not-found answer as a missing environment,
+// otherwise the error alone would enumerate the project's environments.
 func (service *Service) resolveEnvironmentID(ctx context.Context, projectID int64, envSlug string) (int64, error) {
 	var record schemas.Environment
 	err := service.orm.WithContext(ctx).
@@ -151,7 +173,25 @@ func (service *Service) resolveEnvironmentID(ctx context.Context, projectID int6
 	if err != nil {
 		return 0, errors.Internal("failed to find environment", err)
 	}
+
+	if !scopeAllowsEnvironment(ctx, record.Slug) {
+		return 0, errors.NotFound("environment not found")
+	}
+
 	return record.ID, nil
+}
+
+// scopeAllowsEnvironment reports whether the calling API token may touch the
+// environment. A user session carries no scope and is always allowed; project
+// roles bound it instead.
+func scopeAllowsEnvironment(ctx context.Context, envSlug string) bool {
+	return authcontext.ScopeFromContext(ctx).AllowsEnvironment(envSlug)
+}
+
+// scopeAllowsWrite reports whether the calling API token carries write
+// permission. A user session carries no scope and is always allowed.
+func scopeAllowsWrite(ctx context.Context) bool {
+	return authcontext.ScopeFromContext(ctx).AllowsWrite()
 }
 
 func (service *Service) ResolveEnvironmentID(ctx context.Context, projectID int64, envSlug string) (int64, error) {

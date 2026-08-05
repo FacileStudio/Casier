@@ -87,6 +87,7 @@ docker compose up --build
 | OIDC_REDIRECT_URL      | If OIDC  | Callback URL for OIDC flow                       |
 | OIDC_SUCCESS_URL       | No       | Redirect after OIDC login (default: first CORS origin) |
 | SSO_ONLY               | No       | Hide password auth when true                     |
+| CASIER_ADMIN_EMAILS    | No       | Comma-separated emails allowed to call `POST /admin/rotate-key`. Empty means nobody — the endpoint fails closed. |
 
 ## CLI (cli/)
 
@@ -116,6 +117,32 @@ containers, where no keychain exists.
 back to an in-memory mock store: login prints "Logged in as …", writes the config, and the
 token disappears when the process exits, so every later command reports "Not logged in".
 `store_token` reads the token back after writing to make that failure loud if it ever returns.
+
+## Authorization model
+
+Three layers, and every one of them has to be checked — the 2026-08-05 audit found the
+lower two were stored but never read.
+
+1. **Project role** (`owner` / `admin` / `member` / `viewer`) via `ProjectMember`, enforced in
+   `projects.Service.resolveProjectID(ctx, slug, userID, requiredRoles...)`. Every secret,
+   environment and project path funnels through it.
+2. **API token scope**, carried on `authcontext.Identity.Scope` as a `*TokenScope`. A **nil
+   scope means a user session** and is unrestricted by this layer; a non-nil scope is a
+   `casier_…` machine token and is bounded by its `project_id`, `environments` and
+   `permissions` columns. The three checks live at three choke points:
+   `resolveProjectID` (project), `environments.Service.resolveEnvironmentID` (environment),
+   and `secrets.Controller.resolveEnvWithWrite` (write permission). Scoped tokens are refused
+   outright on the project administration routes — a CI credential never manages members.
+   Out-of-scope reads return `not_found`, not `permission_denied`, so a token cannot
+   enumerate what it cannot reach.
+   Note the deliberate asymmetry in `TokenScope`: an empty environment list means *all*
+   environments (that is how pre-scoping tokens are stored), an empty permission list means
+   *no writes*. Fail open on reach, fail closed on write.
+3. **Per-secret ACLs** (`secret_acls`), which narrow a project role for one secret. A secret
+   with no ACL rows behaves as before; `owner` always bypasses them.
+
+`POST /admin/rotate-key` sits outside all of this: it is gated on `CASIER_ADMIN_EMAILS`,
+refuses machine tokens, and fails closed when the list is empty.
 
 ## Domain Vocabulary
 

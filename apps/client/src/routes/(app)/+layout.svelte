@@ -2,7 +2,14 @@
 	import { setContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
-	import { api, COOKIE_SESSION, type Me, type Project, type ProjectsResponse } from '$lib/backend';
+	import {
+		api,
+		ApiError,
+		COOKIE_SESSION,
+		type Me,
+		type Project,
+		type ProjectsResponse,
+	} from '$lib/backend';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import MobileNav from '$lib/components/MobileNav.svelte';
 
@@ -14,8 +21,12 @@
 		try {
 			const result = await api.get<ProjectsResponse>('/projects', auth.token);
 			projects = result.projects ?? [];
-		} catch {
+		} catch (err) {
 			projects = [];
+			if (err instanceof ApiError && err.status === 401) {
+				auth.logout();
+				goto('/login');
+			}
 		}
 	}
 

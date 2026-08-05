@@ -19,6 +19,7 @@ type Config struct {
 	EncryptionKey string
 	OIDC          *OIDCConfig
 	SSOOnly       bool
+	AdminEmails   []string
 }
 
 func Load() (Config, error) {
@@ -39,6 +40,8 @@ func Load() (Config, error) {
 	if cfg.SSOOnly, err = troncenv.Bool("SSO_ONLY", false); err != nil {
 		return Config{}, err
 	}
+
+	cfg.AdminEmails = troncenv.List("CASIER_ADMIN_EMAILS")
 
 	if issuer := troncenv.String("OIDC_ISSUER", ""); issuer != "" {
 		clientID := troncenv.String("OIDC_CLIENT_ID", "")

@@ -55,33 +55,33 @@ func RegisterRoutes(router chi.Router, service *Service, appEnv env.Config) {
 				SetSessionCookie(w, resp.Token)
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
+
+			router.With(middleware.RateLimit(authLimiter)).Post("/forgot-password", func(w http.ResponseWriter, request *http.Request) {
+				var req ForgotPasswordRequest
+				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
+					httpjson.WriteError(w, err)
+					return
+				}
+				if err := service.controller.forgotPassword(request.Context(), &req); err != nil {
+					httpjson.WriteError(w, err)
+					return
+				}
+				httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			})
+
+			router.With(middleware.RateLimit(authLimiter)).Post("/reset-password", func(w http.ResponseWriter, request *http.Request) {
+				var req ResetPasswordRequest
+				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
+					httpjson.WriteError(w, err)
+					return
+				}
+				if err := service.controller.resetPassword(request.Context(), &req); err != nil {
+					httpjson.WriteError(w, err)
+					return
+				}
+				httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			})
 		}
-
-		router.With(middleware.RateLimit(authLimiter)).Post("/forgot-password", func(w http.ResponseWriter, request *http.Request) {
-			var req ForgotPasswordRequest
-			if err := httpjson.DecodeJSON(w, request, &req); err != nil {
-				httpjson.WriteError(w, err)
-				return
-			}
-			if err := service.controller.forgotPassword(request.Context(), &req); err != nil {
-				httpjson.WriteError(w, err)
-				return
-			}
-			httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		})
-
-		router.With(middleware.RateLimit(authLimiter)).Post("/reset-password", func(w http.ResponseWriter, request *http.Request) {
-			var req ResetPasswordRequest
-			if err := httpjson.DecodeJSON(w, request, &req); err != nil {
-				httpjson.WriteError(w, err)
-				return
-			}
-			if err := service.controller.resetPassword(request.Context(), &req); err != nil {
-				httpjson.WriteError(w, err)
-				return
-			}
-			httpjson.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-		})
 
 		router.With(middleware.RequireAuth(service)).Post("/logout", func(w http.ResponseWriter, request *http.Request) {
 			authorization := request.Header.Get("Authorization")

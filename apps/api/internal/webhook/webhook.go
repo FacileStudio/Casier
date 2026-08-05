@@ -17,6 +17,11 @@ import (
 	"gorm.io/gorm"
 )
 
+const (
+	lookupTimeout   = 10 * time.Second
+	deliveryTimeout = 10 * time.Second
+)
+
 type Event struct {
 	Type        string `json:"type"`
 	ProjectID   int64  `json:"project_id"`
@@ -31,43 +36,69 @@ type Dispatcher struct {
 	orm    *gorm.DB
 	logger *slog.Logger
 	client *http.Client
+	load   func(ctx context.Context, projectID int64) ([]schemas.Webhook, error)
 }
 
 func NewDispatcher(orm *gorm.DB, logger *slog.Logger) *Dispatcher {
-	return &Dispatcher{
+	d := &Dispatcher{
 		orm:    orm,
 		logger: logger,
-		client: &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{Timeout: deliveryTimeout},
+	}
+	d.load = d.loadActive
+	return d
+}
+
+// Fire delivers the event in the background. The caller's context is detached
+// with context.WithoutCancel so its values survive for logging and tracing
+// while the HTTP handler returning does not cancel the delivery.
+func (d *Dispatcher) Fire(ctx context.Context, event Event) {
+	go d.dispatch(context.WithoutCancel(ctx), event)
+}
+
+func (d *Dispatcher) dispatch(ctx context.Context, event Event) {
+	lookupCtx, cancel := context.WithTimeout(ctx, lookupTimeout)
+	defer cancel()
+
+	webhooks, err := d.load(lookupCtx, event.ProjectID)
+	if err != nil {
+		d.logger.Error("failed to load webhooks",
+			slog.Int64("project_id", event.ProjectID),
+			slog.String("event", event.Type),
+			slog.Any("error", err))
+		return
+	}
+
+	payload, err := json.Marshal(event)
+	if err != nil {
+		d.logger.Error("failed to encode webhook payload",
+			slog.Int64("project_id", event.ProjectID),
+			slog.String("event", event.Type),
+			slog.Any("error", err))
+		return
+	}
+
+	for _, wh := range webhooks {
+		if !matchesEvent(wh.Events, event.Type) {
+			continue
+		}
+		d.send(ctx, wh, payload)
 	}
 }
 
-func (d *Dispatcher) Fire(ctx context.Context, event Event) {
-	go func() {
-		var webhooks []schemas.Webhook
-		err := d.orm.WithContext(ctx).
-			Where("project_id = ? AND active = ?", event.ProjectID, true).
-			Find(&webhooks).Error
-		if err != nil {
-			d.logger.Error("failed to load webhooks", slog.Any("error", err))
-			return
-		}
-
-		payload, err := json.Marshal(event)
-		if err != nil {
-			return
-		}
-
-		for _, wh := range webhooks {
-			if !matchesEvent(wh.Events, event.Type) {
-				continue
-			}
-			d.send(wh, payload)
-		}
-	}()
+func (d *Dispatcher) loadActive(ctx context.Context, projectID int64) ([]schemas.Webhook, error) {
+	var webhooks []schemas.Webhook
+	err := d.orm.WithContext(ctx).
+		Where("project_id = ? AND active = ?", projectID, true).
+		Find(&webhooks).Error
+	return webhooks, err
 }
 
-func (d *Dispatcher) send(wh schemas.Webhook, payload []byte) {
-	req, err := http.NewRequest(http.MethodPost, wh.URL, bytes.NewReader(payload))
+func (d *Dispatcher) send(ctx context.Context, wh schemas.Webhook, payload []byte) {
+	ctx, cancel := context.WithTimeout(ctx, deliveryTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, wh.URL, bytes.NewReader(payload))
 	if err != nil {
 		d.logger.Warn("webhook request failed", slog.Int64("webhook_id", wh.ID), slog.Any("error", err))
 		return
@@ -75,10 +106,7 @@ func (d *Dispatcher) send(wh schemas.Webhook, payload []byte) {
 	req.Header.Set("Content-Type", "application/json")
 
 	if wh.Secret != "" {
-		mac := hmac.New(sha256.New, []byte(wh.Secret))
-		mac.Write(payload)
-		sig := hex.EncodeToString(mac.Sum(nil))
-		req.Header.Set("X-Casier-Signature", "sha256="+sig)
+		req.Header.Set("X-Casier-Signature", Signature(wh.Secret, payload))
 	}
 
 	resp, err := d.client.Do(req)
@@ -88,6 +116,14 @@ func (d *Dispatcher) send(wh schemas.Webhook, payload []byte) {
 	}
 	resp.Body.Close()
 	d.logger.Info("webhook delivered", slog.Int64("webhook_id", wh.ID), slog.Int("status", resp.StatusCode))
+}
+
+// Signature is the value of the X-Casier-Signature header: the hex HMAC-SHA256
+// of the raw payload, prefixed with the digest name.
+func Signature(secret string, payload []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(payload)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
 
 func matchesEvent(events string, eventType string) bool {

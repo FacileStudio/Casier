@@ -126,5 +126,6 @@ type RotateKeyRequest struct {
 }
 
 type RotateKeyResponse struct {
-	Rotated int `json:"rotated"`
+	Rotated int    `json:"rotated"`
+	Warning string `json:"warning"`
 }

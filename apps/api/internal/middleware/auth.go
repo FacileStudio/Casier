@@ -28,7 +28,10 @@ func RequireAuth(authService Authenticator) func(http.Handler) http.Handler {
 				httpjson.WriteError(w, err)
 				return
 			}
-			data, ok := rawData.(interface{ GetEmail() string })
+			data, ok := rawData.(interface {
+				GetEmail() string
+				GetScope() *authcontext.TokenScope
+			})
 			if !ok {
 				httpjson.WriteError(w, errors.Unauthorized("missing auth"))
 				return
@@ -47,6 +50,7 @@ func RequireAuth(authService Authenticator) func(http.Handler) http.Handler {
 				UserID:   userID,
 				Email:    data.GetEmail(),
 				ClientIP: clientIP,
+				Scope:    data.GetScope(),
 			})
 			next.ServeHTTP(w, request.WithContext(authContext))
 		})

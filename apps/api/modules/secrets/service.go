@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
@@ -27,7 +28,12 @@ func joinTags(tags []string) string {
 
 var refPattern = regexp.MustCompile(`\$\{ref:([^/]+)/([^}]+)\}`)
 
-func (service *Service) resolveReferences(ctx context.Context, projectID int64, value string, dataKey []byte, depth int) string {
+// resolveReferences expands ${ref:env/KEY} against the project's other
+// environments. The caller's scope is honoured here: an environment-scoped API
+// token must not be able to read a environment it was denied by writing a
+// reference into one it was granted, so a denied reference is left literal,
+// exactly like every other resolution failure.
+func (service *Service) resolveReferences(ctx context.Context, projectID int64, value string, dataKey []byte, scope *authcontext.TokenScope, depth int) string {
 	if depth > 3 || !strings.Contains(value, "${ref:") {
 		return value
 	}
@@ -38,6 +44,10 @@ func (service *Service) resolveReferences(ctx context.Context, projectID int64, 
 			return match
 		}
 		envSlug, secretKey := parts[1], parts[2]
+
+		if !scope.AllowsEnvironment(envSlug) {
+			return match
+		}
 
 		envID, err := service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
 		if err != nil {
@@ -57,7 +67,7 @@ func (service *Service) resolveReferences(ctx context.Context, projectID int64, 
 			return match
 		}
 
-		return service.resolveReferences(ctx, projectID, string(plaintext), dataKey, depth+1)
+		return service.resolveReferences(ctx, projectID, string(plaintext), dataKey, scope, depth+1)
 	})
 }
 
@@ -67,6 +77,106 @@ func splitTags(s string) []string {
 	}
 	return strings.Split(s, ",")
 }
+
+const roleOwner = "owner"
+
+const maxSecretKeyLength = 256
+
+const maxSecretValueSize = 64 * 1024
+
+// caller is who a secret operation runs as: the resolved user, their role in
+// the project, and the scope of the API token they authenticated with, if any.
+type caller struct {
+	userID   int64
+	role     string
+	clientIP string
+	scope    *authcontext.TokenScope
+}
+
+func (person caller) logID() string {
+	return strconv.FormatInt(person.userID, 10)
+}
+
+// secretGrant folds the secret_acls rows of one secret into a decision for one
+// caller. A secret with no rows at all is unrestricted and governed by the
+// project role alone.
+type secretGrant struct {
+	restricted bool
+	canRead    bool
+	canWrite   bool
+}
+
+// aclAllowsRead answers whether the caller may see a secret's value. An owner
+// bypasses ACLs so a project can never be locked away from the person who owns
+// it.
+func aclAllowsRead(role string, grant secretGrant) bool {
+	if role == roleOwner || !grant.restricted {
+		return true
+	}
+	return grant.canRead
+}
+
+// aclAllowsWrite answers whether the caller may change a secret. The project
+// role is checked before this, so this only narrows what a member may touch.
+func aclAllowsWrite(role string, grant secretGrant) bool {
+	if role == roleOwner || !grant.restricted {
+		return true
+	}
+	return grant.canWrite
+}
+
+// secretGrants reads every ACL that applies to the given secrets in one query,
+// folded server-side so the result holds one row per restricted secret rather
+// than one row per grantee.
+func (service *Service) secretGrants(ctx context.Context, orm *gorm.DB, secretIDs []int64, userID int64) (map[int64]secretGrant, error) {
+	grants := make(map[int64]secretGrant)
+	if len(secretIDs) == 0 {
+		return grants, nil
+	}
+
+	var rows []struct {
+		SecretID int64
+		CanRead  bool
+		CanWrite bool
+	}
+	err := orm.WithContext(ctx).
+		Table("secret_acls").
+		Select("secret_id, bool_or(user_id = ? and can_read) as can_read, bool_or(user_id = ? and can_write) as can_write", userID, userID).
+		Where("secret_id IN ?", secretIDs).
+		Group("secret_id").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, errors.Internal("failed to load secret ACLs", err)
+	}
+
+	for _, row := range rows {
+		grants[row.SecretID] = secretGrant{restricted: true, canRead: row.CanRead, canWrite: row.CanWrite}
+	}
+	return grants, nil
+}
+
+func (service *Service) assertSecretWrite(ctx context.Context, secretID int64, person caller) error {
+	grants, err := service.secretGrants(ctx, service.orm, []int64{secretID}, person.userID)
+	if err != nil {
+		return err
+	}
+	if !aclAllowsWrite(person.role, grants[secretID]) {
+		return errors.Forbidden("insufficient permissions for this secret")
+	}
+	return nil
+}
+
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// tagFilterPattern turns a user-supplied tag into a LIKE pattern that matches a
+// whole tag and nothing else: wildcards in the filter are neutralised, and the
+// comma padding stops "prod" from matching "not-production". It must be used
+// with an explicit ESCAPE '\' clause.
+func tagFilterPattern(tag string) string {
+	return "%," + likeEscaper.Replace(tag) + ",%"
+}
+
+const tagFilterClause = `',' || tags || ',' LIKE ? ESCAPE '\'`
 
 type ProjectResolver interface {
 	ResolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
@@ -97,33 +207,63 @@ func NewService(orm *gorm.DB, logger *slog.Logger, projectRes ProjectResolver, e
 	return service
 }
 
-func (service *Service) fireWebhook(ctx context.Context, eventType string, envID int64, key string, version int, userID, clientIP string) {
-	projectID, err := service.getProjectIDFromEnv(ctx, envID)
+func (service *Service) fireWebhook(ctx context.Context, eventType string, envID int64, key string, version int, person caller) {
+	projectID, envSlug, err := service.environmentRef(ctx, envID)
 	if err != nil {
 		return
 	}
+	service.emitSecretEvent(ctx, projectID, envSlug, eventType, key, version, person)
+}
+
+// emitSecretEvent records one secret mutation in the audit log and delivers it
+// to the project's webhooks. It takes the project and environment already
+// resolved so a bulk operation pays for that lookup once.
+func (service *Service) emitSecretEvent(ctx context.Context, projectID int64, envSlug, eventType, key string, version int, person caller) {
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, userID, "", eventType, "secret:"+key, "", clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), "", eventType, "secret:"+key, "", person.clientIP)
 	}
 	if service.webhooks == nil {
 		return
 	}
 	service.webhooks.Fire(ctx, webhook.Event{
-		Type:      eventType,
-		ProjectID: projectID,
-		Key:       key,
-		Version:   version,
-		UserID:    userID,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Type:        eventType,
+		ProjectID:   projectID,
+		Environment: envSlug,
+		Key:         key,
+		Version:     version,
+		UserID:      person.logID(),
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
-func (service *Service) getProjectIDFromEnv(ctx context.Context, envID int64) (int64, error) {
+// environmentRef resolves the project an environment belongs to and its slug,
+// which audit entries and webhook payloads both name.
+func (service *Service) environmentRef(ctx context.Context, envID int64) (int64, string, error) {
 	var env schemas.Environment
 	if err := service.orm.WithContext(ctx).Where("id = ?", envID).First(&env).Error; err != nil {
-		return 0, errors.Internal("failed to resolve environment", err)
+		return 0, "", errors.Internal("failed to resolve environment", err)
 	}
-	return env.ProjectID, nil
+	return env.ProjectID, env.Slug, nil
+}
+
+func (service *Service) getProjectIDFromEnv(ctx context.Context, envID int64) (int64, error) {
+	projectID, _, err := service.environmentRef(ctx, envID)
+	return projectID, err
+}
+
+// projectRole reads the caller's role in a project. The project resolver only
+// checks roles, and ACL enforcement needs the role itself to let an owner
+// through.
+func (service *Service) projectRole(ctx context.Context, projectID, userID int64) string {
+	var role string
+	err := service.orm.WithContext(ctx).
+		Model(&schemas.ProjectMember{}).
+		Where("project_id = ? AND user_id = ?", projectID, userID).
+		Pluck("role", &role).Error
+	if err != nil {
+		return ""
+	}
+	return role
 }
 
 func (service *Service) resolveDataKey(ctx context.Context, envID int64) ([]byte, error) {
@@ -138,10 +278,13 @@ func (service *Service) resolveDataKey(ctx context.Context, envID int64) ([]byte
 	return dataKey, nil
 }
 
-func (service *Service) listSecrets(ctx context.Context, envID int64, userID, clientIP, tagFilter string) ([]SecretResponse, int, error) {
+// listSecrets returns the secrets of an environment the caller is allowed to
+// read. A secret carrying ACL rows is dropped entirely unless the caller holds
+// a can_read grant on it, which is also what hides it from export and diff.
+func (service *Service) listSecrets(ctx context.Context, envID int64, person caller, tagFilter string) ([]SecretResponse, int, error) {
 	query := service.orm.WithContext(ctx).Where("environment_id = ?", envID)
 	if tagFilter != "" {
-		query = query.Where("tags LIKE ?", "%"+tagFilter+"%")
+		query = query.Where(tagFilterClause, tagFilterPattern(tagFilter))
 	}
 	var records []schemas.Secret
 	err := query.Order("key asc").Find(&records).Error
@@ -149,12 +292,11 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 		return nil, 0, errors.Internal("failed to list secrets", err)
 	}
 
-	service.logger.Info("secrets.list", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.Int("count", len(records)))
-
 	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
 	rotationDays := service.rotationDays(ctx, projectID)
 
 	if len(records) == 0 {
+		service.logger.Info("secrets.list", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", 0))
 		return []SecretResponse{}, rotationDays, nil
 	}
 
@@ -167,21 +309,28 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 	for i, r := range records {
 		ids[i] = r.ID
 	}
+	grants, err := service.secretGrants(ctx, service.orm, ids, person.userID)
+	if err != nil {
+		return nil, 0, err
+	}
 	rotations := service.lastRotations(ctx, ids)
 	now := time.Now().UTC()
 
-	secrets := make([]SecretResponse, len(records))
-	for i, r := range records {
+	secrets := make([]SecretResponse, 0, len(records))
+	for _, r := range records {
+		if !aclAllowsRead(person.role, grants[r.ID]) {
+			continue
+		}
 		plaintext, err := crypto.Decrypt(r.EncryptedValue, r.Nonce, dataKey)
 		if err != nil {
 			return nil, 0, errors.Internal("failed to decrypt secret", err)
 		}
-		resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, 0)
+		resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person.scope, 0)
 		rotatedAt, ok := rotations[r.ID]
 		if !ok {
 			rotatedAt = r.UpdatedAt
 		}
-		secrets[i] = SecretResponse{
+		secrets = append(secrets, SecretResponse{
 			ID:             r.ID,
 			Key:            r.Key,
 			Value:          resolved,
@@ -191,11 +340,13 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, userID, cl
 			UpdatedAt:      r.UpdatedAt,
 			RotatedAt:      rotatedAt,
 			RotationStatus: rotationStatus(rotatedAt, rotationDays, now),
-		}
+		})
 	}
 
+	service.logger.Info("secrets.list", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", len(secrets)))
+
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, userID, "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(records))+" secrets", clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), "", "secrets.bulk_read", "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(secrets))+" secrets", person.clientIP)
 	}
 
 	return secrets, rotationDays, nil
@@ -307,21 +458,40 @@ func (service *Service) lastRotations(ctx context.Context, secretIDs []int64) ma
 	return rotations
 }
 
-func (service *Service) updateTags(ctx context.Context, envID int64, key string, tags []string) error {
-	result := service.orm.WithContext(ctx).
-		Model(&schemas.Secret{}).
-		Where("environment_id = ? AND key = ?", envID, key).
-		Update("tags", joinTags(tags))
-	if result.Error != nil {
-		return errors.Internal("failed to update tags", result.Error)
+func (service *Service) updateTags(ctx context.Context, envID int64, key string, tags []string, person caller) error {
+	secret, err := service.findSecret(ctx, envID, key)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
-		return errors.NotFound("secret not found")
+	if err := service.assertSecretWrite(ctx, secret.ID, person); err != nil {
+		return err
+	}
+
+	err = service.orm.WithContext(ctx).
+		Model(&schemas.Secret{}).
+		Where("id = ?", secret.ID).
+		Update("tags", joinTags(tags)).Error
+	if err != nil {
+		return errors.Internal("failed to update tags", err)
 	}
 	return nil
 }
 
-func (service *Service) createSecret(ctx context.Context, envID int64, key, value, userID, clientIP string, tags []string) (*SecretResponse, error) {
+func (service *Service) findSecret(ctx context.Context, envID int64, key string) (*schemas.Secret, error) {
+	var record schemas.Secret
+	err := service.orm.WithContext(ctx).
+		Where("environment_id = ? AND key = ?", envID, key).
+		First(&record).Error
+	if stderrors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.NotFound("secret not found")
+	}
+	if err != nil {
+		return nil, errors.Internal("failed to find secret", err)
+	}
+	return &record, nil
+}
+
+func (service *Service) createSecret(ctx context.Context, envID int64, key, value string, person caller, tags []string) (*SecretResponse, error) {
 	dataKey, err := service.resolveDataKey(ctx, envID)
 	if err != nil {
 		return nil, err
@@ -352,15 +522,15 @@ func (service *Service) createSecret(ctx context.Context, envID int64, key, valu
 			Version:        1,
 			EncryptedValue: ciphertext,
 			Nonce:          nonce,
-			ChangedBy:      userID,
+			ChangedBy:      person.logID(),
 		}).Error
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	service.logger.Info("secrets.create", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
-	service.fireWebhook(ctx, "secret.created", envID, key, 1, userID, clientIP)
+	service.logger.Info("secrets.create", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
+	service.fireWebhook(ctx, "secret.created", envID, key, 1, person)
 
 	return &SecretResponse{
 		ID:             record.ID,
@@ -375,17 +545,15 @@ func (service *Service) createSecret(ctx context.Context, envID int64, key, valu
 	}, nil
 }
 
-func (service *Service) updateSecret(ctx context.Context, envID int64, key, value, userID, clientIP string) (*SecretResponse, error) {
-	var record schemas.Secret
-	err := service.orm.WithContext(ctx).
-		Where("environment_id = ? AND key = ?", envID, key).
-		First(&record).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.NotFound("secret not found")
-	}
+func (service *Service) updateSecret(ctx context.Context, envID int64, key, value string, person caller) (*SecretResponse, error) {
+	found, err := service.findSecret(ctx, envID, key)
 	if err != nil {
-		return nil, errors.Internal("failed to find secret", err)
+		return nil, err
 	}
+	if err := service.assertSecretWrite(ctx, found.ID, person); err != nil {
+		return nil, err
+	}
+	record := *found
 
 	dataKey, err := service.resolveDataKey(ctx, envID)
 	if err != nil {
@@ -410,15 +578,15 @@ func (service *Service) updateSecret(ctx context.Context, envID int64, key, valu
 			Version:        record.Version,
 			EncryptedValue: ciphertext,
 			Nonce:          nonce,
-			ChangedBy:      userID,
+			ChangedBy:      person.logID(),
 		}).Error
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	service.logger.Info("secrets.update", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.String("key", key), slog.Int("version", record.Version))
-	service.fireWebhook(ctx, "secret.updated", envID, key, record.Version, userID, clientIP)
+	service.logger.Info("secrets.update", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key), slog.Int("version", record.Version))
+	service.fireWebhook(ctx, "secret.updated", envID, key, record.Version, person)
 
 	return &SecretResponse{
 		ID:             record.ID,
@@ -465,17 +633,15 @@ func (service *Service) listVersions(ctx context.Context, envID int64, key strin
 	return result, nil
 }
 
-func (service *Service) rollbackSecret(ctx context.Context, envID int64, key string, targetVersion int, userID, clientIP string) (*SecretResponse, error) {
-	var secret schemas.Secret
-	err := service.orm.WithContext(ctx).
-		Where("environment_id = ? AND key = ?", envID, key).
-		First(&secret).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.NotFound("secret not found")
-	}
+func (service *Service) rollbackSecret(ctx context.Context, envID int64, key string, targetVersion int, person caller) (*SecretResponse, error) {
+	found, err := service.findSecret(ctx, envID, key)
 	if err != nil {
-		return nil, errors.Internal("failed to find secret", err)
+		return nil, err
 	}
+	if err := service.assertSecretWrite(ctx, found.ID, person); err != nil {
+		return nil, err
+	}
+	secret := *found
 
 	var version schemas.SecretVersion
 	err = service.orm.WithContext(ctx).
@@ -501,7 +667,7 @@ func (service *Service) rollbackSecret(ctx context.Context, envID int64, key str
 			Version:        secret.Version,
 			EncryptedValue: version.EncryptedValue,
 			Nonce:          version.Nonce,
-			ChangedBy:      userID,
+			ChangedBy:      person.logID(),
 		}).Error
 	})
 	if err != nil {
@@ -517,7 +683,8 @@ func (service *Service) rollbackSecret(ctx context.Context, envID int64, key str
 		return nil, errors.Internal("failed to decrypt secret", err)
 	}
 
-	service.logger.Info("secrets.rollback", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.String("key", key), slog.Int("to_version", targetVersion), slog.Int("new_version", secret.Version))
+	service.logger.Info("secrets.rollback", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key), slog.Int("to_version", targetVersion), slog.Int("new_version", secret.Version))
+	service.fireWebhook(ctx, "secret.rolled_back", envID, key, secret.Version, person)
 
 	return &SecretResponse{
 		ID:             secret.ID,
@@ -532,86 +699,217 @@ func (service *Service) rollbackSecret(ctx context.Context, envID int64, key str
 	}, nil
 }
 
-func (service *Service) importEnv(ctx context.Context, envID int64, content, userID, clientIP string) (*ImportResponse, error) {
+// importEnv applies a whole .env file in one transaction: either every parsed
+// line lands or none does. Lines the caller may not write, and keys the schema
+// cannot hold, are counted as skipped rather than failing the import.
+func (service *Service) importEnv(ctx context.Context, envID int64, content string, person caller) (*ImportResponse, error) {
 	dataKey, err := service.resolveDataKey(ctx, envID)
 	if err != nil {
 		return nil, err
 	}
 
+	entries, skipped := parseEnvFile(content)
 	result := &ImportResponse{}
-	lines := strings.Split(content, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") && len(value) >= 2 {
-			value = value[1 : len(value)-1]
-		}
-		if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") && len(value) >= 2 {
-			value = value[1 : len(value)-1]
+	var created, updated []importedSecret
+	denied := 0
+
+	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result.Created, result.Updated = 0, 0
+		created, updated, denied = nil, nil, 0
+
+		var records []schemas.Secret
+		if err := tx.Where("environment_id = ?", envID).Find(&records).Error; err != nil {
+			return errors.Internal("failed to load environment secrets", err)
 		}
 
-		var existing schemas.Secret
-		err := service.orm.WithContext(ctx).
-			Where("environment_id = ? AND key = ?", envID, key).
-			First(&existing).Error
+		byKey := make(map[string]*schemas.Secret, len(records))
+		ids := make([]int64, len(records))
+		for i := range records {
+			byKey[records[i].Key] = &records[i]
+			ids[i] = records[i].ID
+		}
+		grants, err := service.secretGrants(ctx, tx, ids, person.userID)
+		if err != nil {
+			return err
+		}
 
-		if stderrors.Is(err, gorm.ErrRecordNotFound) {
-			ciphertext, nonce, encErr := crypto.Encrypt([]byte(value), dataKey)
+		for _, entry := range entries {
+			ciphertext, nonce, encErr := crypto.Encrypt([]byte(entry.value), dataKey)
 			if encErr != nil {
-				return nil, errors.Internal("failed to encrypt", encErr)
+				return errors.Internal("failed to encrypt", encErr)
 			}
+
+			existing, found := byKey[entry.key]
+			if found {
+				if !aclAllowsWrite(person.role, grants[existing.ID]) {
+					denied++
+					continue
+				}
+				existing.EncryptedValue = ciphertext
+				existing.Nonce = nonce
+				existing.Version++
+				if err := tx.Save(existing).Error; err != nil {
+					return errors.Internal("failed to update secret", err)
+				}
+				if err := tx.Create(&schemas.SecretVersion{
+					SecretID:       existing.ID,
+					Version:        existing.Version,
+					EncryptedValue: ciphertext,
+					Nonce:          nonce,
+					ChangedBy:      person.logID(),
+				}).Error; err != nil {
+					return errors.Internal("failed to record version", err)
+				}
+				result.Updated++
+				updated = append(updated, importedSecret{key: entry.key, version: existing.Version})
+				continue
+			}
+
 			record := &schemas.Secret{
 				EnvironmentID:  envID,
-				Key:            key,
+				Key:            entry.key,
 				EncryptedValue: ciphertext,
 				Nonce:          nonce,
 				Version:        1,
 			}
-			if err := service.orm.WithContext(ctx).Create(record).Error; err != nil {
-				result.Skipped++
-				continue
+			if err := tx.Create(record).Error; err != nil {
+				return errors.Internal("failed to create secret", err)
 			}
-			service.orm.WithContext(ctx).Create(&schemas.SecretVersion{
-				SecretID: record.ID, Version: 1,
-				EncryptedValue: ciphertext, Nonce: nonce, ChangedBy: userID,
-			})
+			if err := tx.Create(&schemas.SecretVersion{
+				SecretID:       record.ID,
+				Version:        1,
+				EncryptedValue: ciphertext,
+				Nonce:          nonce,
+				ChangedBy:      person.logID(),
+			}).Error; err != nil {
+				return errors.Internal("failed to record version", err)
+			}
+			byKey[entry.key] = record
 			result.Created++
-		} else if err == nil {
-			ciphertext, nonce, encErr := crypto.Encrypt([]byte(value), dataKey)
-			if encErr != nil {
-				return nil, errors.Internal("failed to encrypt", encErr)
-			}
-			existing.EncryptedValue = ciphertext
-			existing.Nonce = nonce
-			existing.Version++
-			if err := service.orm.WithContext(ctx).Save(&existing).Error; err != nil {
-				result.Skipped++
-				continue
-			}
-			service.orm.WithContext(ctx).Create(&schemas.SecretVersion{
-				SecretID: existing.ID, Version: existing.Version,
-				EncryptedValue: ciphertext, Nonce: nonce, ChangedBy: userID,
-			})
-			result.Updated++
-		} else {
-			result.Skipped++
+			created = append(created, importedSecret{key: entry.key, version: 1})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	result.Skipped = skipped + denied
+
+	service.logger.Info("secrets.import", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("created", result.Created), slog.Int("updated", result.Updated), slog.Int("skipped", result.Skipped))
+
+	projectID, envSlug, err := service.environmentRef(ctx, envID)
+	if err == nil {
+		if service.audit != nil {
+			detail := "created=" + strconv.Itoa(result.Created) + " updated=" + strconv.Itoa(result.Updated) + " skipped=" + strconv.Itoa(result.Skipped)
+			service.audit.Log(ctx, projectID, person.logID(), "", "secrets.import", "environment:"+envSlug, detail, person.clientIP)
+		}
+		for _, secret := range created {
+			service.emitSecretEvent(ctx, projectID, envSlug, "secret.created", secret.key, secret.version, person)
+		}
+		for _, secret := range updated {
+			service.emitSecretEvent(ctx, projectID, envSlug, "secret.updated", secret.key, secret.version, person)
 		}
 	}
 
-	service.logger.Info("secrets.import", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.Int("created", result.Created), slog.Int("updated", result.Updated))
 	return result, nil
 }
 
-func (service *Service) exportEnv(ctx context.Context, envID int64, userID, clientIP string) (string, error) {
-	secrets, _, err := service.listSecrets(ctx, envID, userID, clientIP, "")
+type importedSecret struct {
+	key     string
+	version int
+}
+
+type envEntry struct {
+	key   string
+	value string
+}
+
+// parseEnvFile reads back the dialect exportEnv writes: one KEY=value per line,
+// '#' comments, and quoted values whose escapes decodeEnvValue expands. Lines
+// without a '=' and keys the secrets table cannot hold are counted as skipped
+// instead of being inserted.
+func parseEnvFile(content string) ([]envEntry, int) {
+	var entries []envEntry
+	skipped := 0
+
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		rawKey, rawValue, ok := strings.Cut(line, "=")
+		if !ok {
+			skipped++
+			continue
+		}
+		key := strings.TrimSpace(rawKey)
+		if key == "" || len(key) > maxSecretKeyLength {
+			skipped++
+			continue
+		}
+		entries = append(entries, envEntry{key: key, value: decodeEnvValue(strings.TrimSpace(rawValue))})
+	}
+
+	return entries, skipped
+}
+
+var envValueEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`, "\r", `\r`, "\t", `\t`)
+
+// encodeEnvValue renders a secret value as a .env literal. Anything a parser
+// could misread - whitespace, quotes, a comment marker, a backslash - forces
+// the double-quoted form, where backslashes are escaped before quotes and line
+// breaks become two-character escapes so one secret stays on one line.
+func encodeEnvValue(value string) string {
+	if value == "" || !strings.ContainsAny(value, " \t\r\n\"'#\\") {
+		return value
+	}
+	return `"` + envValueEscaper.Replace(value) + `"`
+}
+
+// decodeEnvValue is the exact inverse of encodeEnvValue. Single-quoted values
+// are taken literally, as in every other .env dialect.
+func decodeEnvValue(value string) string {
+	if len(value) >= 2 && strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") {
+		return value[1 : len(value)-1]
+	}
+	if len(value) < 2 || !strings.HasPrefix(value, `"`) || !strings.HasSuffix(value, `"`) {
+		return value
+	}
+
+	inner := value[1 : len(value)-1]
+	if !strings.Contains(inner, `\`) {
+		return inner
+	}
+
+	var sb strings.Builder
+	sb.Grow(len(inner))
+	for i := 0; i < len(inner); i++ {
+		if inner[i] != '\\' || i+1 >= len(inner) {
+			sb.WriteByte(inner[i])
+			continue
+		}
+		i++
+		switch inner[i] {
+		case 'n':
+			sb.WriteByte('\n')
+		case 'r':
+			sb.WriteByte('\r')
+		case 't':
+			sb.WriteByte('\t')
+		case '\\':
+			sb.WriteByte('\\')
+		case '"':
+			sb.WriteByte('"')
+		default:
+			sb.WriteByte('\\')
+			sb.WriteByte(inner[i])
+		}
+	}
+	return sb.String()
+}
+
+func (service *Service) exportEnv(ctx context.Context, envID int64, person caller) (string, error) {
+	secrets, _, err := service.listSecrets(ctx, envID, person, "")
 	if err != nil {
 		return "", err
 	}
@@ -620,24 +918,18 @@ func (service *Service) exportEnv(ctx context.Context, envID int64, userID, clie
 	for _, s := range secrets {
 		sb.WriteString(s.Key)
 		sb.WriteString("=")
-		if strings.ContainsAny(s.Value, " \t\n\"'#") {
-			sb.WriteString("\"")
-			sb.WriteString(strings.ReplaceAll(s.Value, "\"", "\\\""))
-			sb.WriteString("\"")
-		} else {
-			sb.WriteString(s.Value)
-		}
+		sb.WriteString(encodeEnvValue(s.Value))
 		sb.WriteString("\n")
 	}
 	return sb.String(), nil
 }
 
-func (service *Service) diffEnvironments(ctx context.Context, envA, envB int64, userID, clientIP string) (*DiffResponse, error) {
-	secretsA, _, err := service.listSecrets(ctx, envA, userID, clientIP, "")
+func (service *Service) diffEnvironments(ctx context.Context, envA, envB int64, person caller) (*DiffResponse, error) {
+	secretsA, _, err := service.listSecrets(ctx, envA, person, "")
 	if err != nil {
 		return nil, err
 	}
-	secretsB, _, err := service.listSecrets(ctx, envB, userID, clientIP, "")
+	secretsB, _, err := service.listSecrets(ctx, envB, person, "")
 	if err != nil {
 		return nil, err
 	}
@@ -777,9 +1069,17 @@ func (service *Service) deleteACL(ctx context.Context, envID int64, key string, 
 	return nil
 }
 
-func (service *Service) deleteSecret(ctx context.Context, envID int64, key, userID, clientIP string) error {
+func (service *Service) deleteSecret(ctx context.Context, envID int64, key string, person caller) error {
+	secret, err := service.findSecret(ctx, envID, key)
+	if err != nil {
+		return err
+	}
+	if err := service.assertSecretWrite(ctx, secret.ID, person); err != nil {
+		return err
+	}
+
 	result := service.orm.WithContext(ctx).
-		Where("environment_id = ? AND key = ?", envID, key).
+		Where("id = ?", secret.ID).
 		Delete(&schemas.Secret{})
 	if result.Error != nil {
 		return errors.Internal("failed to delete secret", result.Error)
@@ -788,7 +1088,7 @@ func (service *Service) deleteSecret(ctx context.Context, envID int64, key, user
 		return errors.NotFound("secret not found")
 	}
 
-	service.logger.Info("secrets.delete", slog.String("user_id", userID), slog.String("client_ip", clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
-	service.fireWebhook(ctx, "secret.deleted", envID, key, 0, userID, clientIP)
+	service.logger.Info("secrets.delete", slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
+	service.fireWebhook(ctx, "secret.deleted", envID, key, 0, person)
 	return nil
 }

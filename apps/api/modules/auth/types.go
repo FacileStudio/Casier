@@ -1,5 +1,7 @@
 package auth
 
+import "github.com/FacileStudio/Casier/apps/api/internal/authcontext"
+
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -21,7 +23,8 @@ type MeResponse struct {
 }
 
 type Data struct {
-	Email string `json:"email"`
+	Email string                  `json:"email"`
+	Scope *authcontext.TokenScope `json:"-"`
 }
 
 func (d *Data) GetEmail() string {
@@ -29,6 +32,15 @@ func (d *Data) GetEmail() string {
 		return ""
 	}
 	return d.Email
+}
+
+// GetScope returns the API token scope the caller authenticated with, or nil
+// for a user session, which is bounded by project roles alone.
+func (d *Data) GetScope() *authcontext.TokenScope {
+	if d == nil {
+		return nil
+	}
+	return d.Scope
 }
 
 type CLIExchangeRequest struct {

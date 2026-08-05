@@ -40,6 +40,10 @@ func (controller *Controller) create(ctx context.Context, projectSlug string, re
 		return nil, err
 	}
 
+	if err := requireWriteScope(ctx); err != nil {
+		return nil, err
+	}
+
 	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin")
 	if err != nil {
 		return nil, err
@@ -56,6 +60,14 @@ func (controller *Controller) update(ctx context.Context, projectSlug, envSlug s
 	userID, err := extractUserID(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	if err := requireWriteScope(ctx); err != nil {
+		return nil, err
+	}
+
+	if !scopeAllowsEnvironment(ctx, envSlug) {
+		return nil, errors.NotFound("environment not found")
 	}
 
 	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin")
@@ -76,12 +88,28 @@ func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug s
 		return err
 	}
 
+	if err := requireWriteScope(ctx); err != nil {
+		return err
+	}
+
+	if !scopeAllowsEnvironment(ctx, envSlug) {
+		return errors.NotFound("environment not found")
+	}
+
 	projectID, err := controller.service.projectResolver.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin")
 	if err != nil {
 		return err
 	}
 
 	return controller.service.deleteEnvironment(ctx, projectID, envSlug)
+}
+
+// requireWriteScope rejects a read-only API token before any mutation runs.
+func requireWriteScope(ctx context.Context) error {
+	if !scopeAllowsWrite(ctx) {
+		return errors.Forbidden("token does not have write permission")
+	}
+	return nil
 }
 
 func extractUserID(ctx context.Context) (int64, error) {

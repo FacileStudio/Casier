@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
@@ -23,13 +24,13 @@ import (
 
 type Service struct {
 	orm        *gorm.DB
-	encKey     []byte
+	keyring    *crypto.Keyring
 	logger     *slog.Logger
 	controller *Controller
 }
 
-func NewService(orm *gorm.DB, encKey []byte, logger *slog.Logger) *Service {
-	service := &Service{orm: orm, encKey: encKey, logger: logger}
+func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger) *Service {
+	service := &Service{orm: orm, keyring: keyring, logger: logger}
 	service.controller = newController(service)
 	return service
 }
@@ -38,14 +39,14 @@ func (service *Service) encryptToken(token string) ([]byte, []byte, error) {
 	if token == "" {
 		return nil, nil, nil
 	}
-	return crypto.Encrypt([]byte(token), service.encKey)
+	return crypto.Encrypt([]byte(token), service.keyring.Key())
 }
 
 func (service *Service) decryptToken(ciphertext, nonce []byte) string {
 	if len(ciphertext) == 0 {
 		return ""
 	}
-	plaintext, err := crypto.Decrypt(ciphertext, nonce, service.encKey)
+	plaintext, err := crypto.Decrypt(ciphertext, nonce, service.keyring.Key())
 	if err != nil {
 		return ""
 	}
@@ -238,16 +239,39 @@ func (service *Service) Authenticate(ctx context.Context, authorization string) 
 	return service.authenticateRequest(ctx, authorization)
 }
 
+// apiTokenScopeRow is the set of api_tokens columns that define what a token
+// may reach, kept separate from the identity columns so the mapping to a
+// TokenScope stays testable without a database.
+type apiTokenScopeRow struct {
+	TokenID      int64
+	ProjectID    int64
+	Environments string
+	Permissions  string
+}
+
+func scopeFromTokenRow(row apiTokenScopeRow) *authcontext.TokenScope {
+	return &authcontext.TokenScope{
+		TokenID:      row.TokenID,
+		ProjectID:    row.ProjectID,
+		Environments: authcontext.ParseScopeList(row.Environments),
+		Permissions:  authcontext.ParseScopeList(row.Permissions),
+	}
+}
+
 func (service *Service) authenticateApiToken(ctx context.Context, token string) (string, *Data, error) {
 	hashed := hashToken(token)
 	var out struct {
-		UserID    int64
-		Email     string
-		ExpiresAt time.Time
+		UserID       int64
+		Email        string
+		ExpiresAt    time.Time
+		TokenID      int64
+		ProjectID    int64
+		Environments string
+		Permissions  string
 	}
 	err := service.orm.WithContext(ctx).
 		Table("api_tokens at").
-		Select("u.id as user_id, u.email as email, at.expires_at as expires_at").
+		Select("u.id as user_id, u.email as email, at.expires_at as expires_at, at.id as token_id, at.project_id as project_id, at.environments as environments, at.permissions as permissions").
 		Joins("join users u on u.id = at.created_by").
 		Where("at.token_hash = ?", hashed).
 		Scan(&out).Error
@@ -267,7 +291,14 @@ func (service *Service) authenticateApiToken(ctx context.Context, token string) 
 			Update("last_used_at", time.Now())
 	}()
 
-	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email}, nil
+	scope := scopeFromTokenRow(apiTokenScopeRow{
+		TokenID:      out.TokenID,
+		ProjectID:    out.ProjectID,
+		Environments: out.Environments,
+		Permissions:  out.Permissions,
+	})
+
+	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email, Scope: scope}, nil
 }
 
 func (service *Service) StartSessionCleanup(ctx context.Context) {
@@ -322,9 +353,8 @@ func (service *Service) forgotPassword(ctx context.Context, email string) error 
 		return errors.Internal("failed to create reset token", err)
 	}
 
-	service.logger.Info("password reset requested",
+	service.logger.Warn("password reset requested but no mailer is configured, the reset token cannot be delivered",
 		slog.String("email", email),
-		slog.String("reset_token", token),
 	)
 
 	return nil
