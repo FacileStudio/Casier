@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"casier/internal/errors"
-	"casier/internal/httpjson"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
 )
 
 type visitor struct {

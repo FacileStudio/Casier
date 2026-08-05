@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"casier/schemas"
+	"github.com/FacileStudio/Casier/apps/api/schemas"
 
 	"gorm.io/gorm"
 )

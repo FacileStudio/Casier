@@ -3,9 +3,9 @@ package projects
 import (
 	"context"
 
-	"casier/internal/authcontext"
-	"casier/internal/errors"
-	"casier/schemas"
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/schemas"
 )
 
 type Controller struct {

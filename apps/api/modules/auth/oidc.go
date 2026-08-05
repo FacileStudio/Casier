@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"casier/internal/authcontext"
-	"casier/internal/env"
-	"casier/internal/errors"
-	"casier/internal/httpjson"
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
+	"github.com/FacileStudio/Casier/apps/api/internal/env"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"

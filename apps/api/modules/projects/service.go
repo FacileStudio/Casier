@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"casier/internal/audit"
-	"casier/internal/crypto"
-	"casier/internal/errors"
-	"casier/schemas"
+	"github.com/FacileStudio/Casier/apps/api/internal/audit"
+	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/schemas"
 
 	"gorm.io/gorm"
 )

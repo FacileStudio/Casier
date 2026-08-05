@@ -5,9 +5,9 @@ import (
 	"net"
 	"net/http"
 
-	"casier/internal/authcontext"
-	"casier/internal/errors"
-	"casier/internal/httpjson"
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
 )
 
 type Authenticator interface {

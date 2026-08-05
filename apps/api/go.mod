@@ -1,4 +1,4 @@
-module casier
+module github.com/FacileStudio/Casier/apps/api
 
 go 1.25.0
 

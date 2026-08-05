@@ -1,6 +1,6 @@
 package environments
 
-import documentation "casier/internal/documentation"
+import documentation "github.com/FacileStudio/Casier/apps/api/internal/documentation"
 
 var Documentation = documentation.Module{
 	Name:        "environments",

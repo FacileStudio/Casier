@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"strconv"
 
-	"casier/internal/errors"
-	"casier/internal/httpjson"
-	"casier/internal/middleware"
-	"casier/modules/auth"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
+	"github.com/FacileStudio/Casier/apps/api/internal/middleware"
+	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 
 	"github.com/go-chi/chi/v5"
 )

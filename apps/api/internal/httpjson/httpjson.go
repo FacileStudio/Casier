@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"casier/internal/errors"
+	"github.com/FacileStudio/Casier/apps/api/internal/errors"
 )
 
 const maxJSONBodyBytes int64 = 1 << 20

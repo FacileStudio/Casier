@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"casier/internal/env"
-	"casier/internal/httpjson"
-	"casier/internal/middleware"
+	"github.com/FacileStudio/Casier/apps/api/internal/env"
+	"github.com/FacileStudio/Casier/apps/api/internal/httpjson"
+	"github.com/FacileStudio/Casier/apps/api/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 )
