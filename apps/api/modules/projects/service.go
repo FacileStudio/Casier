@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
+	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
@@ -21,17 +23,21 @@ import (
 	"gorm.io/gorm"
 )
 
+// RotateKeyWarning is returned with every successful root key rotation: the new
+// key only lives in this process until ENCRYPTION_KEY is updated too.
+const RotateKeyWarning = "Update ENCRYPTION_KEY in the environment to the new key before restarting the API, otherwise it will start with the old key and be unable to decrypt any project data key."
+
 var slugRegexp = regexp.MustCompile(`[^a-z0-9]+`)
 
 type Service struct {
 	orm        *gorm.DB
-	encKey     []byte
+	keyring    *crypto.Keyring
 	audit      *audit.Logger
 	controller *Controller
 }
 
-func NewService(orm *gorm.DB, encKey []byte, auditLog *audit.Logger) *Service {
-	service := &Service{orm: orm, encKey: encKey, audit: auditLog}
+func NewService(orm *gorm.DB, keyring *crypto.Keyring, auditLog *audit.Logger) *Service {
+	service := &Service{orm: orm, keyring: keyring, audit: auditLog}
 	service.controller = newController(service)
 	return service
 }
@@ -42,14 +48,17 @@ func (service *Service) listProjects(ctx context.Context, userID int64) ([]Proje
 		Role string
 	}
 
-	err := service.orm.WithContext(ctx).
+	query := service.orm.WithContext(ctx).
 		Table("projects p").
 		Select("p.*, pm.role").
 		Joins("join project_members pm on pm.project_id = p.id").
-		Where("pm.user_id = ?", userID).
-		Order("p.created_at desc").
-		Scan(&results).Error
-	if err != nil {
+		Where("pm.user_id = ?", userID)
+
+	if scope := authcontext.ScopeFromContext(ctx); scope != nil {
+		query = query.Where("p.id = ?", scope.ProjectID)
+	}
+
+	if err := query.Order("p.created_at desc").Scan(&results).Error; err != nil {
 		return nil, errors.Internal("failed to list projects", err)
 	}
 
@@ -80,7 +89,7 @@ func (service *Service) createProject(ctx context.Context, userID int64, name, d
 		return nil, errors.Internal("failed to generate data key", err)
 	}
 
-	encDataKey, nonce, err := crypto.Encrypt(dataKey, service.encKey)
+	encDataKey, nonce, err := crypto.Encrypt(dataKey, service.keyring.Key())
 	if err != nil {
 		return nil, errors.Internal("failed to encrypt data key", err)
 	}
@@ -157,6 +166,9 @@ func (service *Service) getProject(ctx context.Context, slug string, userID int6
 	}
 	if result.ID == 0 {
 		return nil, errors.NotFound("project not found")
+	}
+	if err := ensureScopeAllowsProject(ctx, result.ID); err != nil {
+		return nil, err
 	}
 
 	return &ProjectResponse{
@@ -453,6 +465,16 @@ func (service *Service) acceptInvite(ctx context.Context, token string, userID i
 	}
 
 	return service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		claim := tx.Model(&schemas.Invite{}).
+			Where("id = ? AND (max_uses = 0 OR use_count < max_uses)", invite.ID).
+			Update("use_count", gorm.Expr("use_count + 1"))
+		if claim.Error != nil {
+			return errors.Internal("failed to claim invite", claim.Error)
+		}
+		if claim.RowsAffected == 0 {
+			return errors.Invalid("invite link has reached max uses")
+		}
+
 		member := &schemas.ProjectMember{
 			ProjectID: invite.ProjectID,
 			UserID:    userID,
@@ -464,9 +486,7 @@ func (service *Service) acceptInvite(ctx context.Context, token string, userID i
 			}
 			return errors.Internal("failed to add member", err)
 		}
-		return tx.Model(&schemas.Invite{}).
-			Where("id = ?", invite.ID).
-			Update("use_count", gorm.Expr("use_count + 1")).Error
+		return nil
 	})
 }
 
@@ -503,6 +523,10 @@ func (service *Service) getProjectWithRole(ctx context.Context, slug string, use
 			return nil, "", errors.NotFound("project not found")
 		}
 		return nil, "", errors.Internal("failed to find project", err)
+	}
+
+	if err := ensureScopeAllowsProject(ctx, project.ID); err != nil {
+		return nil, "", err
 	}
 
 	var member schemas.ProjectMember
@@ -558,10 +582,10 @@ func (service *Service) GetProjectDataKey(ctx context.Context, projectID int64) 
 		return nil, fmt.Errorf("project %d has no data key", projectID)
 	}
 
-	return crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, service.encKey)
+	return crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, service.keyring.Key())
 }
 
-func (service *Service) createApiToken(ctx context.Context, slug string, callerID int64, name, environments, permissions string) (*ApiTokenResponse, error) {
+func (service *Service) createApiToken(ctx context.Context, slug string, callerID int64, name, environments, permissions string, expiresInDays *int) (*ApiTokenResponse, error) {
 	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
 		return nil, err
@@ -573,6 +597,17 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 	var project schemas.Project
 	if err := service.orm.WithContext(ctx).Where("slug = ?", slug).First(&project).Error; err != nil {
 		return nil, errors.Internal("failed to find project", err)
+	}
+
+	lifetime, err := tokenLifetime(expiresInDays)
+	if err != nil {
+		return nil, err
+	}
+
+	requested := parseRequestedEnvironments(environments)
+	scoped, err := service.resolveScopeEnvironments(ctx, project.ID, requested)
+	if err != nil {
+		return nil, err
 	}
 
 	tokenBytes := make([]byte, 32)
@@ -588,27 +623,104 @@ func (service *Service) createApiToken(ctx context.Context, slug string, callerI
 	}
 
 	apiToken := &schemas.ApiToken{
-		TokenHash:    tokenHash,
-		Name:         name,
-		ProjectID:    project.ID,
-		Environments: environments,
-		Permissions:  permissions,
-		CreatedBy:    callerID,
-		ExpiresAt:    time.Now().Add(365 * 24 * time.Hour),
+		TokenHash:       tokenHash,
+		Name:            name,
+		ProjectID:       project.ID,
+		AllEnvironments: len(requested) == 0,
+		Permissions:     permissions,
+		CreatedBy:       callerID,
+		ExpiresAt:       time.Now().Add(lifetime),
 	}
-	if err := service.orm.WithContext(ctx).Create(apiToken).Error; err != nil {
-		return nil, errors.Internal("failed to create API token", err)
+
+	err = service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(apiToken).Error; err != nil {
+			return errors.Internal("failed to create API token", err)
+		}
+		for _, environment := range scoped {
+			grant := &schemas.ApiTokenEnvironment{TokenID: apiToken.ID, EnvironmentID: environment.ID}
+			if err := tx.Create(grant).Error; err != nil {
+				return errors.Internal("failed to bind token scope", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &ApiTokenResponse{
 		ID:           apiToken.ID,
 		Token:        rawToken,
 		Name:         apiToken.Name,
-		Environments: apiToken.Environments,
+		Environments: strings.Join(environmentSlugs(scoped), ","),
 		Permissions:  apiToken.Permissions,
 		ExpiresAt:    apiToken.ExpiresAt,
 		CreatedAt:    apiToken.CreatedAt,
 	}, nil
+}
+
+// tokenLifetime refuses a token that never expires. A machine credential whose
+// whole purpose is to sit in a CI runner is the one that most needs a horizon.
+func tokenLifetime(expiresInDays *int) (time.Duration, error) {
+	days := schemas.DefaultTokenDays
+	if expiresInDays != nil {
+		days = *expiresInDays
+	}
+	if days < 1 || days > schemas.MaxTokenDays {
+		return 0, errors.Invalid(fmt.Sprintf("expires_in_days must be between 1 and %d", schemas.MaxTokenDays))
+	}
+	return time.Duration(days) * 24 * time.Hour, nil
+}
+
+// parseRequestedEnvironments reads the scope a caller asked for. Both an empty
+// list and a lone "*" mean every environment — the dashboard has always offered
+// "*" as the affordance for it, and refusing the string its own placeholder
+// suggests would be a strange way to enforce a security boundary. Neither is an
+// inference: whichever the caller sends, what gets stored is the explicit
+// all_environments flag.
+func parseRequestedEnvironments(raw string) []string {
+	requested := authcontext.ParseScopeList(raw)
+	if len(requested) == 1 && requested[0] == "*" {
+		return nil
+	}
+	return requested
+}
+
+// resolveScopeEnvironments turns the requested slugs into environment rows, and
+// refuses a slug the project does not have. Silently dropping it would mint a
+// token narrower than the caller asked for, which reads as a broken deploy long
+// after anyone remembers creating it.
+func (service *Service) resolveScopeEnvironments(ctx context.Context, projectID int64, slugs []string) ([]schemas.Environment, error) {
+	if len(slugs) == 0 {
+		return nil, nil
+	}
+
+	var found []schemas.Environment
+	if err := service.orm.WithContext(ctx).
+		Where("project_id = ? AND slug IN ?", projectID, slugs).
+		Find(&found).Error; err != nil {
+		return nil, errors.Internal("failed to resolve environments", err)
+	}
+	if len(found) != len(slugs) {
+		known := make(map[string]bool, len(found))
+		for _, environment := range found {
+			known[environment.Slug] = true
+		}
+		for _, slug := range slugs {
+			if !known[slug] {
+				return nil, errors.Invalid(fmt.Sprintf("unknown environment %q", slug))
+			}
+		}
+	}
+	return found, nil
+}
+
+func environmentSlugs(environments []schemas.Environment) []string {
+	slugs := make([]string, len(environments))
+	for i, environment := range environments {
+		slugs[i] = environment.Slug
+	}
+	return slugs
 }
 
 func (service *Service) listApiTokens(ctx context.Context, slug string, callerID int64) ([]ApiTokenResponse, error) {
@@ -634,15 +746,34 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 		return nil, errors.Internal("failed to list tokens", err)
 	}
 
+	var grants []struct {
+		TokenID int64
+		Slug    string
+	}
+	if err := service.orm.WithContext(ctx).
+		Table("api_token_environments te").
+		Select("te.token_id, e.slug").
+		Joins("join environments e on e.id = te.environment_id").
+		Joins("join api_tokens t on t.id = te.token_id").
+		Where("t.project_id = ?", project.ID).
+		Scan(&grants).Error; err != nil {
+		return nil, errors.Internal("failed to read token scopes", err)
+	}
+	scopes := make(map[int64][]string, len(grants))
+	for _, grant := range grants {
+		scopes[grant.TokenID] = append(scopes[grant.TokenID], grant.Slug)
+	}
+
 	result := make([]ApiTokenResponse, len(tokens))
 	for i, t := range tokens {
 		result[i] = ApiTokenResponse{
 			ID:           t.ID,
 			Name:         t.Name,
-			Environments: t.Environments,
+			Environments: strings.Join(scopes[t.ID], ","),
 			Permissions:  t.Permissions,
 			ExpiresAt:    t.ExpiresAt,
 			LastUsedAt:   t.LastUsedAt,
+			RevokedAt:    t.RevokedAt,
 			CreatedAt:    t.CreatedAt,
 		}
 	}
@@ -663,9 +794,12 @@ func (service *Service) revokeApiToken(ctx context.Context, slug string, callerI
 		return errors.Internal("failed to find project", err)
 	}
 
+	// Revoke rather than delete: audit rows name the token that made a change,
+	// and deleting the row turns every one of them into an anonymous event.
 	result := service.orm.WithContext(ctx).
-		Where("id = ? AND project_id = ?", tokenID, project.ID).
-		Delete(&schemas.ApiToken{})
+		Model(&schemas.ApiToken{}).
+		Where("id = ? AND project_id = ? AND revoked_at IS NULL", tokenID, project.ID).
+		Update("revoked_at", time.Now())
 	if result.Error != nil {
 		return errors.Internal("failed to revoke token", result.Error)
 	}
@@ -817,42 +951,90 @@ func (service *Service) listAuditLogs(ctx context.Context, slug string, callerID
 	return result, nil
 }
 
-func (service *Service) RotateRootKey(ctx context.Context, newKey []byte) (int, error) {
-	var projects []schemas.Project
-	if err := service.orm.WithContext(ctx).Find(&projects).Error; err != nil {
-		return 0, errors.Internal("failed to list projects", err)
+// RotateRootKey re-encrypts every project data key under newKey inside a single
+// transaction, so a failure part way through cannot leave the instance with a
+// mix of keys. The in-memory keyring is only swapped once the commit succeeds.
+func (service *Service) RotateRootKey(ctx context.Context, newKey []byte, callerID, callerEmail, clientIP string) (int, error) {
+	currentKey := service.keyring.Key()
+	if bytes.Equal(newKey, currentKey) {
+		return 0, errors.Invalid("new key is identical to the current key")
 	}
 
 	count := 0
-	for _, project := range projects {
-		if len(project.EncryptedDataKey) == 0 {
-			continue
+	err := service.orm.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		count = 0
+
+		var projects []schemas.Project
+		if err := tx.Find(&projects).Error; err != nil {
+			return errors.Internal("failed to list projects", err)
 		}
 
-		dataKey, err := crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, service.encKey)
-		if err != nil {
-			return count, errors.Internal(fmt.Sprintf("failed to decrypt data key for project %d", project.ID), err)
+		for _, project := range projects {
+			if len(project.EncryptedDataKey) == 0 {
+				continue
+			}
+
+			dataKey, err := crypto.Decrypt(project.EncryptedDataKey, project.DataKeyNonce, currentKey)
+			if err != nil {
+				return errors.Internal(fmt.Sprintf("failed to decrypt data key for project %d", project.ID), err)
+			}
+
+			newEncDataKey, newNonce, err := crypto.Encrypt(dataKey, newKey)
+			if err != nil {
+				return errors.Internal(fmt.Sprintf("failed to re-encrypt data key for project %d", project.ID), err)
+			}
+
+			if err := tx.Model(&schemas.Project{}).
+				Where("id = ?", project.ID).
+				Updates(map[string]any{
+					"encrypted_data_key": newEncDataKey,
+					"data_key_nonce":     newNonce,
+				}).Error; err != nil {
+				return errors.Internal(fmt.Sprintf("failed to save re-encrypted data key for project %d", project.ID), err)
+			}
+			count++
 		}
 
-		newEncDataKey, newNonce, err := crypto.Encrypt(dataKey, newKey)
-		if err != nil {
-			return count, errors.Internal(fmt.Sprintf("failed to re-encrypt data key for project %d", project.ID), err)
-		}
-
-		if err := service.orm.WithContext(ctx).
-			Model(&schemas.Project{}).
-			Where("id = ?", project.ID).
-			Updates(map[string]any{
-				"encrypted_data_key": newEncDataKey,
-				"data_key_nonce":     newNonce,
-			}).Error; err != nil {
-			return count, errors.Internal(fmt.Sprintf("failed to save re-encrypted data key for project %d", project.ID), err)
-		}
-		count++
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 
-	service.encKey = newKey
+	service.keyring.Replace(newKey)
+
+	if service.audit != nil {
+		service.audit.Log(ctx, 0, callerID, callerEmail, "instance.root_key_rotated", "encryption_key", fmt.Sprintf("%d project data keys re-encrypted", count), clientIP)
+	}
+
 	return count, nil
+}
+
+// ensureScopeAllowsProject stops an API token minted for one project from
+// reaching another. It answers "not found" rather than "forbidden" so a token
+// cannot use the endpoint to enumerate which projects exist.
+func ensureScopeAllowsProject(ctx context.Context, projectID int64) error {
+	if authcontext.ScopeFromContext(ctx).AllowsProject(projectID) {
+		return nil
+	}
+	return errors.NotFound("project not found")
+}
+
+// isAdminEmail reports whether email is one of the instance admins, compared
+// case-insensitively after trimming. An empty list denies everyone: instance
+// wide operations fail closed when no admin has been configured.
+func isAdminEmail(adminEmails []string, email string) bool {
+	candidate := strings.ToLower(strings.TrimSpace(email))
+	if candidate == "" {
+		return false
+	}
+
+	for _, admin := range adminEmails {
+		if strings.ToLower(strings.TrimSpace(admin)) == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func slugify(name string) string {

@@ -71,6 +71,6 @@ async fn fetch(project: &str, env: &str) -> Result<BTreeMap<String, String>> {
     };
 
     let client = ApiClient::new(&config.server_url, Some(token));
-    let secrets = client.list_secrets(project, env).await?;
+    let secrets = client.list_secrets_with_values(project, env).await?;
     Ok(cache::to_map(&secrets))
 }

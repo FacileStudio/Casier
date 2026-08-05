@@ -8,6 +8,49 @@ type FetchOptions = {
 	token?: string | null;
 };
 
+export class ApiError extends Error {
+	status: number;
+	code: string;
+
+	constructor(message: string, status: number, code = '') {
+		super(message);
+		this.name = 'ApiError';
+		this.status = status;
+		this.code = code;
+	}
+}
+
+function readString(source: Record<string, unknown>, key: string): string {
+	const value = source[key];
+	return typeof value === 'string' ? value : '';
+}
+
+function parseError(body: string, status: number): ApiError {
+	let message = '';
+	let code = '';
+
+	try {
+		const parsed: unknown = JSON.parse(body);
+		if (parsed && typeof parsed === 'object') {
+			const payload = parsed as Record<string, unknown>;
+			const nested = payload.error;
+			if (nested && typeof nested === 'object') {
+				const inner = nested as Record<string, unknown>;
+				message = readString(inner, 'message');
+				code = readString(inner, 'code');
+			} else if (typeof nested === 'string') {
+				message = nested;
+			}
+			if (!message) message = readString(payload, 'message');
+			if (!code) code = readString(payload, 'code');
+		}
+	} catch {
+		message = '';
+	}
+
+	return new ApiError(message || `HTTP ${status}`, status, code);
+}
+
 async function request<T>(path: string, options: FetchOptions = {}): Promise<T> {
 	const headers: Record<string, string> = {};
 
@@ -27,12 +70,20 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
 	});
 
 	if (!response.ok) {
-		const error = await response.json().catch(() => ({ message: 'Request failed' }));
-		throw new Error(error.message ?? `HTTP ${response.status}`);
+		const body = await response.text().catch(() => '');
+		throw parseError(body, response.status);
 	}
 
 	if (response.status === 204) return undefined as T;
-	return response.json();
+
+	const body = await response.text().catch(() => '');
+	if (!body) return undefined as T;
+
+	try {
+		return JSON.parse(body) as T;
+	} catch {
+		throw new ApiError('Unexpected response from server', response.status, 'invalid_response');
+	}
 }
 
 export const api = {
@@ -79,6 +130,7 @@ export type Environment = {
 	name: string;
 	slug: string;
 	position: number;
+	protected: boolean;
 	created_at: string;
 	updated_at: string;
 };
@@ -89,10 +141,13 @@ export type EnvironmentsResponse = {
 
 export type RotationStatus = '' | 'ok' | 'due_soon' | 'overdue';
 
+// `value` is absent unless it was explicitly revealed. Listing no longer ships
+// plaintext, so masking in the browser is no longer theatre over a value that
+// was in the payload all along.
 export type Secret = {
 	id: number;
 	key: string;
-	value: string;
+	value?: string;
 	version: number;
 	tags: string[] | null;
 	created_at: string;
@@ -104,6 +159,20 @@ export type Secret = {
 export type SecretsResponse = {
 	secrets: Secret[] | null;
 	rotation_days: number;
+};
+
+export type TrashedSecret = {
+	id: number;
+	key: string;
+	tags: string[] | null;
+	deleted_at: string;
+	deleted_by: string;
+	purge_at: string;
+};
+
+export type TrashResponse = {
+	secrets: TrashedSecret[] | null;
+	retention_days: number;
 };
 
 export type EnvironmentRotation = {
@@ -156,6 +225,7 @@ export type ApiToken = {
 	permissions: string;
 	expires_at: string;
 	last_used_at: string;
+	revoked_at: string | null;
 	created_at: string;
 };
 

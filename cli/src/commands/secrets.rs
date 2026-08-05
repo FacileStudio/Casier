@@ -14,7 +14,11 @@ fn authed_client(config: &Config, token: Option<String>) -> Result<ApiClient> {
 pub async fn list(project: &str, env: &str, show: bool) -> Result<()> {
     let config = Config::load()?;
     let client = authed_client(&config, auth::get_token(&config.server_url)?)?;
-    let secrets = client.list_secrets(project, env).await?;
+    let secrets = if show {
+        client.list_secrets_with_values(project, env).await?
+    } else {
+        client.list_secrets(project, env).await?
+    };
 
     if secrets.is_empty() {
         println!("No secrets found.");
@@ -31,10 +35,12 @@ pub async fn list(project: &str, env: &str, show: bool) -> Result<()> {
     println!("{:<key_width$}  {:<40}  {}", "KEY", "VALUE", "VERSION");
 
     for s in &secrets {
-        let displayed_value = if show {
-            s.value.clone()
-        } else {
-            "*".repeat(s.value.len().min(8))
+        let displayed_value = match (show, &s.value) {
+            (true, Some(value)) => value.clone(),
+            // A mask as long as the value tells anyone reading over your
+            // shoulder how long the secret is. Without --show the value never
+            // leaves the server at all, so the mask is a fixed width.
+            _ => "••••••••".to_string(),
         };
         println!(
             "{:<key_width$}  {:<40}  {}",
@@ -56,7 +62,7 @@ pub async fn get(project: &str, env: &str, key: &str) -> Result<()> {
     let config = Config::load()?;
     let client = authed_client(&config, auth::get_token(&config.server_url)?)?;
     let secret = client.get_secret(project, env, key).await?;
-    print!("{}", secret.value);
+    print!("{}", secret.value.unwrap_or_default());
     Ok(())
 }
 

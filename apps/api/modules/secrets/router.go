@@ -46,12 +46,49 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 			envSlug := chi.URLParam(request, "envSlug")
 			tagFilter := request.URL.Query().Get("tag")
 
-			resp, err := service.controller.list(request.Context(), projectSlug, envSlug, tagFilter)
+			resp, err := service.controller.list(request.Context(), projectSlug, envSlug, tagFilter, boolParam(request, "reveal"))
 			if err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}
 			httpjson.WriteJSON(w, http.StatusOK, resp)
+		})
+
+		router.Get("/trash", func(w http.ResponseWriter, request *http.Request) {
+			projectSlug := chi.URLParam(request, "slug")
+			envSlug := chi.URLParam(request, "envSlug")
+
+			resp, err := service.controller.trash(request.Context(), projectSlug, envSlug)
+			if err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusOK, resp)
+		})
+
+		router.Get("/{key}/reveal", func(w http.ResponseWriter, request *http.Request) {
+			projectSlug := chi.URLParam(request, "slug")
+			envSlug := chi.URLParam(request, "envSlug")
+			key := chi.URLParam(request, "key")
+
+			resp, err := service.controller.reveal(request.Context(), projectSlug, envSlug, key)
+			if err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			httpjson.WriteJSON(w, http.StatusOK, resp)
+		})
+
+		router.Post("/{key}/restore", func(w http.ResponseWriter, request *http.Request) {
+			projectSlug := chi.URLParam(request, "slug")
+			envSlug := chi.URLParam(request, "envSlug")
+			key := chi.URLParam(request, "key")
+
+			if err := service.controller.restore(request.Context(), projectSlug, envSlug, key); err != nil {
+				httpjson.WriteError(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		})
 
 		router.Post("/import", func(w http.ResponseWriter, request *http.Request) {
@@ -222,11 +259,19 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
 
-			if err := service.controller.delete(request.Context(), projectSlug, envSlug, key); err != nil {
+			if err := service.controller.delete(request.Context(), projectSlug, envSlug, key, boolParam(request, "purge")); err != nil {
 				httpjson.WriteError(w, err)
 				return
 			}
 			w.WriteHeader(http.StatusNoContent)
 		})
 	})
+}
+
+// boolParam reads an opt-in query flag. An unparseable value is false, because
+// every flag here widens what a request does - revealing plaintext, or
+// destroying a secret outright - and a typo must never be read as consent.
+func boolParam(request *http.Request, name string) bool {
+	value, err := strconv.ParseBool(request.URL.Query().Get(name))
+	return err == nil && value
 }

@@ -103,6 +103,18 @@
 						onclick={() => (selectedEnvSlug = env.slug)}
 					>
 						{env.name}
+						{#if env.protected}
+							<span
+								class="inline-flex"
+								title="Protected — only an owner or admin can write here"
+							>
+								<iconify-icon
+									icon="solar:lock-keyhole-linear"
+									width="13"
+									aria-label="Protected"
+								></iconify-icon>
+							</span>
+						{/if}
 						{#if stale > 0}
 							<span
 								class="inline-flex h-5 min-w-5 items-center justify-center rounded-full border border-border px-1.5 text-xs tabular-nums"

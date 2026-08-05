@@ -17,21 +17,53 @@ func newController(service *Service) *Controller {
 	return &Controller{service: service}
 }
 
-func (controller *Controller) list(ctx context.Context, projectSlug, envSlug, tagFilter string) (*ListResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
-	}
-	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+// list answers with metadata only unless the caller explicitly asked to reveal
+// values, and the two are audited apart: masking in the browser was never a
+// control, and one audit row could not tell a dashboard page load from a
+// production dump.
+func (controller *Controller) list(ctx context.Context, projectSlug, envSlug, tagFilter string, reveal bool) (*ListResponse, error) {
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	secrets, rotationDays, err := controller.service.listSecrets(ctx, envID, identity.UserID, identity.ClientIP, tagFilter)
+	action := auditActionList
+	if reveal {
+		action = auditActionRevealList
+	}
+	secrets, rotationDays, err := controller.service.listSecrets(ctx, envID, person, secretRead{
+		tagFilter:   strings.TrimSpace(tagFilter),
+		reveal:      reveal,
+		auditAction: action,
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &ListResponse{Secrets: secrets, RotationDays: rotationDays}, nil
+}
+
+func (controller *Controller) reveal(ctx context.Context, projectSlug, envSlug, key string) (*SecretResponse, error) {
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	return controller.service.revealSecret(ctx, envID, key, person)
+}
+
+func (controller *Controller) trash(ctx context.Context, projectSlug, envSlug string) (*TrashResponse, error) {
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	if err != nil {
+		return nil, err
+	}
+	return controller.service.listTrash(ctx, envID, person)
+}
+
+func (controller *Controller) restore(ctx context.Context, projectSlug, envSlug, key string) error {
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	if err != nil {
+		return err
+	}
+	return controller.service.restoreSecret(ctx, envID, key, person)
 }
 
 func (controller *Controller) rotation(ctx context.Context, projectSlug string) (*RotationSummaryResponse, error) {
@@ -47,11 +79,7 @@ func (controller *Controller) rotation(ctx context.Context, projectSlug string) 
 }
 
 func (controller *Controller) create(ctx context.Context, projectSlug, envSlug string, req *CreateRequest) (*SecretResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
-	}
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -60,75 +88,69 @@ func (controller *Controller) create(ctx context.Context, projectSlug, envSlug s
 	if key == "" {
 		return nil, errors.Invalid("key is required")
 	}
-	if len(key) > 256 {
+	if len(key) > maxSecretKeyLength {
 		return nil, errors.Invalid("secret key exceeds maximum length of 256 characters")
 	}
 
-	const maxSecretValueSize = 64 * 1024
 	if len(req.Value) > maxSecretValueSize {
 		return nil, errors.Invalid("secret value exceeds maximum size of 64KB")
 	}
 
-	return controller.service.createSecret(ctx, envID, key, req.Value, identity.UserID, identity.ClientIP, req.Tags)
+	return controller.service.createSecret(ctx, envID, key, req.Value, person, req.Tags)
 }
 
 func (controller *Controller) update(ctx context.Context, projectSlug, envSlug, key string, req *UpdateRequest) (*SecretResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
-	}
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(key) > 256 {
+	if len(key) > maxSecretKeyLength {
 		return nil, errors.Invalid("secret key exceeds maximum length of 256 characters")
 	}
 
-	const maxSecretValueSize = 64 * 1024
 	if len(req.Value) > maxSecretValueSize {
 		return nil, errors.Invalid("secret value exceeds maximum size of 64KB")
 	}
 
-	return controller.service.updateSecret(ctx, envID, key, req.Value, identity.UserID, identity.ClientIP)
+	return controller.service.updateSecret(ctx, envID, key, req.Value, person)
 }
 
-func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug, key string) error {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return errors.Unauthorized("missing auth")
+// delete trashes a secret by default and destroys it only when the caller asks
+// for it. A purge frees the key immediately and takes the versions and ACLs
+// with it, so it is held to the same roles that administer the project rather
+// than to the roles that may write a value.
+func (controller *Controller) delete(ctx context.Context, projectSlug, envSlug, key string, purge bool) error {
+	if purge {
+		envID, person, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin)
+		if err != nil {
+			return err
+		}
+		return controller.service.purgeSecret(ctx, envID, key, person)
 	}
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
 	}
 
-	return controller.service.deleteSecret(ctx, envID, key, identity.UserID, identity.ClientIP)
+	return controller.service.deleteSecret(ctx, envID, key, person)
 }
 
 func (controller *Controller) importEnv(ctx context.Context, projectSlug, envSlug string, req *ImportRequest) (*ImportResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
-	}
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
-	return controller.service.importEnv(ctx, envID, req.Content, identity.UserID, identity.ClientIP)
+	return controller.service.importEnv(ctx, envID, req.Content, person)
 }
 
 func (controller *Controller) exportEnv(ctx context.Context, projectSlug, envSlug string) (*ExportResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
-	}
-	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
-	content, err := controller.service.exportEnv(ctx, envID, identity.UserID, identity.ClientIP)
+	content, err := controller.service.exportEnv(ctx, envID, person)
 	if err != nil {
 		return nil, err
 	}
@@ -136,15 +158,15 @@ func (controller *Controller) exportEnv(ctx context.Context, projectSlug, envSlu
 }
 
 func (controller *Controller) updateTags(ctx context.Context, projectSlug, envSlug, key string, req *UpdateTagsRequest) error {
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return err
 	}
-	return controller.service.updateTags(ctx, envID, key, req.Tags)
+	return controller.service.updateTags(ctx, envID, key, req.Tags, person)
 }
 
 func (controller *Controller) listVersions(ctx context.Context, projectSlug, envSlug, key string) (*VersionsResponse, error) {
-	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	envID, _, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -156,45 +178,27 @@ func (controller *Controller) listVersions(ctx context.Context, projectSlug, env
 }
 
 func (controller *Controller) rollback(ctx context.Context, projectSlug, envSlug, key string, req *RollbackRequest) (*SecretResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
-	}
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
 	if req.Version < 1 {
 		return nil, errors.Invalid("version must be >= 1")
 	}
-	return controller.service.rollbackSecret(ctx, envID, key, req.Version, identity.UserID, identity.ClientIP)
+	return controller.service.rollbackSecret(ctx, envID, key, req.Version, person)
 }
 
 func (controller *Controller) diff(ctx context.Context, projectSlug, envSlugA, envSlugB string) (*DiffResponse, error) {
-	identity, ok := authcontext.IdentityFromContext(ctx)
-	if !ok {
-		return nil, errors.Unauthorized("missing auth")
+	envA, person, err := controller.resolveEnv(ctx, projectSlug, envSlugA)
+	if err != nil {
+		return nil, err
 	}
-	userID, err := extractUserID(ctx)
+	envB, _, err := controller.resolveEnv(ctx, projectSlug, envSlugB)
 	if err != nil {
 		return nil, err
 	}
 
-	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	envA, err := controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlugA)
-	if err != nil {
-		return nil, err
-	}
-	envB, err := controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlugB)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := controller.service.diffEnvironments(ctx, envA, envB, identity.UserID, identity.ClientIP)
+	resp, err := controller.service.diffEnvironments(ctx, envA, envB, person)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +208,7 @@ func (controller *Controller) diff(ctx context.Context, projectSlug, envSlugA, e
 }
 
 func (controller *Controller) listACLs(ctx context.Context, projectSlug, envSlug, key string) (*ACLsResponse, error) {
-	envID, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	envID, _, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +220,7 @@ func (controller *Controller) listACLs(ctx context.Context, projectSlug, envSlug
 }
 
 func (controller *Controller) setACL(ctx context.Context, projectSlug, envSlug, key string, req *SetACLRequest) error {
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, _, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin)
 	if err != nil {
 		return err
 	}
@@ -227,39 +231,84 @@ func (controller *Controller) setACL(ctx context.Context, projectSlug, envSlug, 
 }
 
 func (controller *Controller) deleteACL(ctx context.Context, projectSlug, envSlug, key string, aclID int64) error {
-	envID, err := controller.resolveEnvWithWrite(ctx, projectSlug, envSlug)
+	envID, _, err := controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin)
 	if err != nil {
 		return err
 	}
 	return controller.service.deleteACL(ctx, envID, key, aclID)
 }
 
-func (controller *Controller) resolveEnv(ctx context.Context, projectSlug, envSlug string) (int64, error) {
-	userID, err := extractUserID(ctx)
-	if err != nil {
-		return 0, err
-	}
-
-	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID)
-	if err != nil {
-		return 0, err
-	}
-
-	return controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
+func (controller *Controller) resolveEnv(ctx context.Context, projectSlug, envSlug string) (int64, caller, error) {
+	return controller.resolveEnvFor(ctx, projectSlug, envSlug)
 }
 
-func (controller *Controller) resolveEnvWithWrite(ctx context.Context, projectSlug, envSlug string) (int64, error) {
-	userID, err := extractUserID(ctx)
-	if err != nil {
-		return 0, err
+// resolveEnvWithWrite is the choke point every mutating secret route goes
+// through: it rejects a read-only API token before any role is even looked up,
+// then demands a role that may write in the project.
+func (controller *Controller) resolveEnvWithWrite(ctx context.Context, projectSlug, envSlug string) (int64, caller, error) {
+	return controller.resolveEnvWithRoles(ctx, projectSlug, envSlug, roleOwner, roleAdmin, "member")
+}
+
+// resolveEnvWithRoles is where a protected environment is enforced, for every
+// write route at once. Reads never come through here, which is the point: a
+// protected environment restricts who may change it, not who may see it.
+func (controller *Controller) resolveEnvWithRoles(ctx context.Context, projectSlug, envSlug string, requiredRoles ...string) (int64, caller, error) {
+	if !authcontext.ScopeFromContext(ctx).AllowsWrite() {
+		return 0, caller{}, errors.Forbidden("this API token is read-only")
 	}
 
-	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID, "owner", "admin", "member")
+	envID, person, err := controller.resolveEnvFor(ctx, projectSlug, envSlug, requiredRoles...)
 	if err != nil {
-		return 0, err
+		return 0, caller{}, err
 	}
 
-	return controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
+	protected, err := controller.service.environmentProtected(ctx, envID)
+	if err != nil {
+		return 0, caller{}, err
+	}
+	if !roleMayWriteProtected(person.role, protected) {
+		return 0, caller{}, errors.Forbidden("this environment is protected: only an owner or admin may write to it")
+	}
+
+	return envID, person, nil
+}
+
+// resolveEnvFor resolves the environment a request targets and, with it, who is
+// asking: the user, their role in the project and the scope of the token they
+// used. An environment-scoped token cannot reach an environment it was not
+// granted, whatever the user's role allows.
+func (controller *Controller) resolveEnvFor(ctx context.Context, projectSlug, envSlug string, requiredRoles ...string) (int64, caller, error) {
+	identity, ok := authcontext.IdentityFromContext(ctx)
+	if !ok {
+		return 0, caller{}, errors.Unauthorized("missing auth")
+	}
+	userID, err := strconv.ParseInt(identity.UserID, 10, 64)
+	if err != nil {
+		return 0, caller{}, errors.Invalid("invalid user id")
+	}
+
+	if !identity.Scope.AllowsEnvironment(envSlug) {
+		return 0, caller{}, errors.Forbidden("this API token is not scoped to this environment")
+	}
+
+	projectID, err := controller.service.projectRes.ResolveProjectID(ctx, projectSlug, userID, requiredRoles...)
+	if err != nil {
+		return 0, caller{}, err
+	}
+	if !identity.Scope.AllowsProject(projectID) {
+		return 0, caller{}, errors.Forbidden("this API token is not scoped to this project")
+	}
+	envID, err := controller.service.envRes.ResolveEnvironmentID(ctx, projectID, envSlug)
+	if err != nil {
+		return 0, caller{}, err
+	}
+
+	return envID, caller{
+		userID:   userID,
+		role:     controller.service.projectRole(ctx, projectID, userID),
+		clientIP: identity.ClientIP,
+		scope:    identity.Scope,
+	}, nil
 }
 
 func extractUserID(ctx context.Context) (int64, error) {

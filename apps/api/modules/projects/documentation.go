@@ -123,5 +123,19 @@ var Documentation = documentation.Module{
 				{Status: 404, Code: "not_found", Description: "Member not found."},
 			},
 		},
+		{
+			Method:       "POST",
+			Path:         "/admin/rotate-key",
+			Summary:      "Rotate the root encryption key",
+			Description:  "Re-encrypts every project data key under a new base64 32-byte root key, in a single transaction. Restricted to the emails listed in CASIER_ADMIN_EMAILS and refused outright when that list is empty or when the caller is an API token. The response warns that ENCRYPTION_KEY must be updated in the environment before the next restart.",
+			Auth:         "bearer token required, instance admin user session",
+			RequestBody:  "RotateKeyRequest",
+			ResponseBody: "RotateKeyResponse",
+			Errors: []documentation.Error{
+				{Status: 400, Code: "invalid_argument", Description: "Key is not base64-encoded 32 bytes, or is identical to the current key."},
+				{Status: 403, Code: "permission_denied", Description: "Caller is not an instance admin, or is an API token."},
+				{Status: 500, Code: "internal", Description: "Rotation failed and was rolled back; the old key is still in force."},
+			},
+		},
 	},
 }

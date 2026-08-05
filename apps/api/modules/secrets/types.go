@@ -16,10 +16,13 @@ type UpdateTagsRequest struct {
 	Tags []string `json:"tags"`
 }
 
+// SecretResponse carries a value only when the caller asked for one and was
+// allowed to have it. Value is a pointer so an omitted value is absent from the
+// JSON entirely: a client can never mistake "hidden" for "the secret is empty".
 type SecretResponse struct {
 	ID             int64     `json:"id"`
 	Key            string    `json:"key"`
-	Value          string    `json:"value"`
+	Value          *string   `json:"value,omitempty"`
 	Version        int       `json:"version"`
 	Tags           []string  `json:"tags"`
 	CreatedAt      time.Time `json:"created_at"`
@@ -31,6 +34,23 @@ type SecretResponse struct {
 type ListResponse struct {
 	Secrets      []SecretResponse `json:"secrets"`
 	RotationDays int              `json:"rotation_days"`
+}
+
+// TrashedSecretResponse never carries a value. The trash is a recovery listing,
+// not a read path: restoring a secret is what puts it back within reach of the
+// audited reveal routes.
+type TrashedSecretResponse struct {
+	ID        int64     `json:"id"`
+	Key       string    `json:"key"`
+	Tags      []string  `json:"tags"`
+	DeletedAt time.Time `json:"deleted_at"`
+	DeletedBy string    `json:"deleted_by"`
+	PurgeAt   time.Time `json:"purge_at"`
+}
+
+type TrashResponse struct {
+	Secrets       []TrashedSecretResponse `json:"secrets"`
+	RetentionDays int                     `json:"retention_days"`
 }
 
 type EnvironmentRotation struct {
