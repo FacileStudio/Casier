@@ -75,8 +75,8 @@ func bindTokenScopesToEnvironments(db *gorm.DB) error {
 			INSERT INTO api_token_environments (token_id, environment_id)
 			SELECT t.id, e.id
 			FROM api_tokens t
-			JOIN LATERAL unnest(string_to_array(t.environments, ',')) AS slug ON true
-			JOIN environments e ON e.project_id = t.project_id AND e.slug = btrim(slug)
+			JOIN LATERAL unnest(string_to_array(t.environments, ',')) AS scope(slug) ON true
+			JOIN environments e ON e.project_id = t.project_id AND e.slug = btrim(scope.slug)
 			WHERE coalesce(btrim(t.environments), '') <> ''
 			ON CONFLICT DO NOTHING
 		`).Error; err != nil {
