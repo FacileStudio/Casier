@@ -8,9 +8,8 @@ lockfile = true
 config_roots = ["apps/api", "apps/client"]
 
 [tools]
-go = "1.24"
+go = "1.25"
 node = "22.22.1"
-"asdf:mise-plugins/mise-postgres" = "14.22"
 
 [tasks.bootstrap]
 description = "Install monorepo dependencies"
@@ -33,6 +32,11 @@ run = "true"
 [tasks.check]
 description = "Run API and client checks"
 depends = ["//apps/api:check", "//apps/client:check"]
+run = "true"
+
+[tasks.format]
+description = "Format the sources in place"
+depends = ["//apps/api:format"]
 run = "true"
 
 [tasks.dev]
