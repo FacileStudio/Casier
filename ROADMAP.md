@@ -347,3 +347,24 @@ production's schema. After the fix, and verified per branch: a comma-separated s
 to exactly its environments, empty or NULL becomes `all_environments`, a slug that no longer
 exists is dropped, spacing is trimmed, slugs resolve within the token's **own project**, a
 re-run is a no-op, and deleting an environment narrows a token instead of widening it.
+
+---
+
+## Found by the first real integration (Journal, 2026-08-06)
+
+Casier now supplies Journal's development configuration end to end, against the live
+instance. Two gaps showed up in doing it, and both are about the rollout rather than the
+server:
+
+- **`.casier.toml` is honoured by three commands out of nine.** `run`, `check` and
+  `push dokploy` take `Option<String>` for project and environment and fall back to the file.
+  `secrets list/get/set/delete`, `sync push/pull` and `diff` all still demand `-p`. The file
+  exists precisely so a repo does not repeat itself, so the split is arbitrary from the
+  outside — `casier run` works with no flags in a pinned repo and `casier secrets list` errors
+  out. Lands in casier-cli.
+- **There is still no `casier projects create`.** Onboarding a repo needs a project and its
+  environments, and the API has both routes, but the CLI wraps neither — so step one of every
+  integration is a trip to the dashboard. That is the actual blocker for a scripted rollout
+  across the suite, and it is a thin wrapper over routes that already exist.
+
+Neither blocks a single-repo integration; both block doing forty of them.
