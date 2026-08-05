@@ -23,7 +23,6 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-      network: host
     expose:
       - "4000"
     networks:
@@ -65,7 +64,6 @@ services:
     build:
       context: .
       dockerfile: apps/client/Dockerfile
-      network: host
       args:
         VITE_API_BASE_URL: https://casier.facile.studio/api
     expose:
