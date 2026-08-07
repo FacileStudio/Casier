@@ -4,7 +4,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type Project, type ProjectsResponse } from '$lib/backend';
 	import { formatDate } from '$lib/format';
-	import { Badge, Field, Input, Skeleton, Textarea } from '@facile/lib';
+	import { Badge, Field, Input, Skeleton, Textarea } from '@facile/muse';
 	import Drawer from '$lib/components/Drawer.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';

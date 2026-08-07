@@ -1,5 +1,5 @@
 @import 'tailwindcss';
-@source '../node_modules/@facile/lib/src';
+@source '../node_modules/@facile/muse/src';
 
 @font-face {
 	font-family: 'Goga';
@@ -165,7 +165,7 @@
 	--radius-xl: calc(var(--radius) * 2);
 
 	/*
-	 * muse (@facile/lib) token aliases. Its primitives are written against the
+	 * muse (@facile/muse) token aliases. Its primitives are written against the
 	 * fc-* namespace, so they are mapped onto the suite palette above and render
 	 * identically to hand-written suite markup.
 	 */

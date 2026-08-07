@@ -5,7 +5,7 @@
     "": {
       "name": "casier-client",
       "dependencies": {
-        "@facile/lib": "github:FacileStudio/muse",
+        "@facile/muse": "github:FacileStudio/muse#v0.2.0",
       },
       "devDependencies": {
         "@sveltejs/adapter-static": "^3.0.10",
@@ -75,7 +75,7 @@
 
     "@esbuild/win32-x64": ["@esbuild/win32-x64@0.28.1", "", { "os": "win32", "cpu": "x64" }, "sha512-bm4Mowrv+GXMlpWX++EcXw/iLyd1o3+bJkC2DkWXYVvgZCqD/bSj9ctZeAMC3cIxgjRVR2Dufaiu4YPxr5gW1A=="],
 
-    "@facile/lib": ["@facile/lib@github:FacileStudio/muse#3de7c2d", { "dependencies": { "gsap": "^3.12.0", "tailwind-merge": "^3.5.0" }, "peerDependencies": { "svelte": "^5.0.0", "tailwindcss": "^4.0.0" } }, "FacileStudio-muse-3de7c2d", "sha512-XhgUfJ9iezD1gmOOMVLXd1Nt1cyphuWogPmyqXqcp2qN/A/8hLXRm0W/8/vJRlxI9RzQktcPqGchu+MLAlP3LA=="],
+    "@facile/muse": ["@facile/muse@github:FacileStudio/muse#9ecc894", { "dependencies": { "gsap": "^3.13.0", "tailwind-merge": "^3.5.0" }, "peerDependencies": { "svelte": "^5.0.0", "tailwindcss": "^4.0.0" } }, "FacileStudio-muse-9ecc894", "sha512-Nx/UkTG8faQ7gSIAcpkgzrrMzphR+WVIRNuRjfRSYYdwab9DsiC3CJHxXfxydcDeSJLSdgiK4CeCRugc1Ed5YQ=="],
 
     "@floating-ui/core": ["@floating-ui/core@1.7.5", "", { "dependencies": { "@floating-ui/utils": "^0.2.11" } }, "sha512-1Ih4WTWyw0+lKyFMcBHGbb5U5FtuHJuujoyyr5zTaWS5EYMeT6Jb2AuDeftsCsEuchO+mM2ij5+q9crhydzLhQ=="],
 

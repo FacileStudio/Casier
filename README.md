@@ -27,7 +27,7 @@ Live at [casier.facile.studio](https://casier.facile.studio).
 | Layer | Tech |
 |---|---|
 | API | Go 1.25, Chi v5, GORM, PostgreSQL 16, [tronc](https://github.com/FacileStudio/tronc) v0.8.0 |
-| Client | SvelteKit 2, Svelte 5 (runes), Tailwind CSS 4, muse (`@facile/lib`), bits-ui |
+| Client | SvelteKit 2, Svelte 5 (runes), Tailwind CSS 4, muse (`@facile/muse`), bits-ui |
 | CLI | Rust 2021, clap, OS keychain token storage |
 | Deploy | Docker Compose, single distroless container behind Traefik |
 

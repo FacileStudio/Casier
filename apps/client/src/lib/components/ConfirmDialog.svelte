@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button } from '@facile/lib';
+	import { Button } from '@facile/muse';
 	import Drawer from '$lib/components/Drawer.svelte';
 
 	let {

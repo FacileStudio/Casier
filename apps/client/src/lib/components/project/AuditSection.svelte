@@ -2,7 +2,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type AuditLogEntry, type AuditLogsResponse } from '$lib/backend';
 	import { formatDateTime } from '$lib/format';
-	import { Badge, Skeleton, Table } from '@facile/lib';
+	import { Badge, Skeleton, Table } from '@facile/muse';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 

@@ -10,7 +10,7 @@
 	} from '$lib/backend';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
-	import { Badge, Skeleton } from '@facile/lib';
+	import { Badge, Skeleton } from '@facile/muse';
 
 	let { children } = $props();
 

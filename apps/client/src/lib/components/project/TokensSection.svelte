@@ -2,7 +2,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type ApiToken, type ApiTokensResponse } from '$lib/backend';
 	import { formatDate, formatDateTime } from '$lib/format';
-	import { Alert, Badge, Button, Field, Input, Select, Skeleton, Spinner, Table } from '@facile/lib';
+	import { Alert, Badge, Button, Field, Input, Select, Skeleton, Spinner, Table } from '@facile/muse';
 	import Drawer from '$lib/components/Drawer.svelte';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';

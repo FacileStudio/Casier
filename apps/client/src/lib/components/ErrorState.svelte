@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Button } from '@facile/lib';
+	import { Button } from '@facile/muse';
 
 	let {
 		message = 'Something went wrong.',

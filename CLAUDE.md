@@ -7,7 +7,7 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 | Layer    | Stack                                                        |
 | -------- | ------------------------------------------------------------ |
 | API      | Go 1.25, Chi router, GORM, PostgreSQL 16, tronc v0.8.0      |
-| Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/lib`) |
+| Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/muse`) |
 | Build    | `go build`, Bun                                              |
 | Deploy   | Docker Compose, single distroless container serving API + client |
 | Auth     | Email + password (session-based, argon2id), optional OIDC SSO |
@@ -255,7 +255,7 @@ self-hosted from `static/fonts`. Radius is `0.5rem`.
 
 - Suite tokens (`bg-background`, `text-muted-foreground`, `border-border`, `bg-primary`, …)
   are the vocabulary. Never hardcode a hex, never use a Tailwind colour utility.
-- muse's `fc-*` tokens are aliased onto the same values in `app.css`, so `@facile/lib`
+- muse's `fc-*` tokens are aliased onto the same values in `app.css`, so `@facile/muse`
   primitives (Table, Badge, Field, Input, …) render in suite colours automatically.
 - Icons are Iconify **Solar** via the `<iconify-icon>` web component loaded in `app.html`:
   `-bold-duotone` for brand marks, `-linear` for UI chrome. Do not add `@lucide/svelte`.

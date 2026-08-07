@@ -13,7 +13,7 @@
 		type TrashResponse,
 	} from '$lib/backend';
 	import { daysSince, formatDate, formatDateTime } from '$lib/format';
-	import { Alert, Badge, Button, Field, Input, Skeleton, Spinner, Table, Textarea } from '@facile/lib';
+	import { Alert, Badge, Button, Field, Input, Skeleton, Spinner, Table, Textarea } from '@facile/muse';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Drawer from '$lib/components/Drawer.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
