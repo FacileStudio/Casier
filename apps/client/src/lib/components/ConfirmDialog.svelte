@@ -1,6 +1,16 @@
 <script lang="ts">
-	import { Button } from '@facile/muse';
-	import Drawer from '$lib/components/Drawer.svelte';
+	/**
+	 * muse's `ConfirmModal` under this app's existing prop names.
+	 *
+	 * The one real adaptation is ownership of the close. `ConfirmModal` closes itself
+	 * when `onConfirm` resolves, while every call site here drives `open` and `loading`
+	 * itself and deliberately stays open on failure. So `onConfirm` returns a promise
+	 * that settles only when the caller drops `loading`, and it settles by rejecting —
+	 * a rejection leaves the dialog open and hands the decision back to the caller,
+	 * which is the semantics these props already promised. Until then `ConfirmModal` is
+	 * pending: spinner on Confirm, both buttons disabled, Escape and backdrop inert.
+	 */
+	import { ConfirmModal } from '@facile/muse';
 
 	let {
 		open = $bindable(false),
@@ -17,14 +27,29 @@
 		loading?: boolean;
 		onconfirm: () => void;
 	} = $props();
+
+	let release: (() => void) | null = $state(null);
+
+	$effect(() => {
+		if (loading || !release) return;
+		const settle = release;
+		release = null;
+		settle();
+	});
+
+	function confirm() {
+		onconfirm();
+		return new Promise<void>((_resolve, reject) => {
+			release = () => reject(new Error('handled by caller'));
+		});
+	}
 </script>
 
-<Drawer bind:open {title}>
-	<p class="text-sm text-muted-foreground">{message}</p>
-	<div class="flex justify-end gap-2 pt-4">
-		<Button variant="ghost" class="h-9" disabled={loading} onclick={() => (open = false)}>Cancel</Button>
-		<Button class="h-9" disabled={loading} onclick={onconfirm}>
-			{loading ? 'Working…' : confirmLabel}
-		</Button>
-	</div>
-</Drawer>
+<ConfirmModal
+	bind:open
+	{title}
+	description={message}
+	{confirmLabel}
+	tone="danger"
+	onConfirm={confirm}
+/>

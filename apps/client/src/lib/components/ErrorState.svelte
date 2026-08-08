@@ -1,5 +1,9 @@
 <script lang="ts">
-	import { Button } from '@facile/muse';
+	/**
+	 * The failure twin of `EmptyState` — same muse `Card`, same CHARTE §4 geometry, so a
+	 * list that failed to load and a list with nothing in it occupy the same shape.
+	 */
+	import { Button, Card } from '@facile/muse';
 
 	let {
 		message = 'Something went wrong.',
@@ -7,17 +11,16 @@
 	}: { message?: string; onretry?: () => void } = $props();
 </script>
 
-<div class="flex flex-col items-center justify-center gap-2 px-4 py-16 text-center">
+<Card class="flex flex-col items-center gap-4 py-12 text-center">
 	<iconify-icon
 		icon="solar:danger-triangle-linear"
-		width="32"
-		class="mb-1 text-muted-foreground"
+		width="24"
+		height="24"
+		class="block text-fc-fg-muted"
 		aria-hidden="true"
 	></iconify-icon>
-	<p class="max-w-sm text-sm text-muted-foreground">{message}</p>
+	<p class="mx-auto max-w-sm text-fc-sm text-fc-fg-muted">{message}</p>
 	{#if onretry}
-		<div class="pt-3">
-			<Button variant="outline" class="h-9" onclick={onretry}>Try again</Button>
-		</div>
+		<Button variant="outline" onclick={onretry}>Try again</Button>
 	{/if}
-</div>
+</Card>

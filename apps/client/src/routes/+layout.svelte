@@ -1,8 +1,9 @@
 <script lang="ts">
 	import '../app.css';
+	import { Toaster } from '@facile/muse';
+	import { Toaster as SonnerToaster } from 'svelte-sonner';
 	import { auth } from '$lib/auth.svelte';
 	import { theme } from '$lib/theme.svelte';
-	import { Toaster } from 'svelte-sonner';
 
 	let { children } = $props();
 
@@ -10,5 +11,6 @@
 	theme.restore();
 </script>
 
-<Toaster position="bottom-right" theme={theme.resolved} />
+<Toaster position="top" />
+<SonnerToaster position="bottom-right" theme={theme.resolved} />
 {@render children?.()}

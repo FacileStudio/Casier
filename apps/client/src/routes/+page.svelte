@@ -1,9 +1,32 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { Button, Card, Divider } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { api, COOKIE_SESSION, type AuthConfig, type Me } from '$lib/backend';
 	import Logo from '$lib/components/Logo.svelte';
+
+	type Feature = { icon: string; title: string; body: string };
+
+	const features: Feature[] = [
+		{
+			icon: 'solar:lock-keyhole-linear',
+			title: 'Encrypted at rest',
+			body: 'Every project gets its own AES-256-GCM data key. Values are encrypted before they ever reach the database.'
+		},
+		{
+			icon: 'solar:layers-linear',
+			title: 'An environment per deploy',
+			body: 'dev, staging and prod out of the box. Diff them, import a .env, roll any secret back to an earlier version.'
+		},
+		{
+			icon: 'solar:code-square-linear',
+			title: 'Made for CI',
+			body: 'casier run injects secrets as env vars. Scoped API tokens for machines, a full audit log for humans.'
+		}
+	];
+
+	const commands = ['casier login', 'casier init', 'casier run -- npm start'];
 
 	let ready = $state(false);
 	let ssoOnly = $state(false);
@@ -45,136 +68,91 @@
 {#if ready}
 	<div class="flex min-h-dvh flex-col bg-background text-foreground">
 		<header class="border-b border-border">
-			<div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-				<a href="/" class="text-2xl">
+			<div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+				<a href="/" class="text-xl sm:text-2xl">
 					<Logo size={28} wordmark />
 				</a>
 				<div class="flex items-center gap-2">
-					<a
-						href="/login"
-						class="hidden h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:inline-flex"
-					>
-						Log in
-					</a>
-					<a
-						href={ctaHref}
-						class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-					>
-						{ctaLabel}
-					</a>
+					<Button href="/login" variant="ghost" size="sm" class="hidden sm:inline-flex">Log in</Button>
+					<Button href={ctaHref} size="sm">{ctaLabel}</Button>
 				</div>
 			</div>
 		</header>
 
 		<main class="flex-1">
-			<section class="mx-auto max-w-5xl px-6 py-24 text-center">
-				<h1 class="text-5xl font-bold font-heading tracking-tight leading-[1.1] sm:text-6xl">
+			<section class="mx-auto max-w-5xl px-6 py-20 text-center sm:py-24">
+				<h1
+					class="font-heading text-4xl leading-[1.1] font-semibold tracking-tight sm:text-5xl lg:text-6xl"
+				>
 					Your secrets.<br />Your server.
 				</h1>
-				<p class="mx-auto mt-6 max-w-xl text-lg text-muted-foreground">
+				<p class="mx-auto mt-6 max-w-xl text-base text-muted-foreground sm:text-lg">
 					Casier is a self-hosted secrets and environment manager for teams. Encrypted at rest,
 					versioned, audited — and one command away from your app.
 				</p>
-				<div class="mt-10 flex flex-wrap justify-center gap-3">
-					<a
-						href={ctaHref}
-						class="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-					>
+				<div class="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center">
+					<Button href={ctaHref} size="lg" iconRight="solar:alt-arrow-right-linear">
 						{heroCtaLabel}
-						<iconify-icon icon="solar:alt-arrow-right-linear" width="16" aria-hidden="true"
-						></iconify-icon>
-					</a>
-					<a
-						href="/login"
-						class="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-border bg-background px-6 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
-					>
-						Log in
-					</a>
+					</Button>
+					<Button href="/login" variant="outline" size="lg">Log in</Button>
 				</div>
 			</section>
 
-			<div class="mx-auto max-w-5xl"><div class="h-px bg-border"></div></div>
+			<div class="mx-auto max-w-5xl px-6"><Divider class="my-0" /></div>
 
-			<section class="mx-auto max-w-5xl px-6 py-20">
-				<div class="grid gap-6 md:grid-cols-3">
-					<div class="rounded-lg border border-border p-6">
-						<div
-							class="mb-3 flex h-10 w-10 items-center justify-center rounded-md border border-border"
-						>
-							<iconify-icon icon="solar:lock-keyhole-linear" width="20" aria-hidden="true"
-							></iconify-icon>
-						</div>
-						<h3 class="text-base font-semibold">Encrypted at rest</h3>
-						<p class="mt-1.5 text-sm text-muted-foreground">
-							Every project gets its own AES-256-GCM data key. Values are encrypted before they ever
-							reach the database.
-						</p>
-					</div>
-
-					<div class="rounded-lg border border-border p-6">
-						<div
-							class="mb-3 flex h-10 w-10 items-center justify-center rounded-md border border-border"
-						>
-							<iconify-icon icon="solar:layers-linear" width="20" aria-hidden="true"></iconify-icon>
-						</div>
-						<h3 class="text-base font-semibold">An environment per deploy</h3>
-						<p class="mt-1.5 text-sm text-muted-foreground">
-							dev, staging and prod out of the box. Diff them, import a .env, roll any secret back to
-							an earlier version.
-						</p>
-					</div>
-
-					<div class="rounded-lg border border-border p-6">
-						<div
-							class="mb-3 flex h-10 w-10 items-center justify-center rounded-md border border-border"
-						>
-							<iconify-icon icon="solar:code-square-linear" width="20" aria-hidden="true"
-							></iconify-icon>
-						</div>
-						<h3 class="text-base font-semibold">Made for CI</h3>
-						<p class="mt-1.5 text-sm text-muted-foreground">
-							<code class="rounded bg-muted px-2 py-1 font-mono text-xs">casier run</code> injects
-							secrets as env vars. Scoped API tokens for machines, a full audit log for humans.
-						</p>
-					</div>
+			<section class="mx-auto max-w-5xl px-6 py-16 sm:py-20">
+				<div class="grid gap-4 md:grid-cols-3">
+					{#each features as feature (feature.title)}
+						<Card class="flex flex-col gap-4">
+							<div
+								class="flex size-10 items-center justify-center rounded-md border border-border"
+								aria-hidden="true"
+							>
+								<iconify-icon icon={feature.icon} width="20" height="20"></iconify-icon>
+							</div>
+							<div class="flex flex-col gap-1">
+								<h3 class="text-base font-semibold">{feature.title}</h3>
+								<p class="text-sm text-muted-foreground">{feature.body}</p>
+							</div>
+						</Card>
+					{/each}
 				</div>
 			</section>
 
-			<div class="mx-auto max-w-5xl"><div class="h-px bg-border"></div></div>
+			<div class="mx-auto max-w-5xl px-6"><Divider class="my-0" /></div>
 
-			<section class="mx-auto max-w-5xl px-6 py-20">
-				<h2 class="text-center text-3xl font-bold font-heading tracking-tight">
+			<section class="mx-auto max-w-5xl px-6 py-16 sm:py-20">
+				<h2 class="text-center font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
 					Three commands and you're done.
 				</h2>
-				<div
-					class="mx-auto mt-8 max-w-2xl overflow-x-auto rounded-lg border border-border bg-muted p-6 font-mono text-sm"
-				>
-					<div><span class="text-muted-foreground">$</span> <span class="text-foreground">casier login</span></div>
-					<div><span class="text-muted-foreground">$</span> <span class="text-foreground">casier init</span></div>
-					<div><span class="text-muted-foreground">$</span> <span class="text-foreground">casier run -- npm start</span></div>
-				</div>
+				<Card class="mx-auto mt-8 max-w-2xl overflow-x-auto">
+					<div class="flex w-max min-w-full flex-col gap-1 font-mono text-sm">
+						{#each commands as command (command)}
+							<div><span class="text-muted-foreground">$</span> {command}</div>
+						{/each}
+					</div>
+				</Card>
 				<p class="mt-4 text-center text-sm text-muted-foreground">
 					Secrets never touch your shell history or a .env file on disk.
 				</p>
 			</section>
 
-			<div class="mx-auto max-w-5xl"><div class="h-px bg-border"></div></div>
+			<div class="mx-auto max-w-5xl px-6"><Divider class="my-0" /></div>
 
-			<section class="mx-auto max-w-5xl px-6 py-20 text-center">
-				<h2 class="text-3xl font-bold font-heading tracking-tight">
+			<section class="mx-auto max-w-5xl px-6 py-16 text-center sm:py-20">
+				<h2 class="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
 					{ssoOnly ? 'Ready to sign in?' : 'Ready to lock things down?'}
 				</h2>
-				<p class="mt-4 text-muted-foreground">
+				<p class="mx-auto mt-4 max-w-xl text-muted-foreground">
 					{ssoOnly
 						? 'Use your organization SSO to access Casier.'
 						: 'Self-hosted, open by design. Bring your own server and keep your keys.'}
 				</p>
-				<a
-					href={ctaHref}
-					class="mt-8 inline-flex h-11 items-center justify-center gap-2 rounded-md bg-primary px-6 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-				>
-					{ssoOnly ? 'Continue with SSO' : 'Create an account'}
-				</a>
+				<div class="mt-8 flex justify-center">
+					<Button href={ctaHref} size="lg">
+						{ssoOnly ? 'Continue with SSO' : 'Create an account'}
+					</Button>
+				</div>
 			</section>
 		</main>
 
@@ -185,7 +163,7 @@
 				<p class="text-xs text-muted-foreground">
 					© {new Date().getFullYear()} Casier by <a
 						href="https://facile.studio"
-						class="underline underline-offset-2 hover:text-foreground transition-colors"
+						class="underline underline-offset-2 transition-colors hover:text-foreground"
 						target="_blank"
 						rel="noopener">Facile</a
 					>.

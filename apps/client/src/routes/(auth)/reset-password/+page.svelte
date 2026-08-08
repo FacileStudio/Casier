@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { toast } from '@facile/muse';
 	import { api } from '$lib/backend';
-	import { toast } from 'svelte-sonner';
 
 	const inputClass =
 		'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -78,10 +78,11 @@
 			required
 			minlength={8}
 			autocomplete="new-password"
+			aria-describedby="password-hint"
 			disabled={loading}
 			class={inputClass}
 		/>
-		<p class="text-xs text-muted-foreground">At least 8 characters.</p>
+		<p id="password-hint" class="text-xs text-muted-foreground">At least 8 characters.</p>
 	</div>
 
 	<div class="space-y-1.5">
@@ -95,23 +96,28 @@
 			required
 			minlength={8}
 			autocomplete="new-password"
+			aria-invalid={passwordMismatch}
+			aria-describedby={passwordMismatch ? 'confirm-password-error' : undefined}
 			disabled={loading}
 			class={inputClass}
 		/>
 		{#if passwordMismatch}
-			<p class="text-sm text-destructive">Passwords do not match</p>
+			<p id="confirm-password-error" class="text-sm text-destructive">Passwords do not match</p>
 		{/if}
 	</div>
 
 	{#if error}
-		<p
-			class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-		>
+		<p role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
 			{error}
 		</p>
 	{/if}
 
-	<button type="submit" disabled={loading || passwordMismatch} class={primaryButtonClass}>
+	<button
+		type="submit"
+		disabled={loading || passwordMismatch}
+		aria-busy={loading}
+		class={primaryButtonClass}
+	>
 		{loading ? 'Resetting…' : 'Reset password'}
 	</button>
 </form>

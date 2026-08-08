@@ -116,10 +116,11 @@
 					required
 					minlength={8}
 					autocomplete="new-password"
+					aria-describedby="password-hint"
 					disabled={loading}
 					class={inputClass}
 				/>
-				<p class="text-xs text-muted-foreground">At least 8 characters.</p>
+				<p id="password-hint" class="text-xs text-muted-foreground">At least 8 characters.</p>
 			</div>
 
 			<div class="space-y-1.5">
@@ -133,18 +134,20 @@
 					required
 					minlength={8}
 					autocomplete="new-password"
+					aria-invalid={passwordMismatch}
+					aria-describedby={passwordMismatch ? 'confirm-password-error' : undefined}
 					disabled={loading}
 					class={inputClass}
 				/>
 				{#if passwordMismatch}
-					<p class="text-sm text-destructive">Passwords do not match</p>
+					<p id="confirm-password-error" class="text-sm text-destructive">
+						Passwords do not match
+					</p>
 				{/if}
 			</div>
 
 			{#if error}
-				<p
-					class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-				>
+				<p role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
 					{error}
 				</p>
 			{/if}
@@ -152,6 +155,7 @@
 			<button
 				type="submit"
 				disabled={loading || passwordMismatch}
+				aria-busy={loading}
 				class={primaryButtonClass}
 			>
 				{loading ? 'Creating account…' : 'Create account'}
@@ -178,7 +182,9 @@
 	{/if}
 
 	{#if ssoOnly && !oidcEnabled}
-		<p class="text-sm text-destructive">SSO is not configured. Contact your administrator.</p>
+		<p role="alert" class="text-sm text-destructive">
+			SSO is not configured. Contact your administrator.
+		</p>
 	{/if}
 
 	<p class="mt-6 text-center text-sm text-muted-foreground">

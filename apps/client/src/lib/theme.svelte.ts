@@ -33,12 +33,19 @@ class ThemeState {
 		this.apply();
 	}
 
+	/**
+	 * Sets both classes, never just `dark`. muse paints dark from
+	 * `@media (prefers-color-scheme: dark)` scoped to `:root:not(.light)`, so on a
+	 * dark-preferring OS removing `dark` is not enough to get light back — only an
+	 * explicit `light` class escapes the media block.
+	 */
 	private apply() {
 		if (!browser) return;
 		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
 		const dark = this.preference === 'dark' || (this.preference === 'system' && prefersDark);
 		this.resolved = dark ? 'dark' : 'light';
 		document.documentElement.classList.toggle('dark', dark);
+		document.documentElement.classList.toggle('light', !dark);
 	}
 }
 

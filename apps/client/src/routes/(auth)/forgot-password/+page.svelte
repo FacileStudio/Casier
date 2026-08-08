@@ -42,7 +42,7 @@
 </div>
 
 {#if success}
-	<p class="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+	<p role="status" class="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
 		If an account exists with that email, a reset token has been generated. Ask your administrator
 		for the token, then set a new password.
 	</p>
@@ -66,14 +66,12 @@
 		</div>
 
 		{#if error}
-			<p
-				class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-			>
+			<p role="alert" class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
 				{error}
 			</p>
 		{/if}
 
-		<button type="submit" disabled={loading} class={primaryButtonClass}>
+		<button type="submit" disabled={loading} aria-busy={loading} class={primaryButtonClass}>
 			{loading ? 'Sending…' : 'Send reset token'}
 		</button>
 	</form>

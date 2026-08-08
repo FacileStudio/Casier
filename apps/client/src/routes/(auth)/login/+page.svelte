@@ -114,13 +114,14 @@
 
 			{#if error}
 				<p
-					class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+					role="alert"
+					class="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
 				>
 					{error}
 				</p>
 			{/if}
 
-			<button type="submit" disabled={loading} class={primaryButtonClass}>
+			<button type="submit" disabled={loading} aria-busy={loading} class={primaryButtonClass}>
 				{loading ? 'Logging in…' : 'Log in'}
 			</button>
 		</form>
@@ -145,7 +146,9 @@
 	{/if}
 
 	{#if ssoOnly && !oidcEnabled}
-		<p class="text-sm text-destructive">SSO is not configured. Contact your administrator.</p>
+		<p role="alert" class="text-sm text-destructive">
+			SSO is not configured. Contact your administrator.
+		</p>
 	{/if}
 
 	{#if !ssoOnly}

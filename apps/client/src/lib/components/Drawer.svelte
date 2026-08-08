@@ -1,13 +1,18 @@
 <script lang="ts">
 	/**
-	 * Side drawer, in the shape shadcn-svelte gives one, built on the bits-ui
-	 * Dialog primitive already in the bundle. It replaces muse's `Modal`, whose
-	 * native `<dialog>` loses its centering to Tailwind's preflight margin reset
-	 * and lands in the top-left corner. A drawer is anchored to an edge, so
-	 * there is no centering left to get wrong.
+	 * The app's overlay for forms and detail panels, built on muse's `Modal`.
+	 *
+	 * muse's own `Drawer` is a bottom sheet — the mobile counterpart to `Modal` per
+	 * CHARTE §11 — and these panels carry desktop forms and scrollable lists, so
+	 * `Modal` at `size="lg"` is the right side of that pair. The name stays `Drawer`
+	 * because every call site imports it under that name with these props.
+	 *
+	 * `title` and `description` go through the `header` snippet rather than muse's
+	 * `title`, which means the accessible name has to be wired by hand: `Modal` only
+	 * points `aria-labelledby` at its own heading, so the id rides through `...rest`.
 	 */
 	import type { Snippet } from 'svelte';
-	import { Dialog } from 'bits-ui';
+	import { Modal } from '@facile/muse';
 
 	let {
 		open = $bindable(false),
@@ -22,31 +27,18 @@
 		class?: string;
 		children: Snippet;
 	} = $props();
+
+	const titleId = $props.id();
 </script>
 
-<Dialog.Root bind:open>
-	<Dialog.Portal>
-		<Dialog.Overlay class="drawer-overlay fixed inset-0 z-50 bg-black/50" />
-		<Dialog.Content
-			class="drawer-panel fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-background outline-none sm:max-w-lg {className}"
-		>
-			<div class="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
-				<div class="min-w-0">
-					<Dialog.Title class="truncate text-base font-semibold">{title}</Dialog.Title>
-					<Dialog.Description class="mt-1 text-sm text-muted-foreground {description ? '' : 'sr-only'}">
-						{description ?? title}
-					</Dialog.Description>
-				</div>
-				<Dialog.Close
-					class="-mr-1.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-					aria-label="Close"
-				>
-					<iconify-icon icon="solar:close-circle-linear" width="18" aria-hidden="true"></iconify-icon>
-				</Dialog.Close>
-			</div>
-			<div class="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-				{@render children()}
-			</div>
-		</Dialog.Content>
-	</Dialog.Portal>
-</Dialog.Root>
+<Modal bind:open size="lg" showClose aria-labelledby={titleId} class={className}>
+	{#snippet header()}
+		<div class="flex min-w-0 flex-col gap-1">
+			<h2 id={titleId} class="truncate text-fc-lg font-semibold">{title}</h2>
+			{#if description}
+				<p class="text-fc-sm text-fc-fg-muted">{description}</p>
+			{/if}
+		</div>
+	{/snippet}
+	{@render children()}
+</Modal>

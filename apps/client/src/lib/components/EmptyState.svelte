@@ -1,5 +1,13 @@
 <script lang="ts">
+	/**
+	 * CHARTE §4's empty state, in muse's geometry, with this app's API.
+	 *
+	 * muse's own `EmptyState` takes `icon` as an icon *name*; every call site here passes
+	 * a snippet, so the layout is composed on muse's `Card` instead — same card, same
+	 * `py-12`, same `gap-4` with title and description bound together in a `gap-1` block.
+	 */
 	import type { Snippet } from 'svelte';
+	import { Card } from '@facile/muse';
 
 	let {
 		title,
@@ -14,19 +22,19 @@
 	} = $props();
 </script>
 
-<div class="rounded-lg border border-dashed border-border p-10 text-center">
+<Card class="flex flex-col items-center gap-4 py-12 text-center">
 	{#if icon}
-		<div class="mb-3 flex justify-center text-muted-foreground">
+		<div class="flex justify-center text-fc-fg-muted">
 			{@render icon()}
 		</div>
 	{/if}
-	<p class="text-base font-semibold text-foreground">{title}</p>
-	{#if description}
-		<p class="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>
-	{/if}
+	<div class="flex flex-col gap-1">
+		<p class="text-fc-sm font-medium text-fc-fg">{title}</p>
+		{#if description}
+			<p class="mx-auto max-w-sm text-fc-sm text-fc-fg-muted">{description}</p>
+		{/if}
+	</div>
 	{#if children}
-		<div class="mt-5 flex justify-center">
-			{@render children()}
-		</div>
+		{@render children()}
 	{/if}
-</div>
+</Card>
