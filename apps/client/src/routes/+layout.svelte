@@ -1,7 +1,6 @@
 <script lang="ts">
 	import '../app.css';
 	import { Toaster } from '@facile/muse';
-	import { Toaster as SonnerToaster } from 'svelte-sonner';
 	import { auth } from '$lib/auth.svelte';
 	import { theme } from '$lib/theme.svelte';
 
@@ -11,6 +10,10 @@
 	theme.restore();
 </script>
 
-<Toaster position="top" />
-<SonnerToaster position="bottom-right" theme={theme.resolved} />
+<!--
+	One Toaster for the whole app, mounted beside the shell rather than inside a page, so a
+	route change cannot unmount a toast mid-flight. The extra bottom padding keeps the stack
+	clear of MobileNav on a phone.
+-->
+<Toaster class="pb-28 md:pb-6" />
 {@render children?.()}

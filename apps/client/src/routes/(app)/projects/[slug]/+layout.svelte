@@ -7,12 +7,20 @@
 		type Environment,
 		type EnvironmentsResponse,
 		type Project,
+		type ProjectRole,
 	} from '$lib/backend';
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
-	import { Badge, Skeleton } from '@facile/muse';
+	import { Badge, Skeleton, Tabs, icons } from '@facile/muse';
 
 	let { children } = $props();
+
+	const roleTones = {
+		owner: 'owner',
+		admin: 'admin',
+		member: 'neutral',
+		viewer: 'neutral',
+	} as const satisfies Record<ProjectRole, string>;
 
 	let slug = $derived(page.params.slug ?? '');
 
@@ -26,48 +34,57 @@
 	);
 	let canAdmin = $derived(project !== null && ['owner', 'admin'].includes(project.role));
 
-	let navTabs = $derived([
-		{
-			href: `/projects/${slug}`,
-			label: 'Secrets',
-			icon: 'solar:key-linear',
-			exact: true,
-			visible: true,
-		},
-		{
-			href: `/projects/${slug}/members`,
-			label: 'Members',
-			icon: 'solar:users-group-rounded-linear',
-			exact: false,
-			visible: true,
-		},
-		{
-			href: `/projects/${slug}/tokens`,
-			label: 'API tokens',
-			icon: 'solar:code-square-linear',
-			exact: false,
-			visible: canAdmin,
-		},
-		{
-			href: `/projects/${slug}/audit`,
-			label: 'Audit log',
-			icon: 'solar:history-linear',
-			exact: false,
-			visible: true,
-		},
-		{
-			href: `/projects/${slug}/settings`,
-			label: 'Settings',
-			icon: 'solar:settings-linear',
-			exact: false,
-			visible: canAdmin,
-		},
-	].filter((tab) => tab.visible));
+	let navTabs = $derived(
+		[
+			{
+				id: 'secrets',
+				href: `/projects/${slug}`,
+				label: 'Secrets',
+				icon: icons.key,
+				exact: true,
+				visible: true,
+			},
+			{
+				id: 'members',
+				href: `/projects/${slug}/members`,
+				label: 'Members',
+				icon: icons.usersGroup,
+				exact: false,
+				visible: true,
+			},
+			{
+				id: 'tokens',
+				href: `/projects/${slug}/tokens`,
+				label: 'API tokens',
+				icon: icons.code,
+				exact: false,
+				visible: canAdmin,
+			},
+			{
+				id: 'audit',
+				href: `/projects/${slug}/audit`,
+				label: 'Audit log',
+				icon: icons.history,
+				exact: false,
+				visible: true,
+			},
+			{
+				id: 'settings',
+				href: `/projects/${slug}/settings`,
+				label: 'Settings',
+				icon: icons.settings,
+				exact: false,
+				visible: canAdmin,
+			},
+		].filter((tab) => tab.visible)
+	);
 
 	function isActive(href: string, exact: boolean) {
 		if (exact) return page.url.pathname === href;
 		return page.url.pathname === href || page.url.pathname.startsWith(`${href}/`);
 	}
+
+	let activeTab = $derived(navTabs.find((tab) => isActive(tab.href, tab.exact))?.id ?? 'secrets');
 
 	async function reloadProject() {
 		project = await api.get<Project>(`/projects/${slug}`, auth.token);
@@ -120,18 +137,20 @@
 </script>
 
 {#if loading}
-	<div class="border-b border-border px-4 py-4 md:px-8 md:py-5">
-		<Skeleton class="mb-2 h-3 w-24" />
+	<div class="flex flex-col gap-4 border-b border-fc-border px-4 py-4 md:px-8 md:py-5">
+		<Skeleton class="h-3 w-24" />
 		<Skeleton class="h-6 w-56 max-w-full" />
-		<Skeleton class="mt-2 h-4 w-80 max-w-full" />
-		<div class="mt-4 flex gap-1 overflow-hidden">
+		<Skeleton class="h-4 w-80 max-w-full" />
+		<div class="flex gap-1 overflow-hidden">
 			{#each Array(4) as _, i (i)}
-				<Skeleton class="h-9 w-28 shrink-0" />
+				<Skeleton class="h-11 w-28 shrink-0 rounded-fc-pill" />
 			{/each}
 		</div>
 	</div>
 {:else if loadError}
-	<ErrorState message={loadError} onretry={load} />
+	<div class="px-4 py-6 md:px-8">
+		<ErrorState message={loadError} onretry={load} />
+	</div>
 {:else if project}
 	<PageHeader
 		title={project.name}
@@ -139,22 +158,12 @@
 		back={{ href: '/projects', label: 'All projects' }}
 	>
 		{#snippet actions()}
-			<Badge class="text-xs">{project?.role}</Badge>
+			<Badge tone={project ? (roleTones[project.role] ?? 'neutral') : 'neutral'}>
+				{project?.role}
+			</Badge>
 		{/snippet}
 		{#snippet tabs()}
-			{#each navTabs as tab (tab.href)}
-				{@const active = isActive(tab.href, tab.exact)}
-				<a
-					href={tab.href}
-					aria-current={active ? 'page' : undefined}
-					class="inline-flex h-9 shrink-0 items-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-medium transition-colors {active
-						? 'bg-foreground text-background'
-						: 'text-muted-foreground hover:bg-muted hover:text-foreground'}"
-				>
-					<iconify-icon icon={tab.icon} width="18" aria-hidden="true"></iconify-icon>
-					{tab.label}
-				</a>
-			{/each}
+			<Tabs items={navTabs} value={activeTab} label="Project sections" />
 		{/snippet}
 	</PageHeader>
 

@@ -2,7 +2,7 @@
 	import { setContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, SideBar, icons } from '@facile/muse';
+	import { MobileNav, SideBar, SpaceSwitcher, Topbar, icons } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import {
 		api,
@@ -65,7 +65,12 @@
 		page.url.pathname === '/settings' || page.url.pathname.startsWith('/settings/'),
 	);
 
-	const user = $derived({ name: auth.email ?? 'Account' });
+	/**
+	 * The API has no display name — an account is only ever an email. The user card
+	 * wants a name, not an address, so the local part stands in for one: a rail is
+	 * 220px wide and a full address either truncates to nonsense or blows the layout.
+	 */
+	const user = $derived({ name: auth.email?.split('@')[0] || 'Account' });
 
 	const spaces = $derived(projects.map((project) => ({ id: project.slug, name: project.name })));
 
@@ -77,22 +82,35 @@
 </script>
 
 {#if auth.isAuthenticated}
-	<div class="flex h-[100dvh] w-full overflow-hidden">
-		<SideBar
-			class="hidden shrink-0 rounded-none border-r border-border bg-background md:flex"
-			icon="solar:safe-square-bold-duotone"
-			title="Casier"
-			bind:collapsed
-			pages={navPages}
-			{user}
-			userHref="/settings"
-			userActive={onSettings}
-			{spaces}
-			{activeSpaceId}
-			onSpaceSelect={selectProject}
-			personalSpaceLabel="All projects"
-		/>
+	<div class="flex h-[100dvh] w-full overflow-hidden bg-fc-page">
+		<div class="hidden h-full shrink-0 p-3 md:block">
+			<SideBar
+				class="h-full"
+				icon="solar:safe-square-bold-duotone"
+				title="Casier"
+				bind:collapsed
+				pages={navPages}
+				{user}
+				userHref="/settings"
+				userActive={onSettings}
+				{spaces}
+				{activeSpaceId}
+				onSpaceSelect={selectProject}
+				personalSpaceLabel="All projects"
+			/>
+		</div>
 		<main class="min-w-0 flex-1 overflow-auto overscroll-contain pb-24 md:pb-0">
+			<Topbar class="md:hidden">
+				<span class="text-fc-md font-semibold text-fc-fg">Casier</span>
+				<div class="min-w-0 max-w-56 flex-1">
+					<SpaceSwitcher
+						{spaces}
+						activeId={activeSpaceId}
+						onSelect={selectProject}
+						personalLabel="All projects"
+					/>
+				</div>
+			</Topbar>
 			{@render children?.()}
 		</main>
 		<MobileNav

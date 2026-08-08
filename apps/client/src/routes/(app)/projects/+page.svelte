@@ -2,16 +2,33 @@
 	import { getContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { auth } from '$lib/auth.svelte';
-	import { api, type Project, type ProjectsResponse } from '$lib/backend';
+	import { api, type Project, type ProjectRole, type ProjectsResponse } from '$lib/backend';
 	import { formatDate } from '$lib/format';
-	import { Badge, Field, Input, Skeleton, Textarea } from '@facile/muse';
+	import {
+		Badge,
+		Button,
+		Card,
+		EmptyState,
+		Field,
+		Input,
+		Skeleton,
+		Spinner,
+		Textarea,
+		icons,
+		toast,
+	} from '@facile/muse';
 	import Drawer from '$lib/components/Drawer.svelte';
-	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import { toast } from 'svelte-sonner';
 
 	const app = getContext<{ projects: Project[]; refreshProjects: () => Promise<void> }>('app');
+
+	const roleTones = {
+		owner: 'owner',
+		admin: 'admin',
+		member: 'neutral',
+		viewer: 'neutral',
+	} as const satisfies Record<ProjectRole, string>;
 
 	let projects = $state<Project[]>([]);
 	let loading = $state(true);
@@ -62,7 +79,7 @@
 			await app.refreshProjects();
 			goto(`/projects/${project.slug}`);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to create project');
+			toast.danger(err instanceof Error ? err.message : 'Failed to create project');
 		} finally {
 			creating = false;
 		}
@@ -78,14 +95,7 @@
 </svelte:head>
 
 {#snippet newProjectButton()}
-	<button
-		type="button"
-		onclick={openCreate}
-		class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
-	>
-		<iconify-icon icon="solar:add-circle-linear" width="16" aria-hidden="true"></iconify-icon>
-		New project
-	</button>
+	<Button icon={icons.plus} onclick={openCreate}>New project</Button>
 {/snippet}
 
 <PageHeader
@@ -98,47 +108,48 @@
 	{#if loading}
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{#each Array(6) as _, index (index)}
-				<Skeleton class="h-32 rounded-lg" />
+				<Skeleton class="h-40 rounded-fc-md" />
 			{/each}
 		</div>
 	{:else if loadError}
 		<ErrorState message={loadError} onretry={loadProjects} />
 	{:else if projects.length === 0}
 		<EmptyState
+			icon={icons.folder}
 			title="No projects yet"
 			description="A project groups the secrets for one app or service, across all of its environments."
 		>
-			{#snippet icon()}
-				<iconify-icon icon="solar:widget-2-linear" width="40" aria-hidden="true"></iconify-icon>
-			{/snippet}
 			{@render newProjectButton()}
 		</EmptyState>
 	{:else}
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{#each projects as project (project.id)}
-				<a
-					href="/projects/{project.slug}"
-					class="group rounded-lg border border-border bg-card p-5 transition-colors hover:bg-muted"
-				>
+				<Card href="/projects/{project.slug}" class="flex flex-col gap-4">
 					<div class="flex items-start justify-between gap-3">
-						<span class="truncate text-base font-semibold">{project.name}</span>
-						<Badge class="text-xs">{project.role}</Badge>
+						<div class="flex min-w-0 items-center gap-3">
+							<span
+								class="flex size-9 shrink-0 items-center justify-center rounded-fc-sm bg-fc-surface text-fc-fg transition-colors group-hover:bg-fc-component"
+							>
+								<iconify-icon icon={icons.folder} width="18" height="18" class="block"
+								></iconify-icon>
+							</span>
+							<span class="truncate text-fc-sm font-medium text-fc-fg">{project.name}</span>
+						</div>
+						<Badge tone={roleTones[project.role] ?? 'neutral'}>{project.role}</Badge>
 					</div>
-					{#if project.description}
-						<p class="mt-1.5 line-clamp-2 text-sm text-muted-foreground">{project.description}</p>
-					{:else}
-						<p class="mt-1.5 line-clamp-2 text-sm text-muted-foreground">No description</p>
-					{/if}
-					<div class="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+					<p class="line-clamp-2 text-fc-sm text-fc-fg-muted">
+						{project.description || 'No description'}
+					</p>
+					<div class="mt-auto flex items-center gap-2 text-fc-xs text-fc-fg-muted">
 						<span class="truncate">Updated {formatDate(project.updated_at)}</span>
 						<iconify-icon
-							icon="solar:alt-arrow-right-linear"
-							width="14"
-							class="ml-auto shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
-							aria-hidden="true"
+							icon={icons.arrow}
+							width="16"
+							height="16"
+							class="ml-auto block shrink-0 transition-transform group-hover:translate-x-0.5"
 						></iconify-icon>
 					</div>
-				</a>
+				</Card>
 			{/each}
 		</div>
 	{/if}
@@ -157,22 +168,25 @@
 				disabled={creating}
 			/>
 		</Field>
-		<div class="flex justify-end gap-2 pt-1">
-			<button
+		<div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+			<Button
 				type="button"
-				onclick={() => (createOpen = false)}
+				variant="ghost"
+				class="w-full sm:w-auto"
 				disabled={creating}
-				class="inline-flex h-9 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+				onclick={() => (createOpen = false)}
 			>
 				Cancel
-			</button>
-			<button
+			</Button>
+			<Button
 				type="submit"
-				disabled={creating || createName.trim().length < 2}
-				class="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50"
+				icon={icons.plus}
+				class="w-full sm:w-auto"
+				disabled={creating || createName.trim().length < 2 || Boolean(nameError)}
 			>
+				{#if creating}<Spinner size="sm" />{/if}
 				{creating ? 'Creating…' : 'Create'}
-			</button>
+			</Button>
 		</div>
 	</form>
 </Drawer>

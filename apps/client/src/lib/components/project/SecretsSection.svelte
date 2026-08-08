@@ -13,22 +13,33 @@
 		type TrashResponse,
 	} from '$lib/backend';
 	import { daysSince, formatDate, formatDateTime } from '$lib/format';
-	import { Alert, Badge, Button, Field, Input, Skeleton, Spinner, Table, Textarea } from '@facile/muse';
+	import {
+		Alert,
+		Badge,
+		Button,
+		Card,
+		EmptyState,
+		Field,
+		IconButton,
+		Input,
+		REDACTED,
+		SecretField,
+		Skeleton,
+		Spinner,
+		Table,
+		Textarea,
+		icons,
+		toast,
+	} from '@facile/muse';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Drawer from '$lib/components/Drawer.svelte';
-	import EmptyState from '$lib/components/EmptyState.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
-	import { toast } from 'svelte-sonner';
 
 	let {
 		projectSlug,
 		environment,
 		canWrite,
 	}: { projectSlug: string; environment: Environment; canWrite: boolean } = $props();
-
-	const MASK = '••••••••';
-	const actionButton =
-		'inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground';
 
 	let secrets = $state<Secret[]>([]);
 	let rotationDays = $state(0);
@@ -152,7 +163,7 @@
 			await fetchValue(secret);
 			revealed = new Set(revealed).add(secret.id);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : `Failed to reveal ${secret.key}`);
+			toast.danger(err instanceof Error ? err.message : `Failed to reveal ${secret.key}`);
 		} finally {
 			const next = new Set(revealing);
 			next.delete(secret.id);
@@ -166,7 +177,7 @@
 			await navigator.clipboard.writeText(value);
 			toast.success(`Copied ${secret.key} to clipboard`);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Clipboard unavailable');
+			toast.danger(err instanceof Error ? err.message : 'Clipboard unavailable');
 		}
 	}
 
@@ -192,7 +203,7 @@
 			toast.success(`Secret ${secret.key} restored`);
 			await loadSecrets();
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : `Failed to restore ${secret.key}`);
+			toast.danger(err instanceof Error ? err.message : `Failed to restore ${secret.key}`);
 		} finally {
 			restoring = null;
 		}
@@ -220,7 +231,7 @@
 			addOpen = false;
 			toast.success(`Secret ${secret.key} added to ${environment.name}`);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to add secret');
+			toast.danger(err instanceof Error ? err.message : 'Failed to add secret');
 		} finally {
 			adding = false;
 		}
@@ -239,7 +250,7 @@
 		} catch (err) {
 			editOpen = false;
 			editTarget = null;
-			toast.error(err instanceof Error ? err.message : `Failed to read ${secret.key}`);
+			toast.danger(err instanceof Error ? err.message : `Failed to read ${secret.key}`);
 		} finally {
 			editLoading = false;
 		}
@@ -260,7 +271,7 @@
 			toast.success(`Secret ${editTarget.key} updated`);
 			editOpen = false;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to update secret');
+			toast.danger(err instanceof Error ? err.message : 'Failed to update secret');
 		} finally {
 			saving = false;
 		}
@@ -281,7 +292,7 @@
 			deleteOpen = false;
 			deleteTarget = null;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Failed to delete secret');
+			toast.danger(err instanceof Error ? err.message : 'Failed to delete secret');
 		} finally {
 			deleting = false;
 		}
@@ -320,7 +331,7 @@
 			historyOpen = false;
 			historyTarget = null;
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Rollback failed');
+			toast.danger(err instanceof Error ? err.message : 'Rollback failed');
 		} finally {
 			rollingBack = null;
 		}
@@ -341,7 +352,7 @@
 			importContent = '';
 			await loadSecrets();
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Import failed');
+			toast.danger(err instanceof Error ? err.message : 'Import failed');
 		} finally {
 			importing = false;
 		}
@@ -360,7 +371,7 @@
 			URL.revokeObjectURL(url);
 			toast.success(`Exported ${environment.name} as .env`);
 		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Export failed');
+			toast.danger(err instanceof Error ? err.message : 'Export failed');
 		} finally {
 			exporting = false;
 		}
@@ -375,22 +386,97 @@
 {#snippet rotationBadge(secret: Secret)}
 	{@const age = daysSince(secret.rotated_at)}
 	{#if secret.rotation_status === 'overdue'}
-		<Badge class="border-foreground bg-foreground whitespace-nowrap text-background">
-			<iconify-icon icon="solar:danger-triangle-linear" width="12" aria-hidden="true"></iconify-icon>
+		<Badge tone="danger" class="whitespace-nowrap">
 			Rotate{age === null ? '' : ` · ${age}d`}
 		</Badge>
 	{:else if secret.rotation_status === 'due_soon'}
-		<Badge class="border-border bg-transparent whitespace-nowrap text-muted-foreground">
-			<iconify-icon icon="solar:clock-circle-linear" width="12" aria-hidden="true"></iconify-icon>
+		<Badge tone="warning" class="whitespace-nowrap">
 			Due soon{age === null ? '' : ` · ${age}d`}
 		</Badge>
 	{/if}
 {/snippet}
 
+{#snippet valueField(secret: Secret)}
+	{@const isRevealed = revealed.has(secret.id)}
+	{@const isRevealing = revealing.has(secret.id)}
+	<SecretField
+		value={isRevealed ? (values.get(secret.id) ?? '') : REDACTED}
+		sensitive={false}
+		copyable={isRevealed}
+		class="min-w-0"
+		onCopy={(ok) =>
+			ok ? toast.success(`Copied ${secret.key} to clipboard`) : toast.danger('Clipboard unavailable')}
+	>
+		{#snippet actions()}
+			{#if !isRevealed}
+				<IconButton
+					variant="ghost"
+					aria-label="Copy {secret.key} to clipboard"
+					title="Copy"
+					onclick={() => copyValue(secret)}
+				>
+					<iconify-icon icon={icons.copy} width="18" height="18" class="block"></iconify-icon>
+				</IconButton>
+			{/if}
+			<IconButton
+				variant="ghost"
+				disabled={isRevealing}
+				aria-label={isRevealed ? `Hide ${secret.key}` : `Reveal ${secret.key}`}
+				title={isRevealed ? 'Hide' : 'Reveal'}
+				aria-pressed={isRevealed}
+				onclick={() => toggleReveal(secret)}
+			>
+				{#if isRevealing}
+					<Spinner size="sm" />
+				{:else}
+					<iconify-icon
+						icon={isRevealed ? icons.eyeClosed : icons.eye}
+						width="18"
+						height="18"
+						class="block"
+					></iconify-icon>
+				{/if}
+			</IconButton>
+		{/snippet}
+	</SecretField>
+{/snippet}
+
+{#snippet secretActions(secret: Secret)}
+	<Button
+		variant="ghost"
+		icon={icons.history}
+		aria-label="History of {secret.key}"
+		title="History"
+		onclick={() => openHistory(secret)}
+	/>
+	{#if canWrite}
+		<Button
+			variant="ghost"
+			icon={icons.edit}
+			aria-label="Edit {secret.key}"
+			title="Edit"
+			onclick={() => openEdit(secret)}
+		/>
+		<Button
+			variant="ghost-danger"
+			icon={icons.remove}
+			aria-label="Delete {secret.key}"
+			title="Delete"
+			onclick={() => openDelete(secret)}
+		/>
+	{/if}
+{/snippet}
+
 <section class="flex flex-col gap-4" aria-label="Secrets">
+	{#if environment.protected}
+		<Alert tone="info">
+			{environment.name} is protected — only an owner or an admin can write to it.
+		</Alert>
+	{/if}
+
 	{#if !loading && !loadError && rotationDays > 0 && needsAttention > 0}
 		<Alert tone="warning" class="flex flex-wrap items-center justify-between gap-3">
-			<p class="min-w-0">
+			<span class="min-w-0">
 				{#if overdue.length > 0}
 					<span class="font-medium">
 						{overdue.length}
@@ -399,16 +485,17 @@
 					</span>
 				{/if}
 				{#if dueSoon.length > 0}
-					<span class="text-muted-foreground">
+					<span>
 						{dueSoon.length}
 						{dueSoon.length === 1 ? 'is' : 'are'} due for rotation shortly.
 					</span>
 				{/if}
-			</p>
+			</span>
 			<Button
 				variant="outline"
 				size="sm"
-				class="h-8 shrink-0"
+				icon={staleOnly ? icons.refresh : icons.filter}
+				class="shrink-0"
 				onclick={() => (staleOnly = !staleOnly)}
 			>
 				{staleOnly ? 'Show all secrets' : 'Review them'}
@@ -416,199 +503,185 @@
 		</Alert>
 	{/if}
 
-	<div class="flex flex-wrap items-center gap-2">
-		<div class="relative min-w-0 flex-1 sm:max-w-xs">
-			<iconify-icon
-				icon="solar:magnifer-linear"
-				width="16"
-				class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-				aria-hidden="true"
-			></iconify-icon>
+	<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+		<div class="min-w-0 flex-1">
 			<Input
 				type="search"
 				placeholder="Filter by key or tag"
 				bind:value={search}
-				class="pl-9"
 				aria-label="Filter secrets"
 			/>
 		</div>
-		<div class="ml-auto flex items-center gap-2">
-			<Button variant="outline" class="h-9" onclick={openTrash}>
-				<iconify-icon icon="solar:trash-bin-trash-linear" width="16" aria-hidden="true"></iconify-icon>
-				Trash
-			</Button>
+		<div class="flex flex-wrap items-center gap-2">
+			<Button variant="outline" icon={icons.remove} onclick={openTrash}>Trash</Button>
 			<Button
 				variant="outline"
-				class="h-9"
+				icon={icons.download}
 				disabled={exporting || secrets.length === 0}
 				onclick={handleExport}
 			>
-				<iconify-icon icon="solar:export-linear" width="16" aria-hidden="true"></iconify-icon>
-				Export
+				{exporting ? 'Exporting…' : 'Export'}
 			</Button>
 			{#if canWrite}
-				<Button variant="outline" class="h-9" onclick={() => (importOpen = true)}>
-					<iconify-icon icon="solar:import-linear" width="16" aria-hidden="true"></iconify-icon>
+				<Button variant="outline" icon={icons.upload} onclick={() => (importOpen = true)}>
 					Import
 				</Button>
-				<Button class="h-9" onclick={openAdd}>
-					<iconify-icon icon="solar:add-circle-linear" width="16" aria-hidden="true"></iconify-icon>
-					Add secret
-				</Button>
+				<Button icon={icons.plus} onclick={openAdd}>Add secret</Button>
 			{/if}
 		</div>
 	</div>
 
 	{#if loading}
-		<div class="flex flex-col gap-2 rounded-lg border border-border bg-card p-4">
+		<Card class="flex flex-col gap-2">
 			{#each Array(5) as _, i (i)}
-				<Skeleton class="h-9 w-full" />
+				<Skeleton class="h-11 w-full" />
 			{/each}
-		</div>
+		</Card>
 	{:else if loadError}
 		<ErrorState message={loadError} onretry={loadSecrets} />
 	{:else if secrets.length === 0}
 		<EmptyState
+			icon={icons.key}
 			title="No secrets in {environment.name}"
 			description="Secrets are encrypted at rest and only visible to members of this project."
 		>
-			{#snippet icon()}
-				<iconify-icon icon="solar:key-linear" width="32" aria-hidden="true"></iconify-icon>
-			{/snippet}
 			{#if canWrite}
-				<Button class="h-9" onclick={openAdd}>
-					<iconify-icon icon="solar:add-circle-linear" width="16" aria-hidden="true"></iconify-icon>
-					Add your first secret
-				</Button>
+				<Button icon={icons.plus} onclick={openAdd}>Add your first secret</Button>
 			{/if}
 		</EmptyState>
 	{:else if filtered.length === 0}
 		<EmptyState
+			icon={icons.search}
 			title="No matches"
 			description={staleOnly && !search.trim()
 				? 'Every secret in this environment is within the rotation policy.'
 				: `No secret matches "${search}".`}
-		/>
+		>
+			<Button
+				variant="outline"
+				icon={icons.refresh}
+				onclick={() => {
+					search = '';
+					staleOnly = false;
+				}}
+			>
+				Clear filters
+			</Button>
+		</EmptyState>
 	{:else}
-		<Table>
-			<thead>
-				<tr>
-					<th>Key</th>
-					<th>Value</th>
-					<th>Version</th>
-					<th>Last rotated</th>
-					<th class="w-1 text-right" aria-label="Actions"></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each filtered as secret (secret.id)}
+		<div class="hidden lg:block">
+			<Table>
+				<thead>
 					<tr>
-						<td>
-							<div class="flex flex-wrap items-center gap-1.5">
-								<code class="rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">{secret.key}</code>
-								{#each secret.tags ?? [] as tag (tag)}
-									<Badge tone="neutral" class="text-xs">{tag}</Badge>
-								{/each}
-							</div>
-						</td>
-						<td>
-							{#if revealed.has(secret.id)}
-								<code
-									class="block max-w-64 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground"
-									title={values.get(secret.id) ?? ''}
-								>
-									{values.get(secret.id) ?? ''}
-								</code>
-							{:else if revealing.has(secret.id)}
-								<Spinner size="sm" />
-							{:else}
-								<span class="select-none font-mono text-sm text-muted-foreground" aria-label="Hidden value">
-									{MASK}
-								</span>
-							{/if}
-						</td>
-						<td class="whitespace-nowrap text-muted-foreground">v{secret.version}</td>
-						<td>
-							<div class="flex flex-wrap items-center gap-2">
-								<span class="whitespace-nowrap text-muted-foreground">
-									{formatDate(secret.rotated_at)}
-								</span>
-								{@render rotationBadge(secret)}
-							</div>
-						</td>
-						<td>
-							<div class="flex items-center justify-end gap-0.5">
-								<button
-									type="button"
-									class={actionButton}
-									aria-label={revealed.has(secret.id) ? `Hide ${secret.key}` : `Reveal ${secret.key}`}
-									onclick={() => toggleReveal(secret)}
-								>
-									{#if revealed.has(secret.id)}
-										<iconify-icon icon="solar:eye-closed-linear" width="16" aria-hidden="true"></iconify-icon>
-									{:else}
-										<iconify-icon icon="solar:eye-linear" width="16" aria-hidden="true"></iconify-icon>
-									{/if}
-								</button>
-								<button
-									type="button"
-									class={actionButton}
-									aria-label={`Copy ${secret.key}`}
-									onclick={() => copyValue(secret)}
-								>
-									<iconify-icon icon="solar:copy-linear" width="16" aria-hidden="true"></iconify-icon>
-								</button>
-								<button
-									type="button"
-									class={actionButton}
-									aria-label={`History of ${secret.key}`}
-									onclick={() => openHistory(secret)}
-								>
-									<iconify-icon icon="solar:history-linear" width="16" aria-hidden="true"></iconify-icon>
-								</button>
-								{#if canWrite}
-									<button
-										type="button"
-										class={actionButton}
-										aria-label={`Edit ${secret.key}`}
-										onclick={() => openEdit(secret)}
-									>
-										<iconify-icon icon="solar:pen-new-square-linear" width="16" aria-hidden="true"></iconify-icon>
-									</button>
-									<button
-										type="button"
-										class={actionButton}
-										aria-label={`Delete ${secret.key}`}
-										onclick={() => openDelete(secret)}
-									>
-										<iconify-icon icon="solar:trash-bin-2-linear" width="16" aria-hidden="true"></iconify-icon>
-									</button>
-								{/if}
-							</div>
-						</td>
+						<th scope="col">Key</th>
+						<th scope="col">Value</th>
+						<th scope="col">Version</th>
+						<th scope="col">Last rotated</th>
+						<th scope="col" class="text-right">Actions</th>
 					</tr>
-				{/each}
-			</tbody>
-		</Table>
+				</thead>
+				<tbody>
+					{#each filtered as secret (secret.id)}
+						<tr>
+							<td>
+								<div class="flex flex-wrap items-center gap-1.5">
+									<span class="font-fc-mono text-fc-xs text-fc-fg">{secret.key}</span>
+									{#each secret.tags ?? [] as tag (tag)}
+										<Badge tone="neutral">{tag}</Badge>
+									{/each}
+								</div>
+							</td>
+							<td>
+								<div class="max-w-sm min-w-56">{@render valueField(secret)}</div>
+							</td>
+							<td class="whitespace-nowrap text-fc-fg-muted">v{secret.version}</td>
+							<td>
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="whitespace-nowrap text-fc-fg-muted">
+										{formatDate(secret.rotated_at)}
+									</span>
+									{@render rotationBadge(secret)}
+								</div>
+							</td>
+							<td>
+								<div class="flex items-center justify-end gap-1">
+									{@render secretActions(secret)}
+								</div>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</Table>
+		</div>
+
+		<div class="flex flex-col gap-2 lg:hidden">
+			{#each filtered as secret (secret.id)}
+				<Card class="flex flex-col gap-4">
+					<div class="flex flex-wrap items-center gap-1.5">
+						<span class="min-w-0 truncate font-fc-mono text-fc-sm font-medium text-fc-fg">
+							{secret.key}
+						</span>
+						{#each secret.tags ?? [] as tag (tag)}
+							<Badge tone="neutral">{tag}</Badge>
+						{/each}
+					</div>
+
+					{@render valueField(secret)}
+
+					<div class="flex flex-wrap items-center gap-2 text-fc-xs text-fc-fg-muted">
+						<span class="whitespace-nowrap">v{secret.version}</span>
+						<span class="whitespace-nowrap">rotated {formatDate(secret.rotated_at)}</span>
+						{@render rotationBadge(secret)}
+					</div>
+
+					<div class="flex items-center justify-end gap-1">
+						{@render secretActions(secret)}
+					</div>
+				</Card>
+			{/each}
+		</div>
 	{/if}
 </section>
 
 <Drawer bind:open={addOpen} title="Add secret to {environment.name}">
 	<form onsubmit={handleAdd} class="flex flex-col gap-4">
 		<Field label="Key" error={newKeyError}>
-			<Input placeholder="DATABASE_URL" bind:value={newKey} required disabled={adding} class="font-mono" />
+			<Input
+				placeholder="DATABASE_URL"
+				bind:value={newKey}
+				required
+				disabled={adding}
+				class="font-fc-mono"
+			/>
 		</Field>
 		<Field label="Value">
-			<Textarea rows={3} placeholder="Secret value" bind:value={newValue} disabled={adding} class="font-mono" />
+			<Textarea
+				rows={3}
+				placeholder="Secret value"
+				bind:value={newValue}
+				disabled={adding}
+				class="font-fc-mono"
+			/>
 		</Field>
 		<Field label="Tags" helper="Comma-separated, optional">
 			<Input placeholder="backend, database" bind:value={newTags} disabled={adding} />
 		</Field>
-		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" class="h-9" disabled={adding} onclick={() => (addOpen = false)}>
+		<div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+			<Button
+				type="button"
+				variant="ghost"
+				class="w-full sm:w-auto"
+				disabled={adding}
+				onclick={() => (addOpen = false)}
+			>
 				Cancel
 			</Button>
-			<Button type="submit" class="h-9" disabled={adding || !newKey.trim() || !!newKeyError}>
+			<Button
+				type="submit"
+				icon={icons.plus}
+				class="w-full sm:w-auto"
+				disabled={adding || !newKey.trim() || Boolean(newKeyError)}
+			>
 				{#if adding}<Spinner size="sm" />{/if}
 				{adding ? 'Adding…' : 'Add secret'}
 			</Button>
@@ -620,63 +693,78 @@
 	{#if trashLoading}
 		<div class="flex flex-col gap-2">
 			{#each Array(3) as _, i (i)}
-				<Skeleton class="h-9 w-full" />
+				<Skeleton class="h-11 w-full" />
 			{/each}
 		</div>
 	{:else if trashError}
 		<ErrorState message={trashError} onretry={openTrash} />
 	{:else if trashed.length === 0}
 		<EmptyState
+			bare
+			icon={icons.remove}
 			title="Nothing in the trash"
 			description="Deleted secrets stay here for 30 days before they are destroyed."
-		>
-			{#snippet icon()}
-				<iconify-icon icon="solar:trash-bin-trash-linear" width="32" aria-hidden="true"></iconify-icon>
-			{/snippet}
-		</EmptyState>
+		/>
 	{:else}
 		<div class="flex flex-col gap-3">
-			<p class="text-sm text-muted-foreground">
+			<p class="text-fc-sm text-fc-fg-muted">
 				A deleted key stays reserved until it is restored or purged, so it cannot be recreated
 				from scratch while it sits here.
 			</p>
-			{#each trashed as secret (secret.id)}
-				<div class="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-					<div class="flex min-w-0 flex-col gap-1">
-						<code class="w-fit rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
-							{secret.key}
-						</code>
-						<span class="text-xs text-muted-foreground">
-							Deleted {formatDateTime(secret.deleted_at)} · purged {formatDate(secret.purge_at)}
-						</span>
-					</div>
-					{#if canWrite}
-						<Button
-							variant="outline"
-							class="h-8 shrink-0"
-							disabled={restoring === secret.id}
-							onclick={() => handleRestore(secret)}
-						>
-							{#if restoring === secret.id}<Spinner size="sm" />{/if}
-							Restore
-						</Button>
-					{/if}
-				</div>
-			{/each}
+			<ul class="flex flex-col divide-y divide-fc-border">
+				{#each trashed as secret (secret.id)}
+					<li class="flex items-center justify-between gap-3 py-3">
+						<div class="flex min-w-0 flex-col gap-1">
+							<span class="truncate font-fc-mono text-fc-sm text-fc-fg">{secret.key}</span>
+							<span class="text-fc-xs text-fc-fg-muted">
+								Deleted {formatDateTime(secret.deleted_at)} · purged {formatDate(secret.purge_at)}
+							</span>
+						</div>
+						{#if canWrite}
+							<Button
+								variant="outline"
+								icon={icons.refresh}
+								class="shrink-0"
+								disabled={restoring === secret.id}
+								onclick={() => handleRestore(secret)}
+							>
+								{#if restoring === secret.id}<Spinner size="sm" />{/if}
+								Restore
+							</Button>
+						{/if}
+					</li>
+				{/each}
+			</ul>
 		</div>
 	{/if}
 </Drawer>
 
-<Drawer bind:open={editOpen} title="Edit {editTarget?.key}">
+<Drawer bind:open={editOpen} title="Edit {editTarget?.key ?? 'secret'}">
 	<form onsubmit={handleEdit} class="flex flex-col gap-4">
 		<Field label="Value" helper="Saving creates a new version">
-			<Textarea rows={4} bind:value={editValue} disabled={saving || editLoading} class="font-mono" />
+			<Textarea
+				rows={4}
+				bind:value={editValue}
+				disabled={saving || editLoading}
+				class="font-fc-mono"
+			/>
 		</Field>
-		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" class="h-9" disabled={saving} onclick={() => (editOpen = false)}>
+		<div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+			<Button
+				type="button"
+				variant="ghost"
+				class="w-full sm:w-auto"
+				disabled={saving}
+				onclick={() => (editOpen = false)}
+			>
 				Cancel
 			</Button>
-			<Button type="submit" class="h-9" disabled={saving || editLoading}>
+			<Button
+				type="submit"
+				icon={icons.check}
+				class="w-full sm:w-auto"
+				disabled={saving || editLoading}
+			>
 				{#if saving || editLoading}<Spinner size="sm" />{/if}
 				{editLoading ? 'Loading…' : saving ? 'Saving…' : 'Save'}
 			</Button>
@@ -684,38 +772,39 @@
 	</form>
 </Drawer>
 
-<Drawer bind:open={historyOpen} title="History of {historyTarget?.key}">
+<Drawer bind:open={historyOpen} title="History of {historyTarget?.key ?? 'secret'}">
 	{#if versionsLoading}
 		<div class="flex justify-center py-6">
 			<Spinner size="md" />
 		</div>
 	{:else if versionsError}
-		<p class="py-4 text-center text-sm text-destructive">{versionsError}</p>
+		<Alert tone="danger">{versionsError}</Alert>
 	{:else if versions.length === 0}
-		<p class="py-4 text-center text-sm text-muted-foreground">No previous versions.</p>
+		<EmptyState bare icon={icons.history} title="No previous versions" />
 	{:else}
-		<ul class="flex flex-col gap-1">
+		<ul class="flex flex-col divide-y divide-fc-border">
 			{#each versions as version (version.version)}
-				<li class="flex items-center justify-between gap-3 rounded-md px-2 py-2 hover:bg-muted">
+				<li class="flex items-center justify-between gap-3 py-3">
 					<div class="min-w-0">
-						<p class="flex items-center gap-2 text-sm text-foreground">
+						<p class="flex items-center gap-2 text-fc-sm text-fc-fg">
 							v{version.version}
 							{#if historyTarget && version.version === historyTarget.version}
-								<Badge tone="accent" class="text-xs">current</Badge>
+								<Badge tone="accent">current</Badge>
 							{/if}
 						</p>
-						<p class="truncate text-xs text-muted-foreground">
+						<p class="truncate text-fc-xs text-fc-fg-muted">
 							{version.changed_by || 'unknown'} — {formatDateTime(version.created_at)}
 						</p>
 					</div>
 					{#if canWrite && historyTarget && version.version !== historyTarget.version}
 						<Button
 							variant="outline"
-							size="sm"
-							class="h-9"
+							icon={icons.refresh}
+							class="shrink-0"
 							disabled={rollingBack !== null}
 							onclick={() => handleRollback(version.version)}
 						>
+							{#if rollingBack === version.version}<Spinner size="sm" />{/if}
 							{rollingBack === version.version ? 'Rolling back…' : 'Roll back'}
 						</Button>
 					{/if}
@@ -733,14 +822,25 @@
 				placeholder={'DATABASE_URL=postgres://…\nAPI_KEY=…'}
 				bind:value={importContent}
 				disabled={importing}
-				class="font-mono"
+				class="font-fc-mono"
 			/>
 		</Field>
-		<div class="flex justify-end gap-2 pt-1">
-			<Button type="button" variant="ghost" class="h-9" disabled={importing} onclick={() => (importOpen = false)}>
+		<div class="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+			<Button
+				type="button"
+				variant="ghost"
+				class="w-full sm:w-auto"
+				disabled={importing}
+				onclick={() => (importOpen = false)}
+			>
 				Cancel
 			</Button>
-			<Button type="submit" class="h-9" disabled={importing || !importContent.trim()}>
+			<Button
+				type="submit"
+				icon={icons.upload}
+				class="w-full sm:w-auto"
+				disabled={importing || !importContent.trim()}
+			>
 				{#if importing}<Spinner size="sm" />{/if}
 				{importing ? 'Importing…' : 'Import'}
 			</Button>
