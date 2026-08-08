@@ -221,7 +221,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 			httpjson.WriteJSON(w, http.StatusOK, resp)
 		})
 
-		router.Put("/{key}/acls", func(w http.ResponseWriter, request *http.Request) {
+		router.With(middleware.RequireUserSession).Put("/{key}/acls", func(w http.ResponseWriter, request *http.Request) {
 			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")
@@ -238,7 +238,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 			w.WriteHeader(http.StatusNoContent)
 		})
 
-		router.Delete("/{key}/acls/{aclId}", func(w http.ResponseWriter, request *http.Request) {
+		router.With(middleware.RequireUserSession).Delete("/{key}/acls/{aclId}", func(w http.ResponseWriter, request *http.Request) {
 			projectSlug := chi.URLParam(request, "slug")
 			envSlug := chi.URLParam(request, "envSlug")
 			key := chi.URLParam(request, "key")

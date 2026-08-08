@@ -166,11 +166,11 @@ func (controller *Controller) updateTags(ctx context.Context, projectSlug, envSl
 }
 
 func (controller *Controller) listVersions(ctx context.Context, projectSlug, envSlug, key string) (*VersionsResponse, error) {
-	envID, _, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
-	versions, err := controller.service.listVersions(ctx, envID, key)
+	versions, err := controller.service.listVersions(ctx, envID, key, person)
 	if err != nil {
 		return nil, err
 	}
@@ -208,11 +208,11 @@ func (controller *Controller) diff(ctx context.Context, projectSlug, envSlugA, e
 }
 
 func (controller *Controller) listACLs(ctx context.Context, projectSlug, envSlug, key string) (*ACLsResponse, error) {
-	envID, _, err := controller.resolveEnv(ctx, projectSlug, envSlug)
+	envID, person, err := controller.resolveEnv(ctx, projectSlug, envSlug)
 	if err != nil {
 		return nil, err
 	}
-	acls, err := controller.service.listACLs(ctx, envID, key)
+	acls, err := controller.service.listACLs(ctx, envID, key, person)
 	if err != nil {
 		return nil, err
 	}
@@ -305,6 +305,7 @@ func (controller *Controller) resolveEnvFor(ctx context.Context, projectSlug, en
 
 	return envID, caller{
 		userID:   userID,
+		email:    identity.Email,
 		role:     controller.service.projectRole(ctx, projectID, userID),
 		clientIP: identity.ClientIP,
 		scope:    identity.Scope,

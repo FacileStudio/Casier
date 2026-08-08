@@ -16,7 +16,7 @@ import (
 )
 
 func RegisterRoutes(router chi.Router, service *Service, authService *auth.Service, appEnv env.Config) {
-	router.With(middleware.RequireAuth(authService), requireUserSession).Post("/admin/rotate-key", func(w http.ResponseWriter, request *http.Request) {
+	router.With(middleware.RequireAuth(authService), middleware.RequireUserSession).Post("/admin/rotate-key", func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := authcontext.IdentityFromContext(request.Context())
 		if !ok {
 			httpjson.WriteError(w, errors.Unauthorized("missing auth"))
@@ -48,7 +48,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 		httpjson.WriteJSON(w, http.StatusOK, RotateKeyResponse{Rotated: count, Warning: RotateKeyWarning})
 	})
 
-	router.With(middleware.RequireAuth(authService), requireUserSession).Post("/invites/{token}/accept", func(w http.ResponseWriter, request *http.Request) {
+	router.With(middleware.RequireAuth(authService), middleware.RequireUserSession).Post("/invites/{token}/accept", func(w http.ResponseWriter, request *http.Request) {
 		token := chi.URLParam(request, "token")
 		if err := service.controller.acceptInvite(request.Context(), token); err != nil {
 			httpjson.WriteError(w, err)
@@ -120,7 +120,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				w.WriteHeader(http.StatusNoContent)
 			})
 
-			router.With(requireUserSession).Get("/members", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Get("/members", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				resp, err := service.controller.listMembers(request.Context(), slug)
 				if err != nil {
@@ -130,7 +130,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
 
-			router.With(requireUserSession).Post("/members", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Post("/members", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				var req AddMemberRequest
 				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
@@ -145,7 +145,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				w.WriteHeader(http.StatusNoContent)
 			})
 
-			router.With(requireUserSession).Get("/invites", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Get("/invites", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				resp, err := service.controller.listInvites(request.Context(), slug)
 				if err != nil {
@@ -155,7 +155,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
 
-			router.With(requireUserSession).Post("/invites", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Post("/invites", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				var req CreateInviteRequest
 				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
@@ -170,7 +170,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusCreated, resp)
 			})
 
-			router.With(requireUserSession).Delete("/invites/{inviteId}", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Delete("/invites/{inviteId}", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				inviteID, err := strconv.ParseInt(chi.URLParam(request, "inviteId"), 10, 64)
 				if err != nil {
@@ -201,7 +201,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
 
-			router.With(requireUserSession).Get("/webhooks", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Get("/webhooks", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				resp, err := service.controller.listWebhooks(request.Context(), slug)
 				if err != nil {
@@ -211,7 +211,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
 
-			router.With(requireUserSession).Post("/webhooks", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Post("/webhooks", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				var req CreateWebhookRequest
 				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
@@ -226,7 +226,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusCreated, resp)
 			})
 
-			router.With(requireUserSession).Delete("/webhooks/{webhookId}", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Delete("/webhooks/{webhookId}", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				webhookID, err := strconv.ParseInt(chi.URLParam(request, "webhookId"), 10, 64)
 				if err != nil {
@@ -240,7 +240,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				w.WriteHeader(http.StatusNoContent)
 			})
 
-			router.With(requireUserSession).Get("/tokens", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Get("/tokens", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				resp, err := service.controller.listApiTokens(request.Context(), slug)
 				if err != nil {
@@ -250,7 +250,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusOK, resp)
 			})
 
-			router.With(requireUserSession).Post("/tokens", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Post("/tokens", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				var req CreateApiTokenRequest
 				if err := httpjson.DecodeJSON(w, request, &req); err != nil {
@@ -265,7 +265,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				httpjson.WriteJSON(w, http.StatusCreated, resp)
 			})
 
-			router.With(requireUserSession).Delete("/tokens/{tokenId}", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Delete("/tokens/{tokenId}", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				tokenID, err := strconv.ParseInt(chi.URLParam(request, "tokenId"), 10, 64)
 				if err != nil {
@@ -279,7 +279,7 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				w.WriteHeader(http.StatusNoContent)
 			})
 
-			router.With(requireUserSession).Delete("/members/{userId}", func(w http.ResponseWriter, request *http.Request) {
+			router.With(middleware.RequireUserSession).Delete("/members/{userId}", func(w http.ResponseWriter, request *http.Request) {
 				slug := chi.URLParam(request, "slug")
 				targetUserID, err := strconv.ParseInt(chi.URLParam(request, "userId"), 10, 64)
 				if err != nil {
@@ -296,19 +296,5 @@ func RegisterRoutes(router chi.Router, service *Service, authService *auth.Servi
 				})
 			})
 		})
-	})
-}
-
-// requireUserSession rejects API-token callers. Project administration —
-// members, invites, webhooks and minting further tokens — and instance wide key
-// rotation are people operations; a machine credential must never widen its own
-// access. Secret and environment reads stay open to tokens.
-func requireUserSession(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
-		if authcontext.ScopeFromContext(request.Context()) != nil {
-			httpjson.WriteError(w, errors.Forbidden("API tokens cannot perform this operation"))
-			return
-		}
-		next.ServeHTTP(w, request)
 	})
 }

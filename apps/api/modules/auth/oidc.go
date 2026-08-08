@@ -56,6 +56,20 @@ func newOIDCHandler(ctx context.Context, cfg *env.OIDCConfig, service *Service) 
 	}, nil
 }
 
+// emailIsVerified decides whether an OIDC identity may be trusted to name a
+// local account. Identity crosses the wire by email here, so an IdP that lets a
+// user set an unverified address is an account-takeover path: claim the email of
+// an existing owner and the callback hands back their session.
+//
+// The claim is a pointer so that "absent" and "false" stay distinguishable. An
+// explicit false is a provider telling us the address is unproven, and it is
+// refused. Absent means the provider publishes no verification signal at all —
+// there is nothing to act on, and failing closed there would lock out every
+// deployment whose IdP omits the claim.
+func emailIsVerified(verified *bool) bool {
+	return verified == nil || *verified
+}
+
 func (h *oidcHandler) login(w http.ResponseWriter, r *http.Request) {
 	state, err := randomState()
 	if err != nil {
@@ -68,6 +82,7 @@ func (h *oidcHandler) login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   int(oidcStateTTL.Seconds()),
 		HttpOnly: true,
+		Secure:   true,
 		SameSite: http.SameSiteLaxMode,
 	})
 
@@ -79,6 +94,7 @@ func (h *oidcHandler) login(w http.ResponseWriter, r *http.Request) {
 			Path:     "/",
 			MaxAge:   int(oidcStateTTL.Seconds()),
 			HttpOnly: true,
+			Secure:   true,
 			SameSite: http.SameSiteLaxMode,
 		})
 	}
@@ -98,6 +114,7 @@ func (h *oidcHandler) callback(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   true,
 	})
 
 	oauth2Token, err := h.oauth2Cfg.Exchange(r.Context(), r.URL.Query().Get("code"))
@@ -120,7 +137,7 @@ func (h *oidcHandler) callback(w http.ResponseWriter, r *http.Request) {
 
 	var claims struct {
 		Email         string `json:"email"`
-		EmailVerified bool   `json:"email_verified"`
+		EmailVerified *bool  `json:"email_verified"`
 		Name          string `json:"name"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
@@ -129,6 +146,10 @@ func (h *oidcHandler) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	if claims.Email == "" {
 		httpjson.WriteError(w, errors.Invalid("OIDC provider did not return an email"))
+		return
+	}
+	if !emailIsVerified(claims.EmailVerified) {
+		httpjson.WriteError(w, errors.Unauthorized("email is not verified"))
 		return
 	}
 
@@ -164,6 +185,7 @@ func (h *oidcHandler) takeCLICallback(w http.ResponseWriter, r *http.Request) (c
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   true,
 	})
 	return decodeCLICallback(cookie.Value)
 }
@@ -186,10 +208,15 @@ func (h *oidcHandler) cliExchange(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims struct {
-		Email string `json:"email"`
+		Email         string `json:"email"`
+		EmailVerified *bool  `json:"email_verified"`
 	}
 	if err := idToken.Claims(&claims); err != nil || claims.Email == "" {
 		httpjson.WriteError(w, errors.Unauthorized("invalid id_token"))
+		return
+	}
+	if !emailIsVerified(claims.EmailVerified) {
+		httpjson.WriteError(w, errors.Unauthorized("email is not verified"))
 		return
 	}
 

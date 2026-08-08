@@ -28,12 +28,22 @@ func joinTags(tags []string) string {
 
 var refPattern = regexp.MustCompile(`\$\{ref:([^/]+)/([^}]+)\}`)
 
+// maxRefExpansions bounds how many ${ref:} occurrences one request may expand.
+// Depth alone does not bound the work: a single 64KB value holds thousands of
+// references, and each one costs an environment lookup plus a secret lookup, so
+// a handful of such values turns one read into an unbounded query storm the
+// client can walk away from. Past the budget a reference is left literal, which
+// is what every other resolution failure already does.
+const maxRefExpansions = 100
+
 // resolveReferences expands ${ref:env/KEY} against the project's other
-// environments. The caller's scope is honoured here: an environment-scoped API
-// token must not be able to read a environment it was denied by writing a
-// reference into one it was granted, so a denied reference is left literal,
-// exactly like every other resolution failure.
-func (service *Service) resolveReferences(ctx context.Context, projectID int64, value string, dataKey []byte, scope *authcontext.TokenScope, depth int) string {
+// environments. Every layer that guards a direct read guards a reference too,
+// because a reference is a read: the caller's token scope must not be widened by
+// writing a reference into an environment it was granted, and a per-secret ACL
+// must not be sidestepped by naming the secret from an environment the caller
+// can write. A denied reference is left literal, exactly like a missing one —
+// an ACL hides a secret, it does not announce it.
+func (service *Service) resolveReferences(ctx context.Context, projectID int64, value string, dataKey []byte, person caller, depth int, budget *int) string {
 	if depth > 3 || !strings.Contains(value, "${ref:") {
 		return value
 	}
@@ -45,7 +55,12 @@ func (service *Service) resolveReferences(ctx context.Context, projectID int64, 
 		}
 		envSlug, secretKey := parts[1], parts[2]
 
-		if !scope.AllowsEnvironment(envSlug) {
+		if *budget <= 0 {
+			return match
+		}
+		*budget--
+
+		if !person.scope.AllowsEnvironment(envSlug) {
 			return match
 		}
 
@@ -62,12 +77,20 @@ func (service *Service) resolveReferences(ctx context.Context, projectID int64, 
 			return match
 		}
 
+		grants, err := service.secretGrants(ctx, service.orm, []int64{record.ID}, person.userID)
+		if err != nil {
+			return match
+		}
+		if !aclAllowsRead(person.role, grants[record.ID]) {
+			return match
+		}
+
 		plaintext, err := crypto.Decrypt(record.EncryptedValue, record.Nonce, dataKey)
 		if err != nil {
 			return match
 		}
 
-		return service.resolveReferences(ctx, projectID, string(plaintext), dataKey, scope, depth+1)
+		return service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person, depth+1, budget)
 	})
 }
 
@@ -121,6 +144,7 @@ var errDuplicateKey = stderrors.New("duplicate secret key")
 // the project, and the scope of the API token they authenticated with, if any.
 type caller struct {
 	userID   int64
+	email    string
 	role     string
 	clientIP string
 	scope    *authcontext.TokenScope
@@ -253,7 +277,7 @@ func (service *Service) fireWebhook(ctx context.Context, eventType string, envID
 // resolved so a bulk operation pays for that lookup once.
 func (service *Service) emitSecretEvent(ctx context.Context, projectID int64, envSlug, eventType, key string, version int, person caller) {
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, person.logID(), "", eventType, "secret:"+key, "", person.clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), person.email, eventType, "secret:"+key, "", person.clientIP)
 	}
 	if service.webhooks == nil {
 		return
@@ -366,6 +390,7 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, person cal
 	rotations := service.lastRotations(ctx, ids)
 	now := time.Now().UTC()
 
+	refBudget := maxRefExpansions
 	secrets := make([]SecretResponse, 0, len(records))
 	for _, r := range records {
 		if !aclAllowsRead(person.role, grants[r.ID]) {
@@ -390,7 +415,7 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, person cal
 			if err != nil {
 				return nil, 0, errors.Internal("failed to decrypt secret", err)
 			}
-			resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person.scope, 0)
+			resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person, 0, &refBudget)
 			response.Value = &resolved
 		}
 		secrets = append(secrets, response)
@@ -399,7 +424,7 @@ func (service *Service) listSecrets(ctx context.Context, envID int64, person cal
 	service.logger.Info(read.auditAction, slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.Int("count", len(secrets)), slog.Bool("revealed", read.reveal))
 
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, person.logID(), "", read.auditAction, "environment:"+strconv.FormatInt(envID, 10), readDetail(len(secrets), read.reveal), person.clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), person.email, read.auditAction, "environment:"+strconv.FormatInt(envID, 10), readDetail(len(secrets), read.reveal), person.clientIP)
 	}
 
 	return secrets, rotationDays, nil
@@ -445,7 +470,8 @@ func (service *Service) revealSecret(ctx context.Context, envID int64, key strin
 
 	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
 	rotationDays := service.rotationDays(ctx, projectID)
-	resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person.scope, 0)
+	refBudget := maxRefExpansions
+	resolved := service.resolveReferences(ctx, projectID, string(plaintext), dataKey, person, 0, &refBudget)
 
 	rotatedAt, ok := service.lastRotations(ctx, []int64{record.ID})[record.ID]
 	if !ok {
@@ -454,7 +480,7 @@ func (service *Service) revealSecret(ctx context.Context, envID int64, key strin
 
 	service.logger.Info(auditActionReveal, slog.String("user_id", person.logID()), slog.String("client_ip", person.clientIP), slog.Int64("environment_id", envID), slog.String("key", key))
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, person.logID(), "", auditActionReveal, "secret:"+key, "", person.clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), person.email, auditActionReveal, "secret:"+key, "", person.clientIP)
 	}
 
 	return &SecretResponse{
@@ -595,6 +621,28 @@ func (service *Service) updateTags(ctx context.Context, envID int64, key string,
 	return nil
 }
 
+// readableSecret is findSecret plus the per-secret ACL gate, and it is what
+// every route returning something *about* a secret must use. Hiding the value
+// while still answering questions about it is not hiding it: version counts,
+// who changed it and when, and the list of everyone granted on it all describe
+// a secret the ACL says the caller cannot read. A denied secret answers
+// not_found, identically to one that does not exist, because an ACL hides a
+// secret rather than announcing it.
+func (service *Service) readableSecret(ctx context.Context, envID int64, key string, person caller) (*schemas.Secret, error) {
+	record, err := service.findSecret(ctx, envID, key)
+	if err != nil {
+		return nil, err
+	}
+	grants, err := service.secretGrants(ctx, service.orm, []int64{record.ID}, person.userID)
+	if err != nil {
+		return nil, err
+	}
+	if !aclAllowsRead(person.role, grants[record.ID]) {
+		return nil, errors.NotFound("secret not found")
+	}
+	return record, nil
+}
+
 func (service *Service) findSecret(ctx context.Context, envID int64, key string) (*schemas.Secret, error) {
 	var record schemas.Secret
 	err := service.orm.WithContext(ctx).
@@ -722,16 +770,10 @@ func (service *Service) updateSecret(ctx context.Context, envID int64, key, valu
 	}, nil
 }
 
-func (service *Service) listVersions(ctx context.Context, envID int64, key string) ([]VersionResponse, error) {
-	var secret schemas.Secret
-	err := service.orm.WithContext(ctx).
-		Where("environment_id = ? AND key = ?", envID, key).
-		First(&secret).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.NotFound("secret not found")
-	}
+func (service *Service) listVersions(ctx context.Context, envID int64, key string, person caller) ([]VersionResponse, error) {
+	secret, err := service.readableSecret(ctx, envID, key, person)
 	if err != nil {
-		return nil, errors.Internal("failed to find secret", err)
+		return nil, err
 	}
 
 	var versions []schemas.SecretVersion
@@ -933,7 +975,7 @@ func (service *Service) importEnv(ctx context.Context, envID int64, content stri
 	if err == nil {
 		if service.audit != nil {
 			detail := "created=" + strconv.Itoa(result.Created) + " updated=" + strconv.Itoa(result.Updated) + " skipped=" + strconv.Itoa(result.Skipped)
-			service.audit.Log(ctx, projectID, person.logID(), "", "secrets.import", "environment:"+envSlug, detail, person.clientIP)
+			service.audit.Log(ctx, projectID, person.logID(), person.email, "secrets.import", "environment:"+envSlug, detail, person.clientIP)
 		}
 		for _, secret := range created {
 			service.emitSecretEvent(ctx, projectID, envSlug, "secret.created", secret.key, secret.version, person)
@@ -1110,16 +1152,10 @@ func (service *Service) diffEnvironments(ctx context.Context, envA, envB int64, 
 	return &DiffResponse{Entries: entries}, nil
 }
 
-func (service *Service) listACLs(ctx context.Context, envID int64, key string) ([]ACLResponse, error) {
-	var secret schemas.Secret
-	err := service.orm.WithContext(ctx).
-		Where("environment_id = ? AND key = ?", envID, key).
-		First(&secret).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, errors.NotFound("secret not found")
-	}
+func (service *Service) listACLs(ctx context.Context, envID int64, key string, person caller) ([]ACLResponse, error) {
+	secret, err := service.readableSecret(ctx, envID, key, person)
 	if err != nil {
-		return nil, errors.Internal("failed to find secret", err)
+		return nil, err
 	}
 
 	var results []struct {
@@ -1303,7 +1339,7 @@ func (service *Service) listTrash(ctx context.Context, envID int64, person calle
 
 	projectID, _ := service.getProjectIDFromEnv(ctx, envID)
 	if service.audit != nil {
-		service.audit.Log(ctx, projectID, person.logID(), "", auditActionTrashList, "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(response.Secrets))+" secrets", person.clientIP)
+		service.audit.Log(ctx, projectID, person.logID(), person.email, auditActionTrashList, "environment:"+strconv.FormatInt(envID, 10), strconv.Itoa(len(response.Secrets))+" secrets", person.clientIP)
 	}
 
 	return response, nil

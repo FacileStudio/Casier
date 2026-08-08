@@ -1036,26 +1036,35 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// KNOWN GAP (reported, not fixed): who may read a secret's ACL list
-			// is only "any project member", so a viewer and any live token see
-			// the grants on a secret they cannot write.
+			// The grant list is as sensitive as the secret it describes: it
+			// names everyone with access. So it answers only to callers who may
+			// read LOCKED itself — the owner, who bypasses ACLs, and the viewer,
+			// who is the one grantee. Admin and member hold a project role that
+			// would otherwise reach it and are refused, and they get not_found
+			// rather than permission_denied because an ACL hides a secret rather
+			// than announcing it.
 			name: "list secret ACLs", method: "GET", pattern: secretPattern + "/{key}/acls", path: devSecrets + "/" + keyLocked + "/acls",
 			outcomes: []outcome{
-				ok(200, projectReaders...),
+				ok(200, cOwner, cViewer),
+				missing(cAdmin, cMember),
 				ok(200, tRead, tWrite, tDev),
 				missing(append(strangers, tBeta)...),
 				unauth(rejectedAtTheDoor...),
 			},
 		},
 		{
+			// Granting access is administration, not a secret write, so no
+			// machine token may do it whatever its permissions — a CI credential
+			// moves secrets, it never decides who may read them. Every live
+			// token is refused identically, including one scoped to another
+			// project, so the refusal says nothing about what exists.
 			name: "grant a secret ACL", method: "PUT", pattern: secretPattern + "/{key}/acls", path: devSecrets + "/" + keyOpen + "/acls",
 			body: `{"email":"` + memberEmail + `","can_read":true,"can_write":false}`,
 			outcomes: []outcome{
 				ok(204, projectAdmins...),
 				denied(cMember, cViewer),
-				denied(tRead),
-				ok(204, tWrite, tDev),
-				missing(append(strangers, tBeta)...),
+				denied(liveTokens...),
+				missing(strangers...),
 				unauth(rejectedAtTheDoor...),
 			},
 		},
@@ -1065,9 +1074,8 @@ func routeCases(f fixture) []routeCase {
 			outcomes: []outcome{
 				ok(204, projectAdmins...),
 				denied(cMember, cViewer),
-				denied(tRead),
-				ok(204, tWrite, tDev),
-				missing(append(strangers, tBeta)...),
+				denied(liveTokens...),
+				missing(strangers...),
 				unauth(rejectedAtTheDoor...),
 			},
 		},
@@ -1241,4 +1249,54 @@ func requireDatabase(t *testing.T) {
 	if !databaseOn {
 		t.Skip(testdb.SkipReason)
 	}
+}
+
+// TestSecretReferenceRespectsACLs pins the one hole that made the ACL layer
+// decorative: ${ref:env/KEY} expansion resolved the referenced secret with only
+// the token scope checked, never the per-secret ACL. A member who could not
+// list, reveal, export or diff LOCKED could still read it by writing a
+// reference to it into a secret they were allowed to create, then revealing
+// that. The reference is a read and is gated like one, so the placeholder must
+// survive expansion literally.
+func TestSecretReferenceRespectsACLs(t *testing.T) {
+	requireDatabase(t)
+
+	if _, err := seed(testDB, testKeyring); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	devSecrets := "/api/projects/" + projectAlpha + "/environments/" + envDev + "/secrets"
+	member := bearers[cMember]
+
+	status, _ := call("POST", devSecrets, `{"key":"SIPHON","value":"${ref:`+envDev+`/`+keyLocked+`}"}`, member, 900)
+	if status != 201 && status != 204 && status != 200 {
+		t.Fatalf("member could not create the referencing secret: got %d", status)
+	}
+
+	status, body := callBody("GET", devSecrets+"/SIPHON/reveal", "", member, 901)
+	if status != 200 {
+		t.Fatalf("reveal: got %d, want 200", status)
+	}
+	if strings.Contains(body, "locked-value") {
+		t.Fatalf("ACL bypassed: reference expansion leaked the locked value: %s", body)
+	}
+}
+
+func callBody(method, path, body, bearer string, address int) (int, string) {
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	request := httptest.NewRequest(method, path, reader)
+	request.RemoteAddr = fmt.Sprintf("10.%d.%d.%d:40000", address>>16&0xff, address>>8&0xff, address&0xff)
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	if bearer != "" {
+		request.Header.Set("Authorization", "Bearer "+bearer)
+	}
+
+	recorder := httptest.NewRecorder()
+	testRouter.ServeHTTP(recorder, request)
+	return recorder.Code, recorder.Body.String()
 }

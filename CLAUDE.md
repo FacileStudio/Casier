@@ -6,7 +6,7 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 
 | Layer    | Stack                                                        |
 | -------- | ------------------------------------------------------------ |
-| API      | Go 1.25, Chi router, GORM, PostgreSQL 16, tronc v0.8.0      |
+| API      | Go 1.25, Chi router, GORM, PostgreSQL 16, tronc v0.9.0      |
 | Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/muse`) |
 | Build    | `go build`, Bun                                              |
 | Deploy   | Docker Compose, single distroless container serving API + client |
@@ -184,6 +184,19 @@ and 3 were stored but never read.
    deleted**, so audit rows naming a token still resolve.
 3. **Per-secret ACLs** (`secret_acls`), which narrow a project role for one secret. A secret
    with no ACL rows behaves as before; `owner` always bypasses them.
+   **An ACL gates every path that reads a secret, including the indirect ones.** Two were
+   missing and were closed on 2026-08-08:
+   - `${ref:env/KEY}` expansion checked only the token scope, so a member who could not list,
+     reveal, export or diff a locked secret could still read it by writing a reference to it
+     into a secret they *were* allowed to create, then revealing that. Expansion now runs the
+     same `aclAllowsRead` gate and leaves a denied reference literal.
+     `TestSecretReferenceRespectsACLs` pins it, and was confirmed to fail without the fix.
+   - `GET .../secrets/{key}/versions` and `.../{key}/acls` answered any project member, leaking
+     version history, who changed it, and the emails of every grantee for a secret the caller
+     could not read. Both go through `service.readableSecret` now and answer `not_found`.
+   Anything returning something *about* a secret must use `readableSecret`, not `findSecret`.
+   Granting an ACL is administration, not a secret write: `PUT`/`DELETE .../{key}/acls` carry
+   `middleware.RequireUserSession`, so no machine token can widen access however it is scoped.
 4. **Protected environments** (`environments.protected`). Writing to a protected environment
    requires `owner` or `admin`, enforced in the secrets write path. Flipping the flag — in
    *either* direction — is itself `owner|admin` only, because a member who could unprotect
@@ -248,30 +261,52 @@ databases in place on startup and is a no-op afterwards.
 
 ## Design system
 
-Casier follows the Facile Suite house style: **black and white, no colour**. The palette in
-`apps/client/src/app.css` is chroma-zero OKLCH (`oklch(L 0 0)`) and mirrors Sablier, Nuage,
-Plume and Vision token for token — including a greyscale `--destructive`. Typeface is Goga,
-self-hosted from `static/fonts`. Radius is `0.5rem`.
+**muse (`@facile/muse`) is the design system, and it owns the palette.** As of 2026-08-08
+Casier pins `github:FacileStudio/muse#v0.5.0` and `app.css` is 71 lines: import Tailwind,
+import `@facile/muse/styles`, `@source` the package so v4 scans it, and one `@theme inline`
+block aliasing the suite's semantic names (`--color-background`, `--color-muted-foreground`, …)
+**onto** muse's `fc-*` tokens. The aliases point that way round on purpose — muse is the source
+of truth, and an app that redeclares the palette drifts from it. Both vocabularies therefore
+work and resolve identically, which is what lets hand-written markup and muse primitives sit in
+the same file.
 
-- Suite tokens (`bg-background`, `text-muted-foreground`, `border-border`, `bg-primary`, …)
-  are the vocabulary. Never hardcode a hex, never use a Tailwind colour utility.
-- muse's `fc-*` tokens are aliased onto the same values in `app.css`, so `@facile/muse`
-  primitives (Table, Badge, Field, Input, …) render in suite colours automatically.
+- Pin the tag. Tracking the default branch means a library push silently changes this build.
+- The house style is still chroma-zero OKLCH greyscale, Goga, radius `0.5rem` — muse now
+  *matches* that rather than contradicting it. Never hardcode a hex or a Tailwind stock colour.
+- **Colour exists only as a tone**: `fc-danger`, `fc-success`, `fc-warning`, `fc-info` and the
+  role tones `fc-owner` / `fc-admin`, plus `fc-chart-1..6`. Everything else is greyscale.
+- Fonts ship **inside the package**. There is no `static/fonts` and no preload — deleting the
+  ten vendored Goga faces was part of the v0.5.0 adoption.
+- **Dark mode needs both classes.** muse paints dark from `@media (prefers-color-scheme: dark)`
+  scoped to `:root:not(.light)`, plus a `:root.dark` twin. Toggling only `dark` therefore cannot
+  show light mode to a dark-preferring OS — the media block still wins. `theme.svelte.ts` and the
+  pre-paint script in `app.html` both set `.light` *and* `.dark`.
+- `vite.config.ts` needs `optimizeDeps.exclude: ['@facile/muse']` or `vite dev` dies. No gate
+  catches this; the production build is unaffected, which is what makes it easy to reintroduce.
+- **Overlays are muse's `Modal` / `ConfirmModal` / `Drawer`.** The old rule said the opposite —
+  muse's `Modal` used to render in the top-left corner because Tailwind preflight's `margin: 0`
+  kills the `<dialog>` UA centring. muse sets `m-auto` itself now, so the bug is gone and
+  `bits-ui` has been dropped entirely. `lib/components/Drawer.svelte` and `ConfirmDialog.svelte`
+  survive as thin adapters over muse so their call sites did not have to change.
+- Containers are **borderless**: `Card`, `StatCard` and `Table` separate from the page by fill
+  (`bg-fc-component` on `bg-fc-page`), not a 1px outline. 1px borders are still right *inside* a
+  container, on form controls, and on floating surfaces.
+- muse hides scrollbars globally, on purpose (layout stability). Never re-enable them; if
+  content is unreachable, the container is the bug.
 - Icons are Iconify **Solar** via the `<iconify-icon>` web component loaded in `app.html`:
   `-bold-duotone` for brand marks, `-linear` for UI chrome. Do not add `@lucide/svelte`.
-  The brand mark is `solar:safe-square-bold-duotone` (`Logo.svelte`), and `static/favicon.svg`
-  is the same glyph — solid plate, mark knocked out, inverted by `prefers-color-scheme` so it
-  stays legible on a light or dark tab strip.
-- **Overlays are `src/lib/components/Drawer.svelte`, never muse's `Modal`.** That `Modal` is a
-  native `<dialog>`, and Tailwind's preflight `margin: 0` kills the `margin: auto` that centres
-  one — it renders in the top-left corner. The drawer is a right-anchored panel built on the
-  bits-ui `Dialog` (already a dependency; it is what shadcn-svelte builds on too), full-width
-  below `sm`. Its slide/fade keyframes live at the bottom of `app.css` because bits-ui renders
-  the overlay and panel itself, out of reach of scoped styles.
-- Dark mode is a `.dark` class on `<html>`, resolved before first paint by an inline script
-  in `app.html` and driven by `src/lib/theme.svelte.ts` (light / dark / system).
-- Active navigation is inverted (`bg-foreground text-background`), not tinted. Separation is
-  done with 1px borders, not shadows.
+  The brand mark is `solar:safe-square-bold-duotone`, and `static/favicon.svg` is the same glyph
+  — solid plate, mark knocked out, inverted by `prefers-color-scheme` so it stays legible on a
+  light or dark tab strip.
+- **Settings is reached only from the sidebar user card** (CHARTE §14), never a nav row, and log
+  out lives inside settings. The shell is muse's `SideBar` + `MobileNav`; only **one** `SideBar`
+  may be mounted, because its collapse shortcut listener is document-level.
+- `main` carries `min-w-0`. A flex item defaults to `min-width: auto`, so without it `main`
+  refuses to shrink below its content and any inner horizontal scroller pushes the whole page
+  sideways instead of scrolling itself.
+- The auth screens are deliberately **raw elements, not muse** — they are the suite's canonical
+  split-screen login unified byte-for-byte across 15 repos. Do not "finish the migration" there.
+- Active navigation is inverted (`bg-foreground text-background`), not tinted.
 
 ## Conventions
 

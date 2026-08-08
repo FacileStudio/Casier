@@ -56,3 +56,17 @@ func RequireAuth(authService Authenticator) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// RequireUserSession rejects API-token callers. Project administration and
+// access grants are a human's job: a CI credential moves secrets, it never
+// decides who may read them. Shared by the projects and secrets modules so the
+// two cannot drift on what "administration" excludes.
+func RequireUserSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		if authcontext.ScopeFromContext(request.Context()) != nil {
+			httpjson.WriteError(w, errors.Forbidden("API tokens cannot perform this operation"))
+			return
+		}
+		next.ServeHTTP(w, request)
+	})
+}
