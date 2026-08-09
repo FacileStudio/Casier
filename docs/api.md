@@ -202,7 +202,7 @@ It resolves its server from `CASIER_SERVER_URL`, then
 keyed by server URL, unless `CASIER_TOKEN` is set — which is the CI and container path,
 since a container has no keychain.
 
-Most commands take `--project` and `--env`. Both fall back to a `.casier.toml` in the
+Most commands take `--project` and `--env`. Both fall back to a `casier.yml` in the
 working directory with a `[project]` table carrying `slug` and `environment`, and
 `environment` finally falls back to `dev`.
 
@@ -210,7 +210,7 @@ working directory with a `[project]` table carrying `slug` and `environment`, an
 |---|---|
 | `casier login [--server URL] [--no-browser]` | Opens a browser for the OIDC round trip and stores the token. `--no-browser` prints the URL instead |
 | `casier logout` | Clears the stored credential |
-| `casier init` | Writes a `.casier.toml` for the current directory |
+| `casier init` | Writes a `casier.yml` for the current directory |
 | `casier projects` | Lists the projects you belong to |
 | `casier secrets list -p <slug> [-e <env>] [--show]` | Lists keys; `--show` reveals values |
 | `casier secrets get -p <slug> [-e <env>] <key>` | Prints one value |

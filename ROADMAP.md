@@ -28,7 +28,7 @@
 - [x] OIDC callback via cookie instead of query param token
 - [x] Session sliding window (extend on use, max 7 days)
 - [x] Expired session cleanup (background purge)
-- [x] CLI: `casier init` to scaffold `.casier.toml` per project
+- [x] CLI: `casier init` to scaffold `casier.yml` per project
 
 ## v3 — Team Features
 
@@ -356,7 +356,7 @@ Casier now supplies Journal's development configuration end to end, against the 
 instance. Two gaps showed up in doing it, and both are about the rollout rather than the
 server:
 
-- **`.casier.toml` is honoured by three commands out of nine.** `run`, `check` and
+- **`casier.yml` is honoured by three commands out of nine.** `run`, `check` and
   `push dokploy` take `Option<String>` for project and environment and fall back to the file.
   `secrets list/get/set/delete`, `sync push/pull` and `diff` all still demand `-p`. The file
   exists precisely so a repo does not repeat itself, so the split is arbitrary from the

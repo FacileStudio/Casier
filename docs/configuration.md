@@ -113,7 +113,7 @@ The Rust CLI reads three variables of its own.
 
 Without `CASIER_TOKEN`, the CLI reads the token from the OS keychain under service `casier`,
 keyed by the server URL — so one machine can hold credentials for several instances.
-Per-project defaults live in a `.casier.toml` at the repo root with a `[project]` table
+Per-project defaults live in a `casier.yml` at the repo root with a `[project]` table
 carrying `slug` and `environment`; `environment` defaults to `dev`.
 
 ## Test database
