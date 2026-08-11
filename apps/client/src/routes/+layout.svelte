@@ -6,7 +6,7 @@
 
 	let { children } = $props();
 
-	auth.restore();
+	auth.check();
 	theme.restore();
 </script>
 

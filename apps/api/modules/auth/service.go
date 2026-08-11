@@ -4,287 +4,152 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	stderrors "errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
-	"github.com/FacileStudio/Casier/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/errors"
 
-	gooidc "github.com/coreos/go-oidc/v3/oidc"
-	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 )
 
 type Service struct {
-	orm        *gorm.DB
-	keyring    *crypto.Keyring
-	logger     *slog.Logger
-	mailer     mailer.Mailer
-	publicURL  string
-	controller *Controller
-	// deliverReset is the out-of-band half of the forgot-password flow. It is a
-	// field rather than a direct method call so forgotPassword can hand the
-	// address off without ever branching on it, and so a test can watch the
-	// handoff without a database behind it.
+	orm          *gorm.DB
+	keyring      *crypto.Keyring
+	logger       *slog.Logger
+	mailer       mailer.Mailer
+	publicURL    string
+	sessions     *session.Manager
+	passwords    *local.Kit
+	identities   porte.IdentityStore
+	controller   *Controller
 	deliverReset func(ctx context.Context, email string)
 }
 
-func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, mail mailer.Mailer, publicURL string) *Service {
-	service := &Service{orm: orm, keyring: keyring, logger: logger, mailer: mail, publicURL: publicURL}
-	service.deliverReset = service.sendPasswordReset
+func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, mail mailer.Mailer, publicURL string, sessions *session.Manager, passwords *local.Kit, identities porte.IdentityStore) *Service {
+	service := &Service{
+		orm:        orm,
+		keyring:    keyring,
+		logger:     logger,
+		mailer:     mail,
+		publicURL:  publicURL,
+		sessions:   sessions,
+		passwords:  passwords,
+		identities: identities,
+	}
 	service.controller = newController(service)
+	service.deliverReset = service.sendPasswordReset
 	return service
 }
 
-func (service *Service) encryptToken(token string) ([]byte, []byte, error) {
-	if token == "" {
-		return nil, nil, nil
-	}
-	return crypto.Encrypt([]byte(token), service.keyring.Key())
-}
-
-func (service *Service) decryptToken(ciphertext, nonce []byte) string {
-	if len(ciphertext) == 0 {
-		return ""
-	}
-	plaintext, err := crypto.Decrypt(ciphertext, nonce, service.keyring.Key())
-	if err != nil {
-		return ""
-	}
-	return string(plaintext)
-}
-
-func (service *Service) registerUser(ctx context.Context, email string, password string) (string, string, error) {
-	hash, err := authcrypto.HashPassword(password)
-	if err != nil {
-		return "", "", errors.Invalid("invalid password")
-	}
-
-	record := &schemas.User{
-		Email:        email,
-		PasswordHash: hash,
-	}
-	if err := service.orm.WithContext(ctx).Create(record).Error; err != nil {
-		if stderrors.Is(err, gorm.ErrDuplicatedKey) {
-			return "", "", errors.Conflict("email already registered")
+func (service *Service) RequireAuth(next http.Handler) http.Handler {
+	return service.sessions.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity, ok := porte.From(r.Context())
+		if !ok {
+			http.Error(w, "", http.StatusUnauthorized)
+			return
 		}
-		return "", "", errors.Internal("failed to create user", err)
-	}
 
-	token, err := authcrypto.NewToken()
-	if err != nil {
-		return "", "", errors.Internal("failed to create session", err)
-	}
-	if err := service.insertSession(ctx, token, record.ID); err != nil {
-		return "", "", err
-	}
+		userID := strconv.FormatInt(identity.UserID, 10)
+		email, err := service.IdentityForUser(r.Context(), identity.UserID)
+		if err != nil {
+			http.Error(w, "", http.StatusUnauthorized)
+			return
+		}
 
-	return strconv.FormatInt(record.ID, 10), token, nil
+		_, port, _ := net.SplitHostPort(r.RemoteAddr)
+		_ = port
+		clientIP := r.RemoteAddr
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			clientIP = strings.Split(fwd, ",")[0]
+		}
+		ctx := authcontext.WithIdentity(r.Context(), authcontext.Identity{
+			UserID:   userID,
+			Email:    email,
+			ClientIP: clientIP,
+		})
+		next.ServeHTTP(w, r.WithContext(ctx))
+	}))
 }
 
-func (service *Service) loginUser(ctx context.Context, email string, password string) (string, string, error) {
-	var record schemas.User
-	err := service.orm.WithContext(ctx).Where("email = ?", email).First(&record).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		authcrypto.VerifyPassword(password, authcrypto.DummyHash)
-		return "", "", errors.Unauthorized("invalid credentials")
-	}
-	if err != nil {
-		return "", "", errors.Internal("failed to read user", err)
-	}
-	if !authcrypto.VerifyPassword(password, record.PasswordHash) {
-		return "", "", errors.Unauthorized("invalid credentials")
-	}
-
-	token, err := authcrypto.NewToken()
-	if err != nil {
-		return "", "", errors.Internal("failed to create session", err)
-	}
-	if err := service.insertSession(ctx, token, record.ID); err != nil {
-		return "", "", err
-	}
-
-	return strconv.FormatInt(record.ID, 10), token, nil
-}
-
-func (service *Service) exchangeCLIToken(ctx context.Context, email string) (string, error) {
-	var record schemas.User
-	err := service.orm.WithContext(ctx).Where("email = ?", email).First(&record).Error
-	if stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return "", errors.Forbidden("no account for this identity")
-	}
-	if err != nil {
-		return "", errors.Internal("failed to look up user", err)
-	}
-
-	token, err := authcrypto.NewToken()
-	if err != nil {
-		return "", errors.Internal("failed to create session", err)
-	}
-	if err := service.insertSession(ctx, token, record.ID); err != nil {
-		return "", err
-	}
-	return token, nil
-}
-
-func (service *Service) logoutUser(ctx context.Context, authorization string) error {
-	token := normalizeBearer(authorization)
-	if token == "" {
-		return errors.Unauthorized("missing auth token")
-	}
-
-	result := service.orm.WithContext(ctx).Where("token = ?", hashToken(token)).Delete(&schemas.Session{})
-	if result.Error != nil {
-		return errors.Internal("failed to delete session", result.Error)
-	}
-	return nil
-}
-
-func (service *Service) insertSession(ctx context.Context, token string, userID int64) error {
-	record := &schemas.Session{
-		Token:     hashToken(token),
-		UserID:    userID,
-		ExpiresAt: time.Now().Add(schemas.SessionSlidingWindow),
-	}
-	if err := service.orm.WithContext(ctx).Create(record).Error; err != nil {
-		return errors.Internal("failed to persist session", err)
-	}
-	return nil
-}
-
-func SetSessionCookie(w http.ResponseWriter, token string) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    token,
-		Path:     "/",
-		MaxAge:   int(schemas.SessionMaxLifetime.Seconds()),
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func ClearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     SessionCookieName,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   true,
-		SameSite: http.SameSiteLaxMode,
-	})
-}
-
-func normalizeBearer(authorization string) string {
-	value := strings.TrimSpace(authorization)
-	if len(value) >= 7 && strings.EqualFold(value[:7], "bearer ") {
-		return strings.TrimSpace(value[7:])
-	}
-	return value
-}
-
-func (service *Service) authenticateRequest(ctx context.Context, authorization string) (string, *Data, error) {
-	token := normalizeBearer(authorization)
-	if token == "" {
-		return "", nil, errors.Unauthorized("missing auth token")
-	}
-
-	hashed := hashToken(token)
-	var out struct {
-		UserID    int64
-		Email     string
-		ExpiresAt time.Time
-		CreatedAt time.Time
-	}
+func (service *Service) IdentityForUser(ctx context.Context, userID int64) (string, error) {
+	var out struct{ Email string }
 	err := service.orm.WithContext(ctx).
-		Table("sessions s").
-		Select("u.id as user_id, u.email as email, s.expires_at as expires_at, s.created_at as created_at").
-		Joins("join users u on u.id = s.user_id").
-		Where("s.token = ?", hashed).
+		Model(&schemas.User{}).
+		Select("email").
+		Where("id = ?", userID).
 		Scan(&out).Error
 	if err != nil {
-		return "", nil, errors.Internal("failed to validate auth token", err)
+		return "", err
 	}
-	if out.UserID == 0 {
-		return "", nil, errors.Unauthorized("invalid auth token")
-	}
+	return out.Email, nil
+}
 
-	now := time.Now()
-	if now.After(out.ExpiresAt) {
-		return "", nil, errors.Unauthorized("expired auth token")
-	}
-	if now.Sub(out.CreatedAt) > schemas.SessionMaxLifetime {
-		return "", nil, errors.Unauthorized("session expired")
-	}
+func (service *Service) registerUser(ctx context.Context, email, password string) (int64, string, error) {
+	w := &noopResponseWriter{}
+	r, _ := http.NewRequestWithContext(ctx, "POST", "/", nil)
+	return service.passwords.Register(ctx, w, r, email, "", password)
+}
 
-	newExpiry := now.Add(schemas.SessionSlidingWindow)
-	absoluteMax := out.CreatedAt.Add(schemas.SessionMaxLifetime)
-	if newExpiry.After(absoluteMax) {
-		newExpiry = absoluteMax
+func (service *Service) loginUser(ctx context.Context, email, password string) (int64, string, error) {
+	w := &noopResponseWriter{}
+	r, _ := http.NewRequestWithContext(ctx, "POST", "/", nil)
+	return service.passwords.Login(ctx, w, r, email, password)
+}
+
+func (service *Service) authenticateRequest(ctx context.Context, bearer string) (int64, string, error) {
+	token := strings.TrimPrefix(bearer, "Bearer ")
+	r, _ := http.NewRequestWithContext(ctx, "GET", "/", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	w := &noopResponseWriter{}
+	id, err := service.sessions.Authenticate(w, r)
+	if err != nil {
+		return 0, "", err
 	}
+	return id.UserID, "", nil
+}
+
+type noopResponseWriter struct{}
+
+func (w *noopResponseWriter) Header() http.Header         { return http.Header{} }
+func (w *noopResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
+func (w *noopResponseWriter) WriteHeader(int)             {}
+
+func (service *Service) ConfigExtra() func() map[string]any {
+	return func() map[string]any {
+		return map[string]any{
+			"password_reset_enabled": service.mailer != nil,
+		}
+	}
+}
+
+func (service *Service) StartSessionCleanup(ctx context.Context) {
 	go func() {
-		service.orm.Model(&schemas.Session{}).
-			Where("token = ?", hashed).
-			Update("expires_at", newExpiry)
+		sweepLoop(ctx, service.sessions, service.logger)
 	}()
-
-	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email}, nil
 }
 
-func (service *Service) Authenticate(ctx context.Context, authorization string) (string, any, error) {
+func (service *Service) AuthenticateAPI(ctx context.Context, authorization string) (string, *authcontext.TokenScope, error) {
 	token := normalizeBearer(authorization)
-	if strings.HasPrefix(token, "casier_") {
-		return service.authenticateApiToken(ctx, token)
+	if !strings.HasPrefix(token, "casier_") {
+		return "", nil, errors.Unauthorized("invalid API token")
 	}
-	return service.authenticateRequest(ctx, authorization)
-}
 
-// apiTokenScopeRow is the set of api_tokens columns that define what a token
-// may reach, kept separate from the identity columns so the mapping to a
-// TokenScope stays testable without a database. Environments arrives already
-// resolved from api_token_environments, so a grant whose environment was
-// deleted never reaches this function.
-type apiTokenScopeRow struct {
-	TokenID         int64
-	ProjectID       int64
-	AllEnvironments bool
-	Environments    []string
-	Permissions     string
-}
-
-func scopeFromTokenRow(row apiTokenScopeRow) *authcontext.TokenScope {
-	return &authcontext.TokenScope{
-		TokenID:         row.TokenID,
-		ProjectID:       row.ProjectID,
-		AllEnvironments: row.AllEnvironments,
-		Environments:    row.Environments,
-		Permissions:     authcontext.ParseScopeList(row.Permissions),
-	}
-}
-
-func (service *Service) authenticateApiToken(ctx context.Context, token string) (string, *Data, error) {
 	hashed := hashToken(token)
-	var out struct {
-		UserID          int64
-		Email           string
-		ExpiresAt       time.Time
-		TokenID         int64
-		ProjectID       int64
-		AllEnvironments bool
-		Permissions     string
-	}
+	var out apiTokenAuthRow
 	err := service.orm.WithContext(ctx).
 		Table("api_tokens at").
-		Select("u.id as user_id, u.email as email, at.expires_at as expires_at, at.id as token_id, at.project_id as project_id, at.all_environments as all_environments, at.permissions as permissions").
+		Select("u.id as user_id, at.expires_at as expires_at, at.id as token_id, at.project_id as project_id, at.all_environments as all_environments, at.permissions as permissions").
 		Joins("join users u on u.id = at.created_by").
 		Where("at.token_hash = ? AND at.revoked_at IS NULL", hashed).
 		Scan(&out).Error
@@ -300,51 +165,48 @@ func (service *Service) authenticateApiToken(ctx context.Context, token string) 
 
 	var environments []string
 	if !out.AllEnvironments {
-		if err := service.orm.WithContext(ctx).
+		service.orm.WithContext(ctx).
 			Table("api_token_environments te").
 			Select("e.slug").
 			Joins("join environments e on e.id = te.environment_id").
 			Where("te.token_id = ?", out.TokenID).
-			Scan(&environments).Error; err != nil {
-			return "", nil, errors.Internal("failed to read token scope", err)
-		}
+			Scan(&environments)
 	}
 
-	go func() {
-		service.orm.Model(&schemas.ApiToken{}).
-			Where("token_hash = ?", hashed).
-			Update("last_used_at", time.Now())
-	}()
-
-	scope := scopeFromTokenRow(apiTokenScopeRow{
+	return strconv.FormatInt(out.UserID, 10), &authcontext.TokenScope{
 		TokenID:         out.TokenID,
 		ProjectID:       out.ProjectID,
 		AllEnvironments: out.AllEnvironments,
 		Environments:    environments,
-		Permissions:     out.Permissions,
-	})
-
-	return strconv.FormatInt(out.UserID, 10), &Data{Email: out.Email, Scope: scope}, nil
+		Permissions:     authcontext.ParseScopeList(out.Permissions),
+	}, nil
 }
 
-func (service *Service) StartSessionCleanup(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(15 * time.Minute)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				result := service.orm.Where("expires_at < ?", time.Now()).Delete(&schemas.Session{})
-				if result.Error != nil {
-					service.logger.Error("session cleanup failed", slog.Any("error", result.Error))
-				} else if result.RowsAffected > 0 {
-					service.logger.Info("purged expired sessions", slog.Int64("count", result.RowsAffected))
-				}
-			}
-		}
-	}()
+type apiTokenScopeRow struct {
+	TokenID         int64
+	ProjectID       int64
+	AllEnvironments bool
+	Environments    []string
+	Permissions     string
+}
+
+type apiTokenAuthRow struct {
+	UserID          int64
+	ExpiresAt       time.Time
+	TokenID         int64
+	ProjectID       int64
+	AllEnvironments bool
+	Permissions     string
+}
+
+func scopeFromTokenRow(row apiTokenScopeRow) *authcontext.TokenScope {
+	return &authcontext.TokenScope{
+		TokenID:         row.TokenID,
+		ProjectID:       row.ProjectID,
+		AllEnvironments: row.AllEnvironments,
+		Environments:    row.Environments,
+		Permissions:     authcontext.ParseScopeList(row.Permissions),
+	}
 }
 
 func hashToken(token string) string {
@@ -352,119 +214,10 @@ func hashToken(token string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (service *Service) upsertOIDCUser(ctx context.Context, email string, name string, oauth2Token *oauth2.Token) (string, string, error) {
-	var record schemas.User
-	err := service.orm.WithContext(ctx).Where("email = ?", email).First(&record).Error
-	if err != nil && !stderrors.Is(err, gorm.ErrRecordNotFound) {
-		return "", "", errors.Internal("failed to look up user", err)
+func normalizeBearer(authorization string) string {
+	value := strings.TrimSpace(authorization)
+	if len(value) >= 7 && strings.EqualFold(value[:7], "bearer ") {
+		return strings.TrimSpace(value[7:])
 	}
-
-	isNew := stderrors.Is(err, gorm.ErrRecordNotFound)
-	if isNew {
-		record = schemas.User{Email: email, Name: name}
-		if err := service.orm.WithContext(ctx).Create(&record).Error; err != nil {
-			return "", "", errors.Internal("failed to create user", err)
-		}
-	} else if name != "" {
-		record.Name = name
-	}
-
-	atEnc, atNonce, err := service.encryptToken(oauth2Token.AccessToken)
-	if err != nil {
-		return "", "", errors.Internal("failed to encrypt access token", err)
-	}
-	rtEnc, rtNonce, err := service.encryptToken(oauth2Token.RefreshToken)
-	if err != nil {
-		return "", "", errors.Internal("failed to encrypt refresh token", err)
-	}
-	record.OIDCAccessTokenEncrypted = atEnc
-	record.OIDCAccessTokenNonce = atNonce
-	record.OIDCRefreshTokenEncrypted = rtEnc
-	record.OIDCRefreshTokenNonce = rtNonce
-	record.OIDCTokenExpiry = oauth2Token.Expiry
-	record.ProfileSyncedAt = time.Now()
-	if err := service.orm.WithContext(ctx).Save(&record).Error; err != nil {
-		return "", "", errors.Internal("failed to save user", err)
-	}
-
-	token, err := authcrypto.NewToken()
-	if err != nil {
-		return "", "", errors.Internal("failed to create session", err)
-	}
-	if err := service.insertSession(ctx, token, record.ID); err != nil {
-		return "", "", err
-	}
-	return strconv.FormatInt(record.ID, 10), token, nil
-}
-
-func (service *Service) SyncOIDCProfile(ctx context.Context, userID string, provider *gooidc.Provider, oauth2Cfg oauth2.Config) (bool, error) {
-	var record schemas.User
-	if err := service.orm.WithContext(ctx).Where("id = ?", userID).First(&record).Error; err != nil {
-		return false, errors.Internal("failed to load user", err)
-	}
-
-	if len(record.OIDCAccessTokenEncrypted) == 0 {
-		return false, nil
-	}
-
-	if time.Since(record.ProfileSyncedAt) < 5*time.Minute {
-		return false, nil
-	}
-
-	storedToken := &oauth2.Token{
-		AccessToken:  service.decryptToken(record.OIDCAccessTokenEncrypted, record.OIDCAccessTokenNonce),
-		RefreshToken: service.decryptToken(record.OIDCRefreshTokenEncrypted, record.OIDCRefreshTokenNonce),
-		Expiry:       record.OIDCTokenExpiry,
-	}
-
-	tokenSource := oauth2Cfg.TokenSource(ctx, storedToken)
-
-	userInfo, err := provider.UserInfo(ctx, tokenSource)
-	if err != nil {
-		service.logger.Warn("OIDC profile sync failed, clearing tokens", slog.String("user_id", userID), slog.Any("error", err))
-		record.OIDCAccessTokenEncrypted = nil
-		record.OIDCAccessTokenNonce = nil
-		record.OIDCRefreshTokenEncrypted = nil
-		record.OIDCRefreshTokenNonce = nil
-		record.OIDCTokenExpiry = time.Time{}
-		if err := service.orm.WithContext(ctx).Save(&record).Error; err != nil {
-			return false, errors.Internal("failed to clear OIDC tokens", err)
-		}
-		return false, nil
-	}
-
-	var claims struct {
-		Name string `json:"name"`
-	}
-	if err := userInfo.Claims(&claims); err != nil {
-		service.logger.Warn("failed to parse UserInfo claims", slog.String("user_id", userID), slog.Any("error", err))
-		return false, nil
-	}
-
-	if claims.Name != "" {
-		record.Name = claims.Name
-	}
-
-	newToken, tokenErr := tokenSource.Token()
-	if tokenErr == nil {
-		atEnc, atNonce, encErr := service.encryptToken(newToken.AccessToken)
-		if encErr == nil {
-			record.OIDCAccessTokenEncrypted = atEnc
-			record.OIDCAccessTokenNonce = atNonce
-		}
-		rtEnc, rtNonce, encErr := service.encryptToken(newToken.RefreshToken)
-		if encErr == nil {
-			record.OIDCRefreshTokenEncrypted = rtEnc
-			record.OIDCRefreshTokenNonce = rtNonce
-		}
-		record.OIDCTokenExpiry = newToken.Expiry
-	}
-
-	record.ProfileSyncedAt = time.Now()
-	if err := service.orm.WithContext(ctx).Save(&record).Error; err != nil {
-		return false, errors.Internal("failed to save synced profile", err)
-	}
-
-	service.logger.Info("synced OIDC profile", slog.String("user_id", userID))
-	return true, nil
+	return value
 }

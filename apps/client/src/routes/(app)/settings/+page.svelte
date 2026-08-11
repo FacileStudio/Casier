@@ -36,7 +36,7 @@
 	async function handleLogout() {
 		loggingOut = true;
 		try {
-			await api.post('/auth/logout', {}, auth.token);
+			await api.post('/auth/logout', {});
 		} catch {
 			toast.warning('The server did not confirm the sign-out, ending the session locally anyway.');
 		}

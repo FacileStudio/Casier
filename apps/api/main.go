@@ -26,6 +26,10 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
 	"github.com/FacileStudio/Journal/sdk/journal"
+	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/oidc"
+	portepg "github.com/FacileStudio/porte/pg"
+	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/health"
 	"github.com/FacileStudio/tronc/healthcheck"
@@ -34,6 +38,7 @@ import (
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
 	"github.com/FacileStudio/tronc/spa"
 	"github.com/go-chi/chi/v5"
+	"gorm.io/gorm"
 )
 
 func redirectToProjects(w http.ResponseWriter, request *http.Request) {
@@ -41,9 +46,6 @@ func redirectToProjects(w http.ResponseWriter, request *http.Request) {
 	http.Redirect(w, request, target, http.StatusMovedPermanently)
 }
 
-// registry is the hand-written route inventory the reference at /docs is
-// generated from. Each module owns its own entry; a route absent from it fails
-// TestEveryRouteIsDocumented.
 func registry() documentation.Response {
 	return documentation.Response{
 		Modules: []documentation.Module{
@@ -63,6 +65,50 @@ func refConfig() apiref.Config {
 		Registry:    registry(),
 	}
 }
+
+func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *slog.Logger) (*session.Manager, *local.Kit, *oidc.Kit, error) {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	store := portepg.New(sqlDB)
+	cfg := appEnv.Porte()
+
+	sessions, err := session.New(cfg, session.Deps{Sessions: store.Sessions(), Logger: appLogger})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	var kit *oidc.Kit
+	if cfg.Issuer != "" {
+		kit, err = oidc.New(ctx, cfg, oidc.Deps{
+			Users:      store.Users(),
+			Identities: store.Identities(),
+			Sessions:   sessions,
+			Codes:      store.LoginCodes(),
+			Logger:     appLogger,
+		})
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	var passwords *local.Kit
+	passwords, err = local.New(local.Config{AllowRegistration: !appEnv.SSOOnly, MinPasswordLength: 8}, local.Deps{
+		Users:      auth.NewUserStore(db),
+		Identities: store.Identities(),
+		Sessions:   sessions,
+		Logger:     appLogger,
+		Count:      auth.NewUserStore(db).CountUsers,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	return sessions, passwords, kit, nil
+}
+
+var authService *auth.Service
 
 func main() {
 	if healthcheck.Handle(os.Args) {
@@ -131,8 +177,16 @@ func run() int {
 		return 1
 	}
 
-	authService := auth.NewService(db, keyring, appLogger, appMailer, appEnv.PublicURL)
+	sessions, passwords, kit, err := buildAuth(shutdownCtx, db, appEnv, appLogger)
+	if err != nil {
+		appLogger.Error("failed to initialise porte", slog.Any("error", err))
+		return 1
+	}
+
+	store := portepg.New(sqlDB)
+	authService = auth.NewService(db, keyring, appLogger, appMailer, appEnv.PublicURL, sessions, passwords, store.Identities())
 	authService.StartSessionCleanup(shutdownCtx)
+
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
 	auditLogger := audit.NewLogger(db, appLogger)
 	projectsService := projects.NewService(db, keyring, auditLogger)
@@ -141,11 +195,6 @@ func run() int {
 	secretsService.StartTrashPurge(shutdownCtx)
 
 	router := httpx.NewRouter(httpx.Config{
-		// Behind Traefik and Cloudflare, RemoteAddr is only the
-		// visitor if both are trusted: Traefik replaces the forwarded
-		// chain rather than extending it, so the visitor survives in
-		// Cf-Connecting-Ip alone. TRUSTED_PROXIES=private,cloudflare
-		// fills all three.
 		TrustedProxies: appEnv.TrustedProxies,
 		CDNProxies:     appEnv.CDNProxies,
 		CDNHeader:      appEnv.CDNHeader,
@@ -160,7 +209,7 @@ func run() int {
 	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
-		auth.RegisterRoutes(r, authService, appEnv)
+		auth.RegisterRoutes(r, sessions, kit, authService, appEnv)
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)

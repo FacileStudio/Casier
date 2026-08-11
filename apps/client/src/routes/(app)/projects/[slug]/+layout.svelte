@@ -87,13 +87,12 @@
 	let activeTab = $derived(navTabs.find((tab) => isActive(tab.href, tab.exact))?.id ?? 'secrets');
 
 	async function reloadProject() {
-		project = await api.get<Project>(`/projects/${slug}`, auth.token);
+		project = await api.get<Project>(`/projects/${slug}`);
 	}
 
 	async function reloadEnvironments() {
 		const res = await api.get<EnvironmentsResponse>(
 			`/projects/${slug}/environments`,
-			auth.token
 		);
 		environments = (res.environments ?? []).toSorted((a, b) => a.position - b.position);
 	}

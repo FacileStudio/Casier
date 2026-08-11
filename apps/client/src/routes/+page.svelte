@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { Button, Card, Divider } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
-	import { api, COOKIE_SESSION, type AuthConfig, type Me } from '$lib/backend';
+	import { api, type AuthConfig } from '$lib/backend';
 	import Logo from '$lib/components/Logo.svelte';
 
 	type Feature = { icon: string; title: string; body: string };
@@ -42,9 +42,10 @@
 		}
 
 		try {
-			const me = await api.get<Me>('/auth/me');
-			auth.login(COOKIE_SESSION, me.id, me.email);
-			goto('/projects', { replaceState: true });
+			await auth.check();
+			if (auth.isAuthenticated) {
+				goto('/projects', { replaceState: true });
+			}
 			return;
 		} catch {}
 

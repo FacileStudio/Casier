@@ -7,7 +7,6 @@
 	import {
 		api,
 		ApiError,
-		COOKIE_SESSION,
 		type Me,
 		type Project,
 		type ProjectsResponse,
@@ -20,7 +19,7 @@
 
 	async function refreshProjects() {
 		try {
-			const result = await api.get<ProjectsResponse>('/projects', auth.token);
+			const result = await api.get<ProjectsResponse>('/projects');
 			projects = result.projects ?? [];
 		} catch (err) {
 			projects = [];
@@ -43,12 +42,10 @@
 			refreshProjects();
 			return;
 		}
-		api.get<Me>('/auth/me')
-			.then((me) => {
-				auth.login(COOKIE_SESSION, me.id, me.email);
-				refreshProjects();
-			})
-			.catch(() => goto('/login'));
+		auth.check().then(() => {
+			if (auth.isAuthenticated) refreshProjects();
+			else goto('/login');
+		});
 	});
 
 	const navPages = $derived([

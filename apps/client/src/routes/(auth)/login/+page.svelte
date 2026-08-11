@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { auth } from '$lib/auth.svelte';
 	import { api, API_BASE, type AuthConfig, type AuthResponse } from '$lib/backend';
 
@@ -21,10 +22,15 @@
 	let configLoaded = $state(false);
 
 	onMount(async () => {
+		const ssoError = $page.url.searchParams.get('error');
+		if (ssoError) {
+			error = ssoError;
+		}
+
 		try {
-			const config = await api.get<AuthConfig>('/auth/config');
-			ssoOnly = config.sso_only;
-			oidcEnabled = config.oidc_enabled;
+			const cfg = await fetch(`${API_BASE}/auth/config`, { credentials: 'include' }).then((r) => r.json());
+			ssoOnly = cfg.sso_only ?? false;
+			oidcEnabled = cfg.oidc_enabled ?? false;
 		} catch {
 			ssoOnly = false;
 		}
@@ -38,7 +44,7 @@
 
 		try {
 			const res = await api.post<AuthResponse>('/auth/login', { email, password });
-			auth.login(res.token, res.user_id, email);
+			await auth.check();
 			goto('/projects');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Login failed';

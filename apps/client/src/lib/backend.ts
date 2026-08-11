@@ -51,11 +51,18 @@ function parseError(body: string, status: number): ApiError {
 	return new ApiError(message || `HTTP ${status}`, status, code);
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
 async function request<T>(path: string, options: FetchOptions = {}): Promise<T> {
+	const method = (options.method ?? 'GET').toUpperCase();
 	const headers: Record<string, string> = {};
 
 	if (options.body) {
 		headers['Content-Type'] = 'application/json';
+	}
+
+	if (!SAFE_METHODS.has(method)) {
+		headers['X-Facile-CSRF'] = '1';
 	}
 
 	if (options.token && options.token !== COOKIE_SESSION) {
@@ -63,7 +70,7 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
 	}
 
 	const response = await fetch(`${API_BASE}${path}`, {
-		method: options.method ?? 'GET',
+		method,
 		headers,
 		credentials: 'include',
 		body: options.body ? JSON.stringify(options.body) : undefined,

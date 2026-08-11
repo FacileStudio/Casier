@@ -51,7 +51,6 @@
 		try {
 			const res = await api.get<RotationSummary>(
 				`/projects/${ctx.slug}/secrets/rotation`,
-				auth.token
 			);
 			rotation = Object.fromEntries((res.environments ?? []).map((env) => [env.slug, env]));
 		} catch {

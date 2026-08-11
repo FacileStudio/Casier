@@ -124,7 +124,7 @@
 		values = new Map();
 		staleOnly = false;
 		try {
-			const res = await api.get<SecretsResponse>(basePath, auth.token);
+			const res = await api.get<SecretsResponse>(basePath);
 			secrets = res.secrets ?? [];
 			rotationDays = res.rotation_days ?? 0;
 		} catch (err) {
@@ -143,7 +143,6 @@
 
 		const revealedSecret = await api.get<Secret>(
 			`${basePath}/${encodeURIComponent(secret.key)}/reveal`,
-			auth.token
 		);
 		const value = revealedSecret.value ?? '';
 		values = new Map(values).set(secret.id, value);
@@ -186,7 +185,7 @@
 		trashLoading = true;
 		trashError = '';
 		try {
-			const res = await api.get<TrashResponse>(`${basePath}/trash`, auth.token);
+			const res = await api.get<TrashResponse>(`${basePath}/trash`);
 			trashed = res.secrets ?? [];
 		} catch (err) {
 			trashError = err instanceof Error ? err.message : 'Failed to load the trash';
@@ -198,7 +197,7 @@
 	async function handleRestore(secret: TrashedSecret) {
 		restoring = secret.id;
 		try {
-			await api.post(`${basePath}/${encodeURIComponent(secret.key)}/restore`, {}, auth.token);
+			await api.post(`${basePath}/${encodeURIComponent(secret.key)}/restore`, {});
 			trashed = trashed.filter((s) => s.id !== secret.id);
 			toast.success(`Secret ${secret.key} restored`);
 			await loadSecrets();
@@ -226,7 +225,7 @@
 				.split(',')
 				.map((t) => t.trim())
 				.filter(Boolean);
-			const secret = await api.post<Secret>(basePath, { key, value: newValue, tags }, auth.token);
+			const secret = await api.post<Secret>(basePath, { key, value: newValue, tags });
 			secrets = [...secrets, secret];
 			addOpen = false;
 			toast.success(`Secret ${secret.key} added to ${environment.name}`);
@@ -264,7 +263,6 @@
 			const updated = await api.put<Secret>(
 				`${basePath}/${encodeURIComponent(editTarget.key)}`,
 				{ value: editValue },
-				auth.token
 			);
 			secrets = secrets.map((s) => (s.id === updated.id ? updated : s));
 			values = new Map(values).set(updated.id, editValue);
@@ -286,7 +284,7 @@
 		if (!deleteTarget) return;
 		deleting = true;
 		try {
-			await api.del(`${basePath}/${encodeURIComponent(deleteTarget.key)}`, auth.token);
+			await api.del(`${basePath}/${encodeURIComponent(deleteTarget.key)}`);
 			secrets = secrets.filter((s) => s.id !== deleteTarget!.id);
 			toast.success(`Secret ${deleteTarget.key} deleted`);
 			deleteOpen = false;
@@ -307,7 +305,6 @@
 		try {
 			const res = await api.get<SecretVersionsResponse>(
 				`${basePath}/${encodeURIComponent(secret.key)}/versions`,
-				auth.token
 			);
 			versions = (res.versions ?? []).toSorted((a, b) => b.version - a.version);
 		} catch (err) {
@@ -324,7 +321,6 @@
 			const updated = await api.post<Secret>(
 				`${basePath}/${encodeURIComponent(historyTarget.key)}/rollback`,
 				{ version },
-				auth.token
 			);
 			secrets = secrets.map((s) => (s.id === updated.id ? updated : s));
 			toast.success(`Rolled ${historyTarget.key} back to v${version}`);
@@ -345,7 +341,6 @@
 			const res = await api.post<ImportResult>(
 				`${basePath}/import`,
 				{ content: importContent },
-				auth.token
 			);
 			toast.success(`Imported: ${res.created} created, ${res.updated} updated, ${res.skipped} skipped`);
 			importOpen = false;
@@ -361,7 +356,7 @@
 	async function handleExport() {
 		exporting = true;
 		try {
-			const res = await api.get<ExportResult>(`${basePath}/export`, auth.token);
+			const res = await api.get<ExportResult>(`${basePath}/export`);
 			const blob = new Blob([res.content], { type: 'text/plain' });
 			const url = URL.createObjectURL(blob);
 			const link = document.createElement('a');

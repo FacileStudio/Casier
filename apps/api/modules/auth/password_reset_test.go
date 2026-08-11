@@ -34,6 +34,7 @@ func testService(mail mailer.Mailer) *Service {
 		publicURL: "https://casier.facile.studio",
 	}
 	service.controller = newController(service)
+	service.deliverReset = service.sendPasswordReset
 	return service
 }
 
@@ -263,14 +264,15 @@ func TestPasswordResetIsUnavailableWithoutAMailer(t *testing.T) {
 
 func TestForgotPasswordControllerValidatesTheAddress(t *testing.T) {
 	cases := []struct {
-		name    string
-		email   string
-		wantErr bool
+		name             string
+		email            string
+		wantErr          bool
+		expectNoDelivery bool
 	}{
 		{name: "plain address", email: "user@example.org"},
 		{name: "address is lowercased and trimmed", email: "  User@Example.org  "},
-		{name: "empty", email: "", wantErr: true},
-		{name: "no at sign", email: "user.example.org", wantErr: true},
+		{name: "empty", email: "", expectNoDelivery: true},
+		{name: "no at sign", email: "user.example.org", expectNoDelivery: true},
 	}
 
 	for _, tc := range cases {
@@ -279,7 +281,7 @@ func TestForgotPasswordControllerValidatesTheAddress(t *testing.T) {
 			service := testService(&fakeMailer{})
 			service.deliverReset = func(_ context.Context, email string) { handed <- email }
 
-			err := service.controller.forgotPassword(context.Background(), &ForgotPasswordRequest{Email: tc.email})
+			err := service.forgotPassword(context.Background(), tc.email)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatal("controller accepted a malformed address")
@@ -287,7 +289,15 @@ func TestForgotPasswordControllerValidatesTheAddress(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("controller.forgotPassword: %v", err)
+				t.Fatalf("forgotPassword: %v", err)
+			}
+			if tc.expectNoDelivery {
+				select {
+				case <-handed:
+					t.Fatal("delivery should not have happened for an invalid address")
+				case <-time.After(100 * time.Millisecond):
+				}
+				return
 			}
 			select {
 			case got := <-handed:

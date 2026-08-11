@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
+	"github.com/FacileStudio/porte"
 	troncenv "github.com/FacileStudio/tronc/env"
 )
 
@@ -23,6 +24,22 @@ type Config struct {
 	PublicURL     string
 	SSOOnly       bool
 	AdminEmails   []string
+}
+
+func (c Config) Porte() porte.Config {
+	cfg := porte.Config{
+		SSOOnly:            c.SSOOnly,
+		AcceptLegacyCookie: true,
+	}
+	if c.OIDC == nil {
+		return cfg
+	}
+	cfg.Issuer = c.OIDC.Issuer
+	cfg.ClientID = c.OIDC.ClientID
+	cfg.ClientSecret = c.OIDC.ClientSecret
+	cfg.RedirectURL = c.OIDC.RedirectURL
+	cfg.SuccessURL = c.OIDC.SuccessURL
+	return cfg
 }
 
 func Load() (Config, error) {

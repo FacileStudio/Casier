@@ -98,7 +98,6 @@
 					description: description.trim(),
 					rotation_days: rotation,
 				},
-				auth.token
 			);
 			toast.success('Project updated');
 			await app?.refreshProjects();
@@ -122,7 +121,6 @@
 			const env = await api.post<Environment>(
 				`/projects/${ctx.slug}/environments`,
 				{ name: newEnvName.trim() },
-				auth.token
 			);
 			newEnvName = '';
 			await ctx.reloadEnvironments();
@@ -140,7 +138,6 @@
 			await api.put<Environment>(
 				`/projects/${ctx.slug}/environments/${env.slug}`,
 				{ name: env.name, protected: !env.protected },
-				auth.token
 			);
 			await ctx.reloadEnvironments();
 			toast.success(
@@ -165,7 +162,7 @@
 		if (!env) return;
 		deletingEnv = true;
 		try {
-			await api.del(`/projects/${ctx.slug}/environments/${env.slug}`, auth.token);
+			await api.del(`/projects/${ctx.slug}/environments/${env.slug}`);
 			deleteEnvOpen = false;
 			envToDelete = null;
 			await ctx.reloadEnvironments();
@@ -182,7 +179,7 @@
 		if (!project) return;
 		deletingProject = true;
 		try {
-			await api.del(`/projects/${ctx.slug}`, auth.token);
+			await api.del(`/projects/${ctx.slug}`);
 			toast.success(`Project "${project.name}" deleted`);
 			await app?.refreshProjects();
 			await goto('/projects');

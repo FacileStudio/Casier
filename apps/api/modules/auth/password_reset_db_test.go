@@ -11,6 +11,10 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/local"
+	portepg "github.com/FacileStudio/porte/pg"
+	"github.com/FacileStudio/porte/session"
 
 	"gorm.io/gorm"
 )
@@ -34,8 +38,28 @@ func resetTestDB(t *testing.T) *gorm.DB {
 
 func resetTestService(t *testing.T, db *gorm.DB) (*Service, *fakeMailer) {
 	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB: %v", err)
+	}
+	store := portepg.New(sqlDB)
+	logger := slog.New(slog.DiscardHandler)
+	sessions, err := session.New(porte.Config{}, session.Deps{Sessions: store.Sessions(), Logger: logger})
+	if err != nil {
+		t.Fatalf("session.New: %v", err)
+	}
+	passwords, err := local.New(local.Config{AllowRegistration: true, MinPasswordLength: 8}, local.Deps{
+		Users:      NewUserStore(db),
+		Identities: store.Identities(),
+		Sessions:   sessions,
+		Logger:     logger,
+		Count:      NewUserStore(db).CountUsers,
+	})
+	if err != nil {
+		t.Fatalf("local.New: %v", err)
+	}
 	fake := &fakeMailer{}
-	service := NewService(db, nil, slog.New(slog.DiscardHandler), fake, "https://casier.test")
+	service := NewService(db, nil, logger, fake, "https://casier.test", sessions, passwords, store.Identities())
 	return service, fake
 }
 
@@ -177,7 +201,7 @@ func TestResetPasswordConsumesTheTokenAndEvictsEverySession(t *testing.T) {
 	}
 
 	var sessions int64
-	db.Model(&schemas.Session{}).Where("user_id = ?", userID).Count(&sessions)
+	db.Raw("SELECT count(*) FROM porte_sessions WHERE user_id = ?", userID).Scan(&sessions)
 	if sessions != 0 {
 		t.Errorf("%d sessions survived the reset, want 0", sessions)
 	}
@@ -253,7 +277,9 @@ func TestResetPasswordRejectsAnExpiredToken(t *testing.T) {
 func TestSendPasswordResetStillWritesTheTokenWhenDeliveryFails(t *testing.T) {
 	db := resetTestDB(t)
 	fake := &fakeMailer{err: context.DeadlineExceeded}
-	service := NewService(db, nil, slog.New(slog.DiscardHandler), fake, "https://casier.test")
+	service, _ := resetTestService(t, db)
+	service.mailer = fake
+	service.deliverReset = service.sendPasswordReset
 	ctx := context.Background()
 
 	if _, _, err := service.registerUser(ctx, "user@example.org", "correct horse battery"); err != nil {

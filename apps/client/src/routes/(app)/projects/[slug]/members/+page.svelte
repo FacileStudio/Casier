@@ -73,7 +73,7 @@
 		loading = true;
 		loadError = '';
 		try {
-			const res = await api.get<MembersResponse>(`/projects/${ctx.slug}/members`, auth.token);
+			const res = await api.get<MembersResponse>(`/projects/${ctx.slug}/members`);
 			members = res.members ?? [];
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load members';
@@ -96,7 +96,6 @@
 			await api.post(
 				`/projects/${ctx.slug}/members`,
 				{ email: newEmail.trim(), role: newRole },
-				auth.token
 			);
 			addOpen = false;
 			toast.success(`${newEmail.trim()} added as ${newRole}`);
@@ -117,7 +116,7 @@
 		if (!removeTarget) return;
 		removing = true;
 		try {
-			await api.del(`/projects/${ctx.slug}/members/${removeTarget.id}`, auth.token);
+			await api.del(`/projects/${ctx.slug}/members/${removeTarget.id}`);
 			members = members.filter((member) => member.id !== removeTarget?.id);
 			toast.success(`${removeTarget.email} removed`);
 			removeOpen = false;

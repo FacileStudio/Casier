@@ -45,8 +45,8 @@
 
 		loading = true;
 		try {
-			const res = await api.post<AuthResponse>('/auth/register', { email, password });
-			auth.login(res.token, res.user_id, email);
+			await api.post<AuthResponse>('/auth/register', { email, password });
+			auth.check();
 			goto('/projects');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Registration failed';

@@ -34,7 +34,44 @@ func Migrate(db *gorm.DB) error {
 		return err
 	}
 
-	return bindTokenScopesToEnvironments(db)
+	if err := bindTokenScopesToEnvironments(db); err != nil {
+		return err
+	}
+
+	return adoptPorte(db)
+}
+
+func adoptPorte(db *gorm.DB) error {
+	migrator := db.Migrator()
+	if migrator.HasTable("porte_identities") {
+		return nil
+	}
+
+	return db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(porteSchema).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(adoptExistingPasswords).Error; err != nil {
+			return err
+		}
+		if migrator.HasTable("sessions") {
+			if err := tx.Exec(carryLegacySessionsOver).Error; err != nil {
+				return err
+			}
+			if err := tx.Exec(dropLegacySessions).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Exec(dropPasswordColumn).Error; err != nil {
+			return err
+		}
+		if migrator.HasColumn(&User{}, "oidc_access_token_enc") {
+			if err := tx.Exec(dropOIDCColumns).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // renameResetTokenColumn runs before AutoMigrate: the column already holds a

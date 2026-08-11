@@ -33,6 +33,10 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
+	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/oidc"
+	portepg "github.com/FacileStudio/porte/pg"
+	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/health"
 	"github.com/FacileStudio/tronc/httpx"
@@ -228,7 +232,24 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	// A stub mailer keeps the password reset routes live, so the matrix answers
 	// who may call them rather than whether the deployment can send mail. The
 	// no-mailer 503 is its own property and is covered in modules/auth.
-	authService := auth.NewService(db, keyring, logger, discardMailer{}, "https://casier.test")
+	store := portepg.New(sqlDB)
+	porteCfg := appEnv.Porte()
+	sessions, err := session.New(porteCfg, session.Deps{Sessions: store.Sessions(), Logger: logger})
+	if err != nil {
+		panic(fmt.Sprintf("session.New: %v", err))
+	}
+	passwords, err := local.New(local.Config{AllowRegistration: true, MinPasswordLength: 8}, local.Deps{
+		Users:      auth.NewUserStore(db),
+		Identities: store.Identities(),
+		Sessions:   sessions,
+		Logger:     logger,
+		Count:      auth.NewUserStore(db).CountUsers,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("local.New: %v", err))
+	}
+	var kit *oidc.Kit
+	authService := auth.NewService(db, keyring, logger, discardMailer{}, "https://casier.test", sessions, passwords, store.Identities())
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
 	projectsService := projects.NewService(db, keyring, auditLogger)
@@ -240,7 +261,7 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
-		auth.RegisterRoutes(r, authService, appEnv)
+		auth.RegisterRoutes(r, sessions, kit, authService, appEnv)
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
@@ -283,18 +304,20 @@ func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
 		{cRotator, rotatorEmail},
 	}
 	for _, u := range users {
-		record := &schemas.User{Email: u.email, PasswordHash: passwordHash}
+		record := &schemas.User{Email: u.email}
 		if err := db.Create(record).Error; err != nil {
 			return f, fmt.Errorf("seed user %s: %w", u.email, err)
 		}
 		f.userIDs[u.email] = record.ID
 
-		session := &schemas.Session{
-			Token:     hashToken(bearers[u.caller]),
-			UserID:    record.ID,
-			ExpiresAt: now.Add(time.Hour),
+		if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject, password_hash) VALUES (?, 'local', ?, ?)`,
+			record.ID, fmt.Sprintf("%d", record.ID), passwordHash).Error; err != nil {
+			return f, fmt.Errorf("seed identity %s: %w", u.email, err)
 		}
-		if err := db.Create(session).Error; err != nil {
+
+		sessToken := hashToken(bearers[u.caller])
+		if err := db.Exec(`INSERT INTO porte_sessions (token_hash, user_id, created_at, last_used_at, expires_at) VALUES (?, ?, now(), now(), ?)`,
+			sessToken, record.ID, now.Add(time.Hour)).Error; err != nil {
 			return f, fmt.Errorf("seed session %s: %w", u.email, err)
 		}
 	}
@@ -561,9 +584,7 @@ func routeCases(f fixture) []routeCase {
 		{
 			name: "logout", method: "POST", pattern: "/api/auth/logout", path: "/api/auth/logout",
 			outcomes: []outcome{
-				ok(204, cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
-				ok(204, liveTokens...),
-				unauth(rejectedAtTheDoor...),
+				ok(200, everyone...),
 			},
 		},
 		{

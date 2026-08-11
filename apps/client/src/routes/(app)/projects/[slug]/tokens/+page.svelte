@@ -77,7 +77,7 @@
 		loading = true;
 		loadError = '';
 		try {
-			const res = await api.get<ApiTokensResponse>(`/projects/${ctx.slug}/tokens`, auth.token);
+			const res = await api.get<ApiTokensResponse>(`/projects/${ctx.slug}/tokens`);
 			tokens = res.tokens ?? [];
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load tokens';
@@ -108,7 +108,6 @@
 					environments: newEnvironments.trim() || '*',
 					expires_in_days: Number(newExpiresInDays),
 				},
-				auth.token
 			);
 			createdToken = token.token ?? '';
 			if (!createdToken) {
@@ -135,7 +134,7 @@
 		if (!revokeTarget) return;
 		revoking = true;
 		try {
-			await api.del(`/projects/${ctx.slug}/tokens/${revokeTarget.id}`, auth.token);
+			await api.del(`/projects/${ctx.slug}/tokens/${revokeTarget.id}`);
 			toast.success(`Token "${revokeTarget.name}" revoked`);
 			revokeOpen = false;
 			revokeTarget = null;

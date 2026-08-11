@@ -49,7 +49,7 @@
 		loading = true;
 		loadError = '';
 		try {
-			const res = await api.get<ProjectsResponse>('/projects', auth.token);
+			const res = await api.get<ProjectsResponse>('/projects');
 			projects = (res.projects ?? []).toSorted((a, b) => a.name.localeCompare(b.name));
 		} catch (err) {
 			loadError = err instanceof Error ? err.message : 'Failed to load projects';
@@ -72,7 +72,6 @@
 			const project = await api.post<Project>(
 				'/projects',
 				{ name: createName.trim(), description: createDescription.trim() },
-				auth.token
 			);
 			createOpen = false;
 			toast.success(`Project "${project.name}" created`);

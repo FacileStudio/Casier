@@ -52,7 +52,6 @@
 		try {
 			const res = await api.get<AuditLogsResponse>(
 				`/projects/${ctx.slug}/audit?limit=50`,
-				auth.token
 			);
 			logs = res.logs ?? [];
 		} catch (err) {
