@@ -32,6 +32,7 @@ func (v *visitor) allow() bool {
 	return true
 }
 
+// RateLimiter is an in-memory token-bucket limiter keyed by client IP.
 type RateLimiter struct {
 	mu         sync.Mutex
 	visitors   map[string]*visitor
@@ -39,6 +40,8 @@ type RateLimiter struct {
 	refillRate float64
 }
 
+// NewRateLimiter builds a limiter admitting maxPerWindow requests per window
+// per IP and starts its visitor-cleanup loop.
 func NewRateLimiter(maxPerWindow int, window time.Duration) *RateLimiter {
 	rl := &RateLimiter{
 		visitors:   make(map[string]*visitor),
@@ -79,6 +82,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	return v.allow()
 }
 
+// RateLimit wraps a handler with per-IP rate limiting from limiter.
 func RateLimit(limiter *RateLimiter) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

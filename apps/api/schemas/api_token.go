@@ -10,10 +10,11 @@ const (
 	MaxTokenDays     = 730
 )
 
-// AllEnvironments is stored explicitly rather than inferred from an empty
-// environment list. Inferring it made "no environments left" and "every
-// environment" the same state, so cascading an environment delete would have
-// widened a token's reach instead of narrowing it.
+// ApiToken is one machine credential. AllEnvironments is stored explicitly
+// rather than inferred from an empty environment list: inferring it made "no
+// environments left" and "every environment" the same state, so cascading an
+// environment delete would have widened a token's reach instead of narrowing
+// it.
 type ApiToken struct {
 	ID              int64      `gorm:"column:id;primaryKey"`
 	TokenHash       string     `gorm:"column:token_hash;uniqueIndex"`

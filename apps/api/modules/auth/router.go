@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// RegisterRoutes mounts the auth endpoints, gated by appEnv's SSO policy.
 func RegisterRoutes(router chi.Router, sessions *session.Manager, kit *oidc.Kit, service *Service, appEnv env.Config) {
 	authLimiter := middleware.NewRateLimiter(5, 1*time.Minute)
 

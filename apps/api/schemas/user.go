@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// User is the local identity row.
 type User struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
 	Email     string    `gorm:"column:email;uniqueIndex"`

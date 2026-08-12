@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// SecretACL is one user's override on a single secret.
 type SecretACL struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
 	SecretID  int64     `gorm:"column:secret_id;uniqueIndex:idx_secret_user"`

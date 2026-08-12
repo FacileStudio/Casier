@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// ProjectMember is one user's role in a project.
 type ProjectMember struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
 	ProjectID int64     `gorm:"column:project_id;uniqueIndex:idx_project_user"`

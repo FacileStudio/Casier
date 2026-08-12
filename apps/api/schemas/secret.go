@@ -10,10 +10,10 @@ import (
 // purge job destroys it and its versions for good.
 const TrashRetentionDays = 30
 
-// The unique index on (environment_id, key) deliberately ignores deleted_at, so
-// a key in the trash stays reserved until it is restored or purged. Recreating
-// it under the same name would otherwise leave two rows a restore cannot tell
-// apart.
+// Secret is one stored value in an environment. Its unique index on
+// (environment_id, key) deliberately ignores deleted_at, so a key in the trash
+// stays reserved until it is restored or purged: recreating it under the same
+// name would otherwise leave two rows a restore cannot tell apart.
 type Secret struct {
 	ID             int64          `gorm:"column:id;primaryKey"`
 	EnvironmentID  int64          `gorm:"column:environment_id;uniqueIndex:idx_env_key"`

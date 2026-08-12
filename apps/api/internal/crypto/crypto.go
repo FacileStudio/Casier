@@ -8,6 +8,8 @@ import (
 	"fmt"
 )
 
+// Encrypt seals plaintext with AES-256-GCM, returning the ciphertext and its
+// random nonce separately so the nonce can be stored beside the value.
 func Encrypt(plaintext []byte, key []byte) (ciphertext []byte, nonce []byte, err error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -32,6 +34,7 @@ func Encrypt(plaintext []byte, key []byte) (ciphertext []byte, nonce []byte, err
 	return ciphertext, nonce, nil
 }
 
+// Decrypt opens ciphertext with the nonce that sealed it.
 func Decrypt(ciphertext []byte, nonce []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -51,6 +54,8 @@ func Decrypt(ciphertext []byte, nonce []byte, key []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
+// KeyFromBase64 decodes a 32-byte base64 encryption key, rejecting anything
+// that is not exactly one.
 func KeyFromBase64(encoded string) ([]byte, error) {
 	key, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {

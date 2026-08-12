@@ -23,6 +23,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// Service implements authentication: sessions, passwords via porte, OIDC and
+// password reset, with a mailer seam for the reset delivery.
 type Service struct {
 	orm          *gorm.DB
 	keyring      *crypto.Keyring
@@ -36,6 +38,7 @@ type Service struct {
 	deliverReset func(ctx context.Context, email string)
 }
 
+// NewService wires an auth service onto the database and the porte kits.
 func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, mail mailer.Mailer, publicURL string, sessions *session.Manager, passwords *local.Kit, identities porte.IdentityStore) *Service {
 	service := &Service{
 		orm:        orm,

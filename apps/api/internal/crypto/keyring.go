@@ -10,6 +10,8 @@ type Keyring struct {
 	key   []byte
 }
 
+// NewKeyring builds a keyring holding one root key, readable and replaceable
+// under a lock.
 func NewKeyring(key []byte) *Keyring {
 	return &Keyring{key: key}
 }

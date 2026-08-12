@@ -7,6 +7,7 @@ const (
 	SessionMaxLifetime   = 7 * 24 * time.Hour
 )
 
+// Session is one login session.
 type Session struct {
 	Token     string    `gorm:"column:token;primaryKey"`
 	UserID    int64     `gorm:"column:user_id;index"`

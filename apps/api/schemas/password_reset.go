@@ -7,6 +7,7 @@ import "time"
 // replayed into an account takeover.
 const PasswordResetTTL = 30 * time.Minute
 
+// PasswordReset is one in-flight password reset.
 type PasswordReset struct {
 	TokenHash string    `gorm:"column:token_hash;primaryKey"`
 	UserID    int64     `gorm:"column:user_id;index"`

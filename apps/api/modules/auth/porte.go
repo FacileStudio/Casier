@@ -11,10 +11,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// UserStore is the porte.register adapter that resolves a user table lookup
+// into the identity porte hands back.
 type UserStore struct {
 	orm *gorm.DB
 }
 
+// NewUserStore wires a UserStore onto the database.
 func NewUserStore(orm *gorm.DB) *UserStore {
 	return &UserStore{orm: orm}
 }

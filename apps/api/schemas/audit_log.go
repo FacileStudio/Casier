@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// AuditLog is one audited action on a project.
 type AuditLog struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
 	ProjectID int64     `gorm:"column:project_id;index"`

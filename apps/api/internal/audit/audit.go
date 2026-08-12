@@ -15,12 +15,14 @@ const (
 	maxConcurrency = 64
 )
 
+// Logger writes audit rows asynchronously, bounded by a writer pool.
 type Logger struct {
 	orm    *gorm.DB
 	logger *slog.Logger
 	slots  chan struct{}
 }
 
+// NewLogger wires an audit logger onto the database.
 func NewLogger(orm *gorm.DB, logger *slog.Logger) *Logger {
 	return &Logger{
 		orm:    orm,

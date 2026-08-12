@@ -9,6 +9,7 @@ const DefaultRotationDays = 90
 // MaxRotationDays keeps a policy inside a decade, and zero disables it.
 const MaxRotationDays = 3650
 
+// Project is one project, the container for environments and secrets.
 type Project struct {
 	ID               int64     `gorm:"column:id;primaryKey"`
 	Name             string    `gorm:"column:name"`

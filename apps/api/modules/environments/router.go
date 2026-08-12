@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// RegisterRoutes mounts the environment endpoints.
 func RegisterRoutes(router chi.Router, service *Service, authService *auth.Service) {
 	router.Route("/projects/{slug}/environments", func(router chi.Router) {
 		router.Use(middleware.RequireAuth(authService))

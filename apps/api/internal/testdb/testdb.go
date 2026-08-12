@@ -54,6 +54,10 @@ func Announce() {
 // two packages truncating the same tables deadlock and steal each other's
 // fixtures. Isolating by schema keeps that concurrency instead of forcing the
 // whole suite through -p 1.
+// Open returns a scoped, migrated connection. The search_path has to travel in
+// the connection string rather than a SET, because GORM hands out pooled
+// connections and a SET would bind one of them — every other query in the
+// package would quietly run against public instead of the test's schema.
 func Open(url string) (*gorm.DB, error) {
 	schema := schemaName()
 
@@ -68,9 +72,6 @@ func Open(url string) (*gorm.DB, error) {
 		_ = handle.Close()
 	}
 
-	// The search_path has to travel in the connection string, not in a SET.
-	// GORM hands out pooled connections, so a SET would bind one of them and
-	// every other query in the package would quietly run against public.
 	scoped, err := database.Open(withSearchPath(url, schema))
 	if err != nil {
 		return nil, fmt.Errorf("open %s scoped to %s: %w", EnvVar, schema, err)

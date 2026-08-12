@@ -6,6 +6,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// Migrate brings the schema up to date on every boot, running the rename and
+// backfill steps in order.
 func Migrate(db *gorm.DB) error {
 	if err := renameSpacesToProjects(db); err != nil {
 		return err

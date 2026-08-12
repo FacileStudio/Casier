@@ -14,6 +14,7 @@ import (
 
 const DefaultPort = 587
 
+// SMTPConfig is the relay connection and envelope settings.
 type SMTPConfig struct {
 	Host     string
 	Port     int
@@ -59,6 +60,9 @@ func newSMTP(config SMTPConfig) (*smtpMailer, error) {
 	return &smtpMailer{config: config, from: from, send: smtp.SendMail, now: time.Now}, nil
 }
 
+// Send delivers one message over SMTP. Credentials stay optional: an internal
+// relay on a trusted network often has none, and smtp.SendMail skips AUTH
+// entirely when handed a nil Auth.
 func (m *smtpMailer) Send(ctx context.Context, message Message) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -74,8 +78,6 @@ func (m *smtpMailer) Send(ctx context.Context, message Message) error {
 		return err
 	}
 
-	// Credentials stay optional: an internal relay on a trusted network often
-	// has none, and smtp.SendMail skips AUTH entirely when handed a nil Auth.
 	var auth smtp.Auth
 	if m.config.Username != "" {
 		auth = smtp.PlainAuth("", m.config.Username, m.config.Password, m.config.Host)

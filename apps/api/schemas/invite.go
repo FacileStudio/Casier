@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// Invite is a project invitation redeemable by email.
 type Invite struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
 	Token     string    `gorm:"column:token;uniqueIndex"`

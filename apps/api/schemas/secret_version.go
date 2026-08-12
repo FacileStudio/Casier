@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// SecretVersion is one stored value of a secret.
 type SecretVersion struct {
 	ID             int64     `gorm:"column:id;primaryKey"`
 	SecretID       int64     `gorm:"column:secret_id;index"`

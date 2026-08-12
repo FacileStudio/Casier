@@ -235,18 +235,23 @@ func tagFilterPattern(tag string) string {
 
 const tagFilterClause = `',' || tags || ',' LIKE ? ESCAPE '\'`
 
+// ProjectResolver resolves a project slug against the caller's role.
 type ProjectResolver interface {
 	ResolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
 }
 
+// EnvironmentResolver resolves an environment slug within a project.
 type EnvironmentResolver interface {
 	ResolveEnvironmentID(ctx context.Context, projectID int64, envSlug string) (int64, error)
 }
 
+// DataKeyResolver hands out the project data key for decryption.
 type DataKeyResolver interface {
 	GetProjectDataKey(ctx context.Context, projectID int64) ([]byte, error)
 }
 
+// Service implements the secret lifecycle: create, read, versions, trash,
+// rotation, ACLs, import/export and diff, encrypted at rest.
 type Service struct {
 	orm        *gorm.DB
 	logger     *slog.Logger
@@ -258,6 +263,7 @@ type Service struct {
 	controller *Controller
 }
 
+// NewService wires a secret service onto the database and its resolvers.
 func NewService(orm *gorm.DB, logger *slog.Logger, projectRes ProjectResolver, envRes EnvironmentResolver, dataKeyRes DataKeyResolver, webhooks *webhook.Dispatcher, auditLog *audit.Logger) *Service {
 	service := &Service{orm: orm, logger: logger, projectRes: projectRes, envRes: envRes, dataKeyRes: dataKeyRes, webhooks: webhooks, audit: auditLog}
 	service.controller = newController(service)

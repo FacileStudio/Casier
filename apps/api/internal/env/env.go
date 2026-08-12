@@ -8,6 +8,8 @@ import (
 	troncenv "github.com/FacileStudio/tronc/env"
 )
 
+// OIDCConfig is the OpenID Connect client configuration, present only when
+// OIDC_ISSUER was set.
 type OIDCConfig struct {
 	Issuer       string
 	ClientID     string
@@ -16,6 +18,8 @@ type OIDCConfig struct {
 	SuccessURL   string
 }
 
+// Config is the process configuration: the tronc core plus Casier's OIDC and
+// service accounts.
 type Config struct {
 	troncenv.Core
 	EncryptionKey string
@@ -42,6 +46,13 @@ func (c Config) Porte() porte.Config {
 	return cfg
 }
 
+// Load reads and validates the environment, wiring the OIDC config through
+// porte's own Config. The public origin is what a link in an email has to
+// point at, so it falls back to the first CORS origin the same way
+// OIDC_SUCCESS_URL does; and SMTP_HOST is the switch that enables mail — unset
+// means no mailer and a password reset flow that refuses rather than silently
+// drops mail, while set makes the whole relay config add up now, at startup,
+// instead of at the first reset request.
 func Load() (Config, error) {
 	core, err := troncenv.LoadCore()
 	if err != nil {
@@ -63,9 +74,6 @@ func Load() (Config, error) {
 
 	cfg.AdminEmails = troncenv.List("CASIER_ADMIN_EMAILS")
 
-	// The public origin is what a link in an email has to point at. Deployments
-	// almost never set it twice, so it falls back to the first CORS origin the
-	// same way OIDC_SUCCESS_URL does.
 	cfg.PublicURL = troncenv.String("PUBLIC_URL", "")
 	if cfg.PublicURL == "" && len(cfg.CORSAllowedOrigins) > 0 {
 		cfg.PublicURL = cfg.CORSAllowedOrigins[0]
@@ -91,9 +99,6 @@ func Load() (Config, error) {
 		}
 	}
 
-	// SMTP_HOST is the switch: unset means no mailer and a password reset flow
-	// that refuses rather than silently drops mail. Set means the rest has to
-	// add up now, at startup, instead of at the first reset request.
 	if host := troncenv.String("SMTP_HOST", ""); host != "" {
 		port, err := troncenv.Int("SMTP_PORT", mailer.DefaultPort)
 		if err != nil {

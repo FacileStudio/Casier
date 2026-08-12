@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// RegisterRoutes mounts the secret endpoints.
 func RegisterRoutes(router chi.Router, service *Service, authService *auth.Service) {
 	router.With(middleware.RequireAuth(authService)).Get("/projects/{slug}/secrets/diff", func(w http.ResponseWriter, request *http.Request) {
 		projectSlug := chi.URLParam(request, "slug")

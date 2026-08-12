@@ -222,6 +222,10 @@ func (discardMailer) Send(context.Context, mailer.Message) error { return nil }
 // It tolerates a nil database so the route-coverage test can walk the mounted
 // routes without Postgres: no service touches the handle until a request
 // arrives.
+// buildTestRouter assembles the full middleware chain with a stub mailer, so
+// the matrix answers who may call the password reset routes rather than
+// whether the deployment can send mail — the no-mailer 503 is its own property
+// and is covered in modules/auth.
 func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	appEnv := env.Config{
@@ -229,9 +233,6 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 		AdminEmails:   []string{rotatorEmail},
 	}
 
-	// A stub mailer keeps the password reset routes live, so the matrix answers
-	// who may call them rather than whether the deployment can send mail. The
-	// no-mailer 503 is its own property and is covered in modules/auth.
 	store := portepg.New(sqlDB)
 	porteCfg := appEnv.Porte()
 	sessions, err := session.New(porteCfg, session.Deps{Sessions: store.Sessions(), Logger: logger})
@@ -284,6 +285,11 @@ func seedPasswordHash() (string, error) {
 	return authcrypto.HashPassword(fixturePassword)
 }
 
+// seed builds the fixture the matrix asserts against: a project with dev and
+// prod environments and a deliberately restricted LOCKED secret whose ACL names
+// only the viewer. The registered webhook points at a port nothing listens on
+// (127.0.0.1:1), a refused connection ends the goroutine immediately instead of
+// hanging on DNS.
 func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
 	if err := testdb.Truncate(db); err != nil {
 		return fixture{}, err
@@ -383,9 +389,6 @@ func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
 	}
 	_ = openSecret
 
-	// LOCKED carries an ACL naming only the viewer, which makes it restricted
-	// for everyone else: admin and member hold a project role that would
-	// otherwise let them write it, and owner bypasses ACLs by design.
 	acl := &schemas.SecretACL{SecretID: lockedSecret, UserID: f.userIDs["viewer@casier.test"], CanRead: true, CanWrite: false}
 	if err := db.Create(acl).Error; err != nil {
 		return f, fmt.Errorf("seed acl: %w", err)
@@ -405,8 +408,6 @@ func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
 	}
 	f.inviteID = invite.ID
 
-	// A port nothing listens on: the dispatcher fires in a goroutine, and a
-	// refused connection ends it immediately instead of hanging on DNS.
 	hook := &schemas.Webhook{ProjectID: alpha, URL: "http://127.0.0.1:1/hook", Events: "*", Active: true, CreatedBy: f.userIDs["owner@casier.test"]}
 	if err := db.Create(hook).Error; err != nil {
 		return f, fmt.Errorf("seed webhook: %w", err)
@@ -508,6 +509,33 @@ func seedSecret(db *gorm.DB, envID int64, dataKey []byte, key, value string, ver
 	return record.ID, nil
 }
 
+// routeCases returns the full authorization matrix, grouped: unauthenticated
+// surface, authenticated identity, instance-wide key rotation (gated on
+// CASIER_ADMIN_EMAILS, closed to machine tokens and to every project role
+// including owner), projects, environments, secrets, and the per-secret ACL
+// layer.
+//
+// Known gaps, pinned as observed so a fix has to change the line deliberately:
+// project creation carries no requireUserSession and no scope check, so a
+// read-only CI token can mint a project of its own; rename has no AllowsWrite
+// check, so a read-only token inherits its creator's owner role; delete is the
+// same, and removes the project and every secret in it; the audit trail is
+// open to every project role and to machine tokens, including one scoped to a
+// single environment; and the environment listing is not filtered by the
+// calling token's scope, so a dev-only token can enumerate prod.
+//
+// The secret endpoints carry their own rationale: revealing one value is a
+// read gated exactly like a list (the separation it buys is in the audit
+// trail, not in who may call it); restoring is a write, so a read-only token
+// and a viewer are refused even though they can see the key in the trash; the
+// LOCKED ACL names only the viewer, so admin and member lose a write their
+// project role would otherwise allow while owner still bypasses it; the grant
+// list is as sensitive as the secret it describes, so it answers only to
+// callers who may read LOCKED itself, and admin and member get not_found
+// rather than permission_denied because an ACL hides a secret rather than
+// announcing it; and granting access is administration, not a secret write, so
+// no machine token may do it whatever its permissions — every live token is
+// refused identically, so the refusal says nothing about what exists.
 func routeCases(f fixture) []routeCase {
 	alphaPath := "/api/projects/" + projectAlpha
 	devSecrets := alphaPath + "/environments/" + envDev + "/secrets"
@@ -521,8 +549,6 @@ func routeCases(f fixture) []routeCase {
 	strangers := []string{cOutsider, cRotator}
 
 	return []routeCase{
-		// Unauthenticated surface. Every caller gets the same answer, which is
-		// the point: these routes must not vary with a credential.
 		{
 			name: "liveness", method: "GET", pattern: "/health", path: "/health",
 			outcomes: []outcome{ok(200, everyone...)},
@@ -580,7 +606,6 @@ func routeCases(f fixture) []routeCase {
 			outcomes: []outcome{fails(400, "invalid_argument", everyone...)},
 		},
 
-		// Authenticated identity.
 		{
 			name: "logout", method: "POST", pattern: "/api/auth/logout", path: "/api/auth/logout",
 			outcomes: []outcome{
@@ -596,8 +621,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 
-		// Instance-wide key rotation: gated on CASIER_ADMIN_EMAILS, closed to
-		// machine tokens, and closed to every project role including owner.
 		{
 			name: "rotate root key", method: "POST", pattern: "/api/admin/rotate-key", path: "/api/admin/rotate-key",
 			body: `{"new_key":"` + freshKey + `"}`,
@@ -619,7 +642,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 
-		// Projects.
 		{
 			name: "list projects", method: "GET", pattern: "/api/projects/", path: "/api/projects/",
 			outcomes: []outcome{
@@ -629,10 +651,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// KNOWN GAP (reported, not fixed): project creation carries no
-			// requireUserSession and no scope check, so a read-only CI token
-			// can mint a project of its own. Pinned as observed so a fix has to
-			// change this line deliberately.
 			name: "create project", method: "POST", pattern: "/api/projects/", path: "/api/projects/",
 			body: `{"name":"Gamma","description":""}`,
 			outcomes: []outcome{
@@ -651,9 +669,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// KNOWN GAP (reported, not fixed): no requireUserSession and no
-			// AllowsWrite check, so a read-only token inherits its creator's
-			// owner role and can rename the project.
 			name: "update project", method: "PUT", pattern: "/api/projects/{slug}/", path: alphaPath + "/",
 			body: `{"name":"Alpha renamed","description":"x"}`,
 			outcomes: []outcome{
@@ -665,8 +680,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// KNOWN GAP (reported, not fixed): as above, but this one deletes
-			// the project and every secret in it.
 			name: "delete project", method: "DELETE", pattern: "/api/projects/{slug}/", path: alphaPath + "/",
 			outcomes: []outcome{
 				ok(204, cOwner),
@@ -740,9 +753,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// KNOWN GAP (reported, not fixed): the audit trail is open to every
-			// project role and to machine tokens, including one scoped to a
-			// single environment.
 			name: "read audit log", method: "GET", pattern: "/api/projects/{slug}/audit", path: alphaPath + "/audit",
 			outcomes: []outcome{
 				ok(200, projectReaders...),
@@ -816,11 +826,7 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 
-		// Environments.
 		{
-			// KNOWN GAP (reported, not fixed): the listing is not filtered by
-			// the calling token's environment scope, so a dev-only token can
-			// enumerate prod.
 			name: "list environments", method: "GET", pattern: "/api/projects/{slug}/environments/", path: alphaPath + "/environments/",
 			outcomes: []outcome{
 				ok(200, projectReaders...),
@@ -868,7 +874,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 
-		// Secrets.
 		{
 			name: "diff across environments", method: "GET", pattern: "/api/projects/{slug}/secrets/diff",
 			path: alphaPath + "/secrets/diff?from=" + envDev + "&to=" + envProd,
@@ -921,8 +926,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// Revealing one value is a read, gated exactly like a list: the
-			// separation it buys is in the audit trail, not in who may call it.
 			name: "reveal a single secret", method: "GET", pattern: secretPattern + "/{key}/reveal", path: devSecrets + "/" + keyOpen + "/reveal",
 			outcomes: []outcome{
 				ok(200, projectReaders...),
@@ -941,8 +944,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// Restoring is a write, so a read-only token and a viewer are
-			// refused even though they can see the key sitting in the trash.
 			name: "restore a trashed secret", method: "POST", pattern: secretPattern + "/{key}/restore", path: devSecrets + "/" + keyTrashed + "/restore",
 			outcomes: []outcome{
 				ok(204, projectWriters...),
@@ -987,9 +988,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// The per-secret ACL layer: LOCKED names only the viewer, so admin
-			// and member lose a write their project role would otherwise allow,
-			// and owner still bypasses it.
 			name: "update an ACL-restricted secret", method: "PUT", pattern: secretPattern + "/{key}", path: devSecrets + "/" + keyLocked,
 			body: `{"value":"rotated"}`,
 			outcomes: []outcome{
@@ -1057,13 +1055,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// The grant list is as sensitive as the secret it describes: it
-			// names everyone with access. So it answers only to callers who may
-			// read LOCKED itself — the owner, who bypasses ACLs, and the viewer,
-			// who is the one grantee. Admin and member hold a project role that
-			// would otherwise reach it and are refused, and they get not_found
-			// rather than permission_denied because an ACL hides a secret rather
-			// than announcing it.
 			name: "list secret ACLs", method: "GET", pattern: secretPattern + "/{key}/acls", path: devSecrets + "/" + keyLocked + "/acls",
 			outcomes: []outcome{
 				ok(200, cOwner, cViewer),
@@ -1074,11 +1065,6 @@ func routeCases(f fixture) []routeCase {
 			},
 		},
 		{
-			// Granting access is administration, not a secret write, so no
-			// machine token may do it whatever its permissions — a CI credential
-			// moves secrets, it never decides who may read them. Every live
-			// token is refused identically, including one scoped to another
-			// project, so the refusal says nothing about what exists.
 			name: "grant a secret ACL", method: "PUT", pattern: secretPattern + "/{key}/acls", path: devSecrets + "/" + keyOpen + "/acls",
 			body: `{"email":"` + memberEmail + `","can_read":true,"can_write":false}`,
 			outcomes: []outcome{

@@ -2,6 +2,7 @@ package schemas
 
 import "time"
 
+// Webhook is a registered event webhook on a project.
 type Webhook struct {
 	ID        int64     `gorm:"column:id;primaryKey"`
 	ProjectID int64     `gorm:"column:project_id;index"`

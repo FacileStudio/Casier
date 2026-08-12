@@ -22,6 +22,7 @@ const (
 	deliveryTimeout = 10 * time.Second
 )
 
+// Event is one webhook delivery payload.
 type Event struct {
 	Type        string `json:"type"`
 	ProjectID   int64  `json:"project_id"`
@@ -32,6 +33,8 @@ type Event struct {
 	Timestamp   string `json:"timestamp"`
 }
 
+// Dispatcher delivers events to the webhooks registered on a project, in the
+// background, bounded by a timeout.
 type Dispatcher struct {
 	orm    *gorm.DB
 	logger *slog.Logger
@@ -39,6 +42,7 @@ type Dispatcher struct {
 	load   func(ctx context.Context, projectID int64) ([]schemas.Webhook, error)
 }
 
+// NewDispatcher wires a webhook dispatcher onto the database.
 func NewDispatcher(orm *gorm.DB, logger *slog.Logger) *Dispatcher {
 	d := &Dispatcher{
 		orm:    orm,

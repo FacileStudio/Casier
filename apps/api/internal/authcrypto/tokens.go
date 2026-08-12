@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 )
 
+// NewToken returns 32 random bytes URL-base64-encoded, for credentials that
+// must not be guessable.
 func NewToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {

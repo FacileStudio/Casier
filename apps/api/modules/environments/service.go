@@ -26,16 +26,19 @@ var protectionRoles = []string{"owner", "admin"}
 // asks for more than an admin.
 var protectedDeleteRoles = []string{"owner"}
 
+// ProjectResolver resolves a project slug against the caller's role.
 type ProjectResolver interface {
 	ResolveProjectID(ctx context.Context, slug string, userID int64, requiredRoles ...string) (int64, error)
 }
 
+// Service manages environments within projects.
 type Service struct {
 	orm             *gorm.DB
 	projectResolver ProjectResolver
 	controller      *Controller
 }
 
+// NewService wires an environment service onto the database.
 func NewService(orm *gorm.DB, projectResolver ProjectResolver) *Service {
 	service := &Service{orm: orm, projectResolver: projectResolver}
 	service.controller = newController(service)

@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// RegisterRoutes mounts the project endpoints.
 func RegisterRoutes(router chi.Router, service *Service, authService *auth.Service, appEnv env.Config) {
 	router.With(middleware.RequireAuth(authService), middleware.RequireUserSession).Post("/admin/rotate-key", func(w http.ResponseWriter, request *http.Request) {
 		identity, ok := authcontext.IdentityFromContext(request.Context())

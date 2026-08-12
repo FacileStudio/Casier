@@ -149,6 +149,9 @@ func boolToInt(value bool) int {
 	return 0
 }
 
+// TestPasswordResetTokenExpiresOnTheSchemaTTL checks the stored lifetime. issued
+// is read before the row is written, so the stored lifetime is the TTL plus
+// however long the round trip took, never less.
 func TestPasswordResetTokenExpiresOnTheSchemaTTL(t *testing.T) {
 	db := resetTestDB(t)
 	service, _ := resetTestService(t, db)
@@ -165,8 +168,6 @@ func TestPasswordResetTokenExpiresOnTheSchemaTTL(t *testing.T) {
 	if err := db.First(&reset).Error; err != nil {
 		t.Fatalf("read reset row: %v", err)
 	}
-	// issued is read before the row is written, so the stored lifetime is the
-	// TTL plus however long the round trip took, never less.
 	lifetime := reset.ExpiresAt.Sub(issued)
 	if lifetime < schemas.PasswordResetTTL || lifetime > schemas.PasswordResetTTL+time.Minute {
 		t.Fatalf("token lifetime = %s, want %s", lifetime, schemas.PasswordResetTTL)

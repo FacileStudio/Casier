@@ -10,12 +10,17 @@ import (
 	"github.com/FacileStudio/tronc/httpjson"
 )
 
+// Authenticator lets the middleware authenticate either a session, an API
+// token, or a user identity — the one seam the porte kit and the token store
+// both satisfy.
 type Authenticator interface {
 	RequireAuth(next http.Handler) http.Handler
 	IdentityForUser(ctx context.Context, userID int64) (string, error)
 	AuthenticateAPI(ctx context.Context, authorization string) (string, *authcontext.TokenScope, error)
 }
 
+// RequireAuth accepts either a user session or a scoped API token, exactly as
+// RequireAuthOrToken does; it is that alias rather than a session-only guard.
 func RequireAuth(authService Authenticator) func(http.Handler) http.Handler {
 	return RequireAuthOrToken(authService)
 }
@@ -49,6 +54,8 @@ func RequireAuthOrToken(authService Authenticator) func(http.Handler) http.Handl
 	}
 }
 
+// RequireUserSession rejects a scoped API token, so the route is reachable
+// only by a real logged-in user rather than a machine credential.
 func RequireUserSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if authcontext.ScopeFromContext(r.Context()) != nil {

@@ -7,6 +7,7 @@ package mailer
 
 import "context"
 
+// Message is one email to send.
 type Message struct {
 	To      string
 	Subject string

@@ -75,6 +75,9 @@ func ParseScopeList(raw string) []string {
 	return values
 }
 
+// Identity is an authenticated caller, carrying everything the authorization
+// middleware reached for: the user, their IP, and the token scope that bounds
+// what a machine token may do.
 type Identity struct {
 	UserID   string
 	Email    string
@@ -84,10 +87,13 @@ type Identity struct {
 
 type contextKey struct{}
 
+// WithIdentity stores an Identity in the request context.
 func WithIdentity(parentContext context.Context, identity Identity) context.Context {
 	return context.WithValue(parentContext, contextKey{}, identity)
 }
 
+// IdentityFromContext reads the Identity stored by WithIdentity, reporting
+// false when the request carries none.
 func IdentityFromContext(parentContext context.Context) (Identity, bool) {
 	identity, ok := parentContext.Value(contextKey{}).(Identity)
 	return identity, ok

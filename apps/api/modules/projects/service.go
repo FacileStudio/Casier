@@ -29,6 +29,8 @@ const RotateKeyWarning = "Update ENCRYPTION_KEY in the environment to the new ke
 
 var slugRegexp = regexp.MustCompile(`[^a-z0-9]+`)
 
+// Service manages projects: creation, membership, invites, tokens, webhooks
+// and the audit trail, under the shared keyring.
 type Service struct {
 	orm        *gorm.DB
 	keyring    *crypto.Keyring
@@ -36,6 +38,7 @@ type Service struct {
 	controller *Controller
 }
 
+// NewService wires a project service onto the database.
 func NewService(orm *gorm.DB, keyring *crypto.Keyring, auditLog *audit.Logger) *Service {
 	service := &Service{orm: orm, keyring: keyring, audit: auditLog}
 	service.controller = newController(service)
@@ -780,6 +783,9 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 	return result, nil
 }
 
+// revokeApiToken revokes a token rather than deleting it: audit rows name the
+// token that made a change, and deleting the row would turn every one of them
+// into an anonymous event.
 func (service *Service) revokeApiToken(ctx context.Context, slug string, callerID int64, tokenID int64) error {
 	_, callerRole, err := service.getProjectWithRole(ctx, slug, callerID)
 	if err != nil {
@@ -794,8 +800,6 @@ func (service *Service) revokeApiToken(ctx context.Context, slug string, callerI
 		return errors.Internal("failed to find project", err)
 	}
 
-	// Revoke rather than delete: audit rows name the token that made a change,
-	// and deleting the row turns every one of them into an anonymous event.
 	result := service.orm.WithContext(ctx).
 		Model(&schemas.ApiToken{}).
 		Where("id = ? AND project_id = ? AND revoked_at IS NULL", tokenID, project.ID).
