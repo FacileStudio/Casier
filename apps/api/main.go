@@ -82,7 +82,7 @@ func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *s
 	var kit *oidc.Kit
 	if cfg.Issuer != "" {
 		kit, err = oidc.New(ctx, cfg, oidc.Deps{
-			Users:      store.Users(),
+			Users:      auth.NewUserStore(db),
 			Identities: store.Identities(),
 			Sessions:   sessions,
 			Codes:      store.LoginCodes(),
