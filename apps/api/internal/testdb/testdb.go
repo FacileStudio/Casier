@@ -6,14 +6,17 @@
 package testdb
 
 import (
+	"context"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/database"
-	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/Casier/apps/api/migrations"
 
+	"github.com/FacileStudio/tronc/migrate"
 	"gorm.io/gorm"
 )
 
@@ -76,10 +79,24 @@ func Open(url string) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open %s scoped to %s: %w", EnvVar, schema, err)
 	}
-	if err := schemas.Migrate(scoped); err != nil {
-		return nil, fmt.Errorf("migrate: %w", err)
+	sqlDB, err := scoped.DB()
+	if err != nil {
+		return nil, fmt.Errorf("open %s handle: %w", EnvVar, err)
+	}
+	cfg := migrate.Config{DB: sqlDB, FS: migrations.FS, LockID: lockID(schema)}
+	if err := migrate.Run(context.Background(), cfg); err != nil {
+		return nil, fmt.Errorf("migrate %s: %w", schema, err)
 	}
 	return scoped, nil
+}
+
+// lockID derives a Postgres advisory-lock identifier from the test schema.
+// goose's advisory lock is database-scoped, so without this every test package
+// would queue on the same default id while migrating in parallel.
+func lockID(schema string) int64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(schema))
+	return int64(h.Sum64())
 }
 
 func withSearchPath(url, schema string) string {
@@ -126,9 +143,15 @@ func Truncate(db *gorm.DB) error {
 		return nil
 	}
 
-	quoted := make([]string, len(tables))
-	for i, table := range tables {
-		quoted[i] = `"` + table + `"`
+	quoted := make([]string, 0, len(tables))
+	for _, table := range tables {
+		if table == migrate.TableName {
+			continue
+		}
+		quoted = append(quoted, `"`+table+`"`)
+	}
+	if len(quoted) == 0 {
+		return nil
 	}
 	statement := "TRUNCATE TABLE " + strings.Join(quoted, ", ") + " RESTART IDENTITY CASCADE"
 	if err := db.Exec(statement).Error; err != nil {

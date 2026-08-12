@@ -97,6 +97,17 @@ for dir in $GO_MODULES; do
       echo "$drivers"
       s=1
     fi
+
+    # The schema is owned by migrations/, not by the models. AutoMigrate is
+    # unordered, has no down path and silently no-ops on a rename, which is how
+    # the production schema became unreproducible in the first place. Test
+    # files are exempt only so the guard predates the last repo's conversion.
+    strays="$(grep -rln 'AutoMigrate' --include='*.go' . 2>/dev/null | grep -v '_test\.go$' | grep -v '^vendor/' || true)"
+    if [ -n "$strays" ]; then
+      echo "AutoMigrate is back in non-test code; schema changes belong in migrations/ (see Wiki/MIGRATIONS.md):"
+      echo "$strays"
+      s=1
+    fi
     exit "$s"
   ) || status=1
 done

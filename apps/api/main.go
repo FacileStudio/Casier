@@ -19,11 +19,11 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
 	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
+	"github.com/FacileStudio/Casier/apps/api/migrations"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
 	"github.com/FacileStudio/Casier/apps/api/modules/projects"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
-	"github.com/FacileStudio/Casier/apps/api/schemas"
 
 	"github.com/FacileStudio/Journal/sdk/journal"
 	"github.com/FacileStudio/porte/local"
@@ -36,6 +36,7 @@ import (
 	"github.com/FacileStudio/tronc/httpx"
 	"github.com/FacileStudio/tronc/logger"
 	troncmiddleware "github.com/FacileStudio/tronc/middleware"
+	"github.com/FacileStudio/tronc/migrate"
 	"github.com/FacileStudio/tronc/spa"
 	"github.com/go-chi/chi/v5"
 	"gorm.io/gorm"
@@ -152,11 +153,6 @@ func run() int {
 		appLogger.Error("failed to open database", slog.Any("error", err))
 		return 1
 	}
-
-	if err := schemas.Migrate(db); err != nil {
-		appLogger.Error("failed to run migrations", slog.Any("error", err))
-		return 1
-	}
 	sqlDB, err := db.DB()
 	if err != nil {
 		appLogger.Error("failed to access database handle", slog.Any("error", err))
@@ -167,6 +163,19 @@ func run() int {
 			appLogger.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
+
+	migrateConfig := migrate.Config{DB: sqlDB, FS: migrations.FS, Logger: appLogger}
+	if handled, err := migrate.Command(context.Background(), os.Args, migrateConfig); handled {
+		if err != nil {
+			appLogger.Error("migrate", slog.Any("error", err))
+			return 1
+		}
+		return 0
+	}
+	if err := migrate.Run(context.Background(), migrateConfig); err != nil {
+		appLogger.Error("failed to run migrations", slog.Any("error", err))
+		return 1
+	}
 
 	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
 	defer cancelCleanup()
