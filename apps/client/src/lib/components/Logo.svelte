@@ -12,7 +12,7 @@
 
 <span class="inline-flex items-center gap-3 {className}">
 	<iconify-icon
-		icon="solar:safe-square-bold-duotone"
+		icon="solar:key-minimalistic-square-bold-duotone"
 		width={size}
 		height={size}
 		class="shrink-0"

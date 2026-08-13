@@ -83,7 +83,7 @@
 		<div class="hidden h-full shrink-0 p-3 md:block">
 			<SideBar
 				class="h-full"
-				icon="solar:safe-square-bold-duotone"
+				icon="solar:key-minimalistic-square-bold-duotone"
 				title="Casier"
 				bind:collapsed
 				pages={navPages}
