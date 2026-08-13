@@ -70,22 +70,6 @@ var Documentation = documentation.Module{
 			},
 		},
 		{
-			Method:       "POST",
-			Path:         "/auth/cli",
-			Summary:      "Exchange an OIDC ID token for a CLI auth token",
-			Description:  "Validates an OIDC ID token against the configured issuer and returns an auth token for an existing user. Only registered when OIDC is configured.",
-			Auth:         "public",
-			RequestBody:  "CLIExchangeRequest",
-			ResponseBody: "CLIExchangeResponse",
-			Errors: []documentation.Error{
-				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body or missing id_token."},
-				{Status: 401, Code: "unauthenticated", Description: "ID token is invalid, expired, or not issued for this client."},
-				{Status: 403, Code: "permission_denied", Description: "No account exists for this identity."},
-				{Status: 404, Code: "not_found", Description: "OIDC is not configured."},
-				{Status: 500, Code: "internal", Description: "Unexpected server error."},
-			},
-		},
-		{
 			Method:      "POST",
 			Path:        "/auth/logout",
 			Summary:     "Log out",

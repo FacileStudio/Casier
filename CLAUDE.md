@@ -134,14 +134,19 @@ deployment state rather than a hypothetical:
 
 - `GET /auth/config` — how `casier login` discovers whether the API answers at the root (dev)
   or under `/api` (Traefik in production), and whether SSO is on.
-- `GET /auth/oidc?cli_port=<port>&cli_state=<nonce>` — the CLI opens a browser and listens on
-  an ephemeral `127.0.0.1` port. After the OIDC round trip the API mints a **separate** session
-  token and redirects to `http://127.0.0.1:<port>/callback`. The port and nonce are validated
-  server-side and the redirect host is hard-coded, so neither parameter can be turned into an
-  open redirect; the CLI re-checks the nonce to reject token injection from other local
-  processes.
-- `POST /auth/cli` — exchanges an OIDC ID token for a session token. Unlike the browser
-  callback it does **not** auto-provision an unknown user (403).
+- `GET /auth/oidc?flow=cli&port=<port>&cli_state=<nonce>` — the CLI opens a browser and listens on
+  an ephemeral `127.0.0.1` port. After the OIDC round trip, porte redirects to
+  `http://127.0.0.1:<port>/?code=<code>&state=<nonce>` where `code` is a **one-time login code**
+  (≈60s TTL) and `state` echoes the caller's nonce. The port and nonce are validated
+  server-side and the redirect host is hard-coded (only the number is taken from the
+  request), so neither parameter can be turned into an open redirect; the CLI re-checks the
+  nonce to reject code injection from other local processes.
+- `POST /auth/oidc/exchange` — settles the flow. A JSON body `{"code": "<code>"}` returns
+  `{"token": "…", "user_id": "…"}`, where `token` is a bearer session token. The code is
+  single-use (a replay answers 401), stored hashed. This is porte's token endpoint in
+  everything but name, so it answers under `Cache-Control: no-store`. Unlike the browser
+  callback it does **not** auto-provision an unknown user on the register side (403 where the
+  code is not valid).
 - `GET .../secrets` returns **metadata only**. Values come from `?reveal=true` or
   `GET .../secrets/{key}/reveal`, audited separately. This is the one change that already broke
   the CLI once: an older binary does not know to ask, so every value comes back absent and a
