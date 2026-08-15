@@ -32,8 +32,8 @@
 	let ssoOnly = $state(false);
 
 	const ctaHref = $derived(ssoOnly ? '/login' : '/register');
-	const ctaLabel = $derived(ssoOnly ? 'Continue with SSO' : 'Get started');
-	const heroCtaLabel = $derived(ssoOnly ? 'Continue with SSO' : 'Start managing secrets');
+	const ctaLabel = $derived(ssoOnly ? 'Sign in with Facile' : 'Get started');
+	const heroCtaLabel = $derived(ssoOnly ? 'Sign in with Facile' : 'Start managing secrets');
 
 	onMount(async () => {
 		if (auth.isAuthenticated) {
@@ -74,8 +74,8 @@
 					<Logo size={28} wordmark />
 				</a>
 				<div class="flex items-center gap-2">
-					<Button href="/login" variant="ghost" size="sm" class="hidden sm:inline-flex">Log in</Button>
-					<Button href={ctaHref} size="sm">{ctaLabel}</Button>
+					<Button href="/login" variant="ghost" size="sm" class="hidden sm:inline-flex rounded-fc-md">Log in</Button>
+					<Button href={ctaHref} size="sm" class="rounded-fc-md">{ctaLabel}</Button>
 				</div>
 			</div>
 		</header>
@@ -92,10 +92,10 @@
 					versioned, audited — and one command away from your app.
 				</p>
 				<div class="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center">
-					<Button href={ctaHref} size="lg" iconRight="solar:alt-arrow-right-linear">
+					<Button href={ctaHref} size="lg" iconRight="solar:alt-arrow-right-linear" class="rounded-fc-md">
 						{heroCtaLabel}
 					</Button>
-					<Button href="/login" variant="outline" size="lg">Log in</Button>
+					<Button href="/login" variant="outline" size="lg" class="rounded-fc-md">Log in</Button>
 				</div>
 			</section>
 
@@ -146,12 +146,12 @@
 				</h2>
 				<p class="mx-auto mt-4 max-w-xl text-muted-foreground">
 					{ssoOnly
-						? 'Use your organization SSO to access Casier.'
+						? 'Use your Facile SSO to access Casier.'
 						: 'Self-hosted, open by design. Bring your own server and keep your keys.'}
 				</p>
 				<div class="mt-8 flex justify-center">
-					<Button href={ctaHref} size="lg">
-						{ssoOnly ? 'Continue with SSO' : 'Create an account'}
+					<Button href={ctaHref} size="lg" class="rounded-fc-md">
+						{ssoOnly ? 'Sign in with Facile' : 'Create an account'}
 					</Button>
 				</div>
 			</section>

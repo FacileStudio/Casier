@@ -9,8 +9,6 @@
 	const labelClass = 'text-sm font-medium leading-none';
 	const primaryButtonClass =
 		'inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:pointer-events-none disabled:opacity-50';
-	const outlineButtonClass =
-		'inline-flex h-10 w-full items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50';
 
 	let email = $state('');
 	let password = $state('');
@@ -64,7 +62,7 @@
 	<h1 class="font-heading text-2xl font-bold tracking-tight text-foreground">Create account</h1>
 	<p class="mt-1.5 text-sm text-muted-foreground">
 		{ssoOnly
-			? 'Sign in with your organization account to access Casier.'
+			? 'Sign in with your Facile account to access Casier.'
 			: 'Sign up to start managing secrets.'}
 	</p>
 </div>
@@ -72,6 +70,28 @@
 {#if !configLoaded}
 	<div class="h-40"></div>
 {:else}
+	{#if oidcEnabled}
+		<a
+			href="{API_BASE}/auth/oidc"
+			data-sveltekit-reload
+			class={primaryButtonClass}
+		>
+			<iconify-icon
+				icon="solar:key-minimalistic-square-bold-duotone"
+				width="18"
+				class="mr-2"
+			></iconify-icon>
+			Sign in with Facile
+		</a>
+		{#if !ssoOnly}
+			<div class="my-6 flex items-center gap-3">
+				<span class="h-px flex-1 bg-border"></span>
+				<span class="text-xs uppercase tracking-wide text-muted-foreground">or</span>
+				<span class="h-px flex-1 bg-border"></span>
+			</div>
+		{/if}
+	{/if}
+
 	{#if !ssoOnly}
 		<div class="mb-6 flex rounded-lg border border-border bg-muted p-1 gap-1">
 			<a
@@ -161,24 +181,6 @@
 				{loading ? 'Creating account…' : 'Create account'}
 			</button>
 		</form>
-	{/if}
-
-	{#if oidcEnabled}
-		{#if !ssoOnly}
-			<div class="my-5 flex items-center gap-3">
-				<div class="h-px flex-1 bg-border"></div>
-				<span class="text-xs text-muted-foreground">or</span>
-				<div class="h-px flex-1 bg-border"></div>
-			</div>
-		{/if}
-
-		<button
-			type="button"
-			onclick={() => (window.location.href = `${API_BASE}/auth/oidc`)}
-			class={outlineButtonClass}
-		>
-			Continue with SSO
-		</button>
 	{/if}
 
 	{#if ssoOnly && !oidcEnabled}
