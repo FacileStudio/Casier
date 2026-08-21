@@ -52,7 +52,7 @@
 - [x] Secret references (one secret pointing to another across environments)
 - [x] Dashboard: activity feed with filterable audit log
 - [x] Dashboard: secret diff view across environments
-- [ ] Nook integration (emit secret change events to the Facile event bus)
+- [ ] Antenne integration (emit secret change events to the Facile event bus)
 - [ ] Go SDK (`@facile/casier-go`) for runtime secret fetching
 - [ ] TypeScript SDK (`@facile/casier-ts`) for runtime secret fetching
 - [ ] CI/CD integrations (GitHub Actions, Docker build args)

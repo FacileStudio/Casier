@@ -7,7 +7,7 @@
 	 * whole reason `Tabs` items carry `href`.
 	 *
 	 * Only the sections Casier has real content for are here. Notifications, Pool and
-	 * Members are canonical but Casier has no account-level mail, no Nook client, and
+	 * Members are canonical but Casier has no account-level mail, no Antenne client, and
 	 * membership that belongs to a project rather than to an account — an empty tab is
 	 * worse than a missing one.
 	 */
