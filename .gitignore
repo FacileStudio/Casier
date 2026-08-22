@@ -7,4 +7,3 @@ apps/api/vendor/
 *.env
 !*.env.example
 .DS_Store
-mise.lock
