@@ -27,13 +27,9 @@ mise run bootstrap
 "apps/client"]`, so each app carries its own `mise.toml` and the root tasks fan out to them
 with `//apps/api:deps` style references. `bootstrap` is that fan-out for dependencies.
 
-Enable the tracked git hooks once per clone:
-
-```sh
-mise run hooks
-```
-
-That is `git config core.hooksPath .githooks`. Without it the pre-push gate never runs.
+`mise install` also wires the git hooks. `mise.toml` declares
+`postinstall = "lefthook install"` under `[hooks]`, so the two commands above are the whole
+setup and there is no separate hooks step.
 
 ## Running
 
@@ -109,8 +105,10 @@ skips with a message when its toolchain is missing rather than failing the run.
 The CLI is in the gate on purpose: it speaks the same API as the client and breaks the same
 way when the contract drifts, but it used to sit outside it entirely.
 
-`.githooks/pre-push` execs the same script. Bypass a known-unrelated failure with
-`git push --no-verify`.
+lefthook execs the same script as a `pre-push` job, declared in `lefthook.yml`. That file
+also pulls the shared conventional-commit check from `FacileStudio/hooks`, pinned by tag,
+which rejects any commit subject that is not `type(scope): summary` and adds the gitmoji for
+the type itself. Bypass a known-unrelated push failure with `git push --no-verify`.
 
 Two details in the script are worth knowing before editing it. It is invoked as
 `sh scripts/check.sh` rather than through `mise run`, because `mise run` resolves every tool
