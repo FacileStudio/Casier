@@ -16,6 +16,14 @@ type OIDCConfig struct {
 	ClientSecret string
 	RedirectURL  string
 	SuccessURL   string
+
+	// CLIAudience is the client id the suite's CLI holds its device-grant
+	// token under, and setting it is what mounts porte's device exchange so
+	// one `facile login` serves this tool too. It is deliberately not
+	// OIDC_CLIENT_ID: the token being traded was minted for the CLI, not for
+	// Casier, and it is deliberately not the machine audience either, which
+	// names this app and arms a different path.
+	CLIAudience string
 }
 
 // Config is the process configuration: the tronc core plus Casier's OIDC and
@@ -43,6 +51,7 @@ func (c Config) Porte() porte.Config {
 	cfg.ClientSecret = c.OIDC.ClientSecret
 	cfg.RedirectURL = c.OIDC.RedirectURL
 	cfg.SuccessURL = c.OIDC.SuccessURL
+	cfg.CLIAudience = c.OIDC.CLIAudience
 	return cfg
 }
 
@@ -96,6 +105,7 @@ func Load() (Config, error) {
 			ClientSecret: clientSecret,
 			RedirectURL:  redirectURL,
 			SuccessURL:   successURL,
+			CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
 		}
 	}
 
