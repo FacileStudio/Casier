@@ -422,7 +422,7 @@
 				onclick={() => toggleReveal(secret)}
 			>
 				{#if isRevealing}
-					<Spinner size="sm" />
+					<Spinner label="Loading" size="sm" />
 				{:else}
 					<iconify-icon
 						icon={isRevealed ? icons.eyeClosed : icons.eye}
@@ -677,7 +677,7 @@
 				class="w-full sm:w-auto"
 				disabled={adding || !newKey.trim() || Boolean(newKeyError)}
 			>
-				{#if adding}<Spinner size="sm" />{/if}
+				{#if adding}<Spinner label="Loading" size="sm" />{/if}
 				{adding ? 'Adding…' : 'Add secret'}
 			</Button>
 		</div>
@@ -723,7 +723,7 @@
 								disabled={restoring === secret.id}
 								onclick={() => handleRestore(secret)}
 							>
-								{#if restoring === secret.id}<Spinner size="sm" />{/if}
+								{#if restoring === secret.id}<Spinner label="Loading" size="sm" />{/if}
 								Restore
 							</Button>
 						{/if}
@@ -760,7 +760,7 @@
 				class="w-full sm:w-auto"
 				disabled={saving || editLoading}
 			>
-				{#if saving || editLoading}<Spinner size="sm" />{/if}
+				{#if saving || editLoading}<Spinner label="Loading" size="sm" />{/if}
 				{editLoading ? 'Loading…' : saving ? 'Saving…' : 'Save'}
 			</Button>
 		</div>
@@ -770,7 +770,7 @@
 <Drawer bind:open={historyOpen} title="History of {historyTarget?.key ?? 'secret'}">
 	{#if versionsLoading}
 		<div class="flex justify-center py-6">
-			<Spinner size="md" />
+			<Spinner label="Loading" size="md" />
 		</div>
 	{:else if versionsError}
 		<Alert tone="danger">{versionsError}</Alert>
@@ -799,7 +799,7 @@
 							disabled={rollingBack !== null}
 							onclick={() => handleRollback(version.version)}
 						>
-							{#if rollingBack === version.version}<Spinner size="sm" />{/if}
+							{#if rollingBack === version.version}<Spinner label="Loading" size="sm" />{/if}
 							{rollingBack === version.version ? 'Rolling back…' : 'Roll back'}
 						</Button>
 					{/if}
@@ -836,7 +836,7 @@
 				class="w-full sm:w-auto"
 				disabled={importing || !importContent.trim()}
 			>
-				{#if importing}<Spinner size="sm" />{/if}
+				{#if importing}<Spinner label="Loading" size="sm" />{/if}
 				{importing ? 'Importing…' : 'Import'}
 			</Button>
 		</div>

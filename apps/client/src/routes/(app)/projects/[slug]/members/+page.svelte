@@ -250,7 +250,7 @@
 				Cancel
 			</Button>
 			<Button type="submit" size="lg" disabled={adding || !newEmail.trim()}>
-				{#if adding}<Spinner size="sm" class="border-current border-t-transparent" />{/if}
+				{#if adding}<Spinner label="Loading" size="sm" class="border-current border-t-transparent" />{/if}
 				{adding ? 'Adding…' : 'Add member'}
 			</Button>
 		</div>
