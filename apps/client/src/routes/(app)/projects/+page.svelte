@@ -183,7 +183,7 @@
 				class="w-full sm:w-auto"
 				disabled={creating || createName.trim().length < 2 || Boolean(nameError)}
 			>
-				{#if creating}<Spinner size="sm" />{/if}
+				{#if creating}<Spinner label="Loading" size="sm" />{/if}
 				{creating ? 'Creating…' : 'Create'}
 			</Button>
 		</div>

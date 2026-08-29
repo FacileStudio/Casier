@@ -99,14 +99,16 @@
 		<main class="min-w-0 flex-1 overflow-auto overscroll-contain pb-24 md:pb-0">
 			<Topbar class="md:hidden">
 				<span class="text-fc-md font-semibold text-fc-fg">Casier</span>
-				<div class="min-w-0 max-w-56 flex-1">
-					<SpaceSwitcher
-						{spaces}
-						activeId={activeSpaceId}
-						onSelect={selectProject}
-						personalLabel="All projects"
-					/>
-				</div>
+				{#if spaces.length > 0}
+					<div class="min-w-0 max-w-56 flex-1">
+						<SpaceSwitcher
+							{spaces}
+							activeId={activeSpaceId}
+							onSelect={selectProject}
+							personalLabel="All projects"
+						/>
+					</div>
+				{/if}
 			</Topbar>
 			{@render children?.()}
 		</main>

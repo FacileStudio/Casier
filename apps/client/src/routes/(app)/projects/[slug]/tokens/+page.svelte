@@ -312,7 +312,7 @@
 						Cancel
 					</Button>
 					<Button type="submit" size="lg" disabled={creating || !newName.trim()}>
-						{#if creating}<Spinner size="sm" class="border-current border-t-transparent" />{/if}
+						{#if creating}<Spinner label="Loading" size="sm" class="border-current border-t-transparent" />{/if}
 						{creating ? 'Creating…' : 'Create token'}
 					</Button>
 				</div>
