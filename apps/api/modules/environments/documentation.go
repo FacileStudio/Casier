@@ -15,7 +15,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "ListResponse",
+			ResponseBody: ListResponse{},
 			Errors: []documentation.Error{
 				{Status: 404, Code: "not_found", Description: "Project not found."},
 			},
@@ -29,8 +29,8 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			RequestBody:  "CreateRequest",
-			ResponseBody: "EnvironmentResponse",
+			RequestBody:  CreateRequest{},
+			ResponseBody: EnvironmentResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid input."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, or a read-only API token."},
@@ -47,8 +47,8 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
-			RequestBody:  "UpdateRequest",
-			ResponseBody: "EnvironmentResponse",
+			RequestBody:  UpdateRequest{},
+			ResponseBody: EnvironmentResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid input."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, a read-only API token, or any API token trying to change `protected`."},

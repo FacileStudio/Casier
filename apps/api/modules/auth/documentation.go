@@ -12,7 +12,7 @@ var Documentation = documentation.Module{
 			Summary:      "Describe the authentication modes",
 			Description:  "Returns {sso_only, oidc_enabled, password_reset_enabled} so a client knows which sign-in paths exist before offering them. password_reset_enabled is true only when passwords are on and a mailer is configured, so the login screen never offers a reset that cannot be delivered.",
 			Auth:         "public",
-			ResponseBody: "AuthConfigResponse",
+			ResponseBody: AuthConfigResponse{},
 		},
 		{
 			Method:       "POST",
@@ -20,8 +20,8 @@ var Documentation = documentation.Module{
 			Summary:      "Register a new user",
 			Description:  "Creates a user account and returns an auth token.",
 			Auth:         "public",
-			RequestBody:  "RegisterRequest",
-			ResponseBody: "AuthResponse",
+			RequestBody:  RegisterRequest{},
+			ResponseBody: AuthResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body or invalid registration input."},
 				{Status: 409, Code: "already_exists", Description: "A user with the same email already exists."},
@@ -34,8 +34,8 @@ var Documentation = documentation.Module{
 			Summary:      "Authenticate a user",
 			Description:  "Authenticates credentials and returns an auth token.",
 			Auth:         "public",
-			RequestBody:  "LoginRequest",
-			ResponseBody: "AuthResponse",
+			RequestBody:  LoginRequest{},
+			ResponseBody: AuthResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body or invalid login input."},
 				{Status: 401, Code: "unauthenticated", Description: "Email or password is invalid."},
@@ -48,7 +48,7 @@ var Documentation = documentation.Module{
 			Summary:     "Request a password reset link",
 			Description: "Emails a single-use reset link to the address if it belongs to a password account. The response is identical whether or not the address is registered, and delivery happens after the response, so it never reveals which. Only registered when password auth is enabled.",
 			Auth:        "public",
-			RequestBody: "ForgotPasswordRequest",
+			RequestBody: ForgotPasswordRequest{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body or malformed email."},
 				{Status: 429, Code: "rate_limited", Description: "Too many requests from this caller."},
@@ -61,7 +61,7 @@ var Documentation = documentation.Module{
 			Summary:     "Set a new password from a reset link",
 			Description: "Consumes the token from the reset link, sets the new password, invalidates every other outstanding reset token for that user, and deletes all of the user's sessions. Only registered when password auth is enabled.",
 			Auth:        "public",
-			RequestBody: "ResetPasswordRequest",
+			RequestBody: ResetPasswordRequest{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body, password shorter than 8 characters, or a token that is unknown, already used, or expired."},
 				{Status: 429, Code: "rate_limited", Description: "Too many requests from this caller."},
@@ -86,7 +86,7 @@ var Documentation = documentation.Module{
 			Summary:      "Get current user",
 			Description:  "Returns the authenticated user's profile.",
 			Auth:         "bearer token required",
-			ResponseBody: "MeResponse",
+			ResponseBody: MeResponse{},
 			Errors: []documentation.Error{
 				{Status: 401, Code: "unauthenticated", Description: "Authorization header is missing or invalid."},
 			},

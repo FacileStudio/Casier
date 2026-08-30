@@ -16,7 +16,7 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
-			ResponseBody: "ListResponse",
+			ResponseBody: ListResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "API token is not scoped to this project or environment."},
 				{Status: 404, Code: "not_found", Description: "Project or environment not found."},
@@ -33,7 +33,7 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			ResponseBody: "SecretResponse",
+			ResponseBody: SecretResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "API token is not scoped to this project or environment."},
 				{Status: 404, Code: "not_found", Description: "Secret not found, or hidden from the caller by a per-secret ACL."},
@@ -49,7 +49,7 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
-			ResponseBody: "TrashResponse",
+			ResponseBody: TrashResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "API token is not scoped to this project or environment."},
 				{Status: 404, Code: "not_found", Description: "Project or environment not found."},
@@ -80,7 +80,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "RotationSummaryResponse",
+			ResponseBody: RotationSummaryResponse{},
 			Errors: []documentation.Error{
 				{Status: 404, Code: "not_found", Description: "Project not found."},
 			},
@@ -95,8 +95,8 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
-			RequestBody:  "CreateRequest",
-			ResponseBody: "SecretResponse",
+			RequestBody:  CreateRequest{},
+			ResponseBody: SecretResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid input."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
@@ -114,8 +114,8 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			RequestBody:  "UpdateRequest",
-			ResponseBody: "SecretResponse",
+			RequestBody:  UpdateRequest{},
+			ResponseBody: SecretResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Secret not found."},
@@ -147,8 +147,8 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
-			RequestBody:  "ImportRequest",
-			ResponseBody: "ImportResponse",
+			RequestBody:  ImportRequest{},
+			ResponseBody: ImportResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Project or environment not found."},
@@ -164,7 +164,7 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 			},
-			ResponseBody: "ExportResponse",
+			ResponseBody: ExportResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "API token is not scoped to this project or environment."},
 				{Status: 404, Code: "not_found", Description: "Project or environment not found."},
@@ -179,7 +179,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "DiffResponse",
+			ResponseBody: DiffResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "from or to is missing."},
 				{Status: 403, Code: "permission_denied", Description: "API token is not scoped to one of the environments."},
@@ -197,7 +197,7 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			RequestBody: "UpdateTagsRequest",
+			RequestBody: UpdateTagsRequest{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid tag list."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, or the environment is protected."},
@@ -215,7 +215,7 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			ResponseBody: "VersionsResponse",
+			ResponseBody: VersionsResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Project, environment or secret not found."},
@@ -232,8 +232,8 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			RequestBody:  "RollbackRequest",
-			ResponseBody: "SecretResponse",
+			RequestBody:  RollbackRequest{},
+			ResponseBody: SecretResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid or missing version."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, or the environment is protected."},
@@ -251,7 +251,7 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			ResponseBody: "ACLsResponse",
+			ResponseBody: ACLsResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Project, environment or secret not found."},
@@ -268,7 +268,7 @@ var Documentation = documentation.Module{
 				{Name: "envSlug", Type: "string", Description: "Environment slug."},
 				{Name: "key", Type: "string", Description: "Secret key."},
 			},
-			RequestBody: "SetACLRequest",
+			RequestBody: SetACLRequest{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid user or access level."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},

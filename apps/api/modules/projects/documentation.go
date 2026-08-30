@@ -12,7 +12,7 @@ var Documentation = documentation.Module{
 			Summary:      "List projects",
 			Description:  "Returns all projects the authenticated user belongs to.",
 			Auth:         "bearer token required",
-			ResponseBody: "ListResponse",
+			ResponseBody: ListResponse{},
 			Errors: []documentation.Error{
 				{Status: 401, Code: "unauthenticated", Description: "Authorization header is missing or invalid."},
 				{Status: 500, Code: "internal", Description: "Unexpected server error."},
@@ -24,8 +24,8 @@ var Documentation = documentation.Module{
 			Summary:      "Create a project",
 			Description:  "Creates a new project with default environments (dev, staging, prod). The creator becomes the owner.",
 			Auth:         "bearer token required",
-			RequestBody:  "CreateRequest",
-			ResponseBody: "ProjectResponse",
+			RequestBody:  CreateRequest{},
+			ResponseBody: ProjectResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid JSON body or missing name."},
 				{Status: 409, Code: "already_exists", Description: "A project with the same slug already exists."},
@@ -41,7 +41,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "ProjectResponse",
+			ResponseBody: ProjectResponse{},
 			Errors: []documentation.Error{
 				{Status: 404, Code: "not_found", Description: "Project not found or user is not a member."},
 			},
@@ -55,8 +55,8 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			RequestBody:  "UpdateRequest",
-			ResponseBody: "ProjectResponse",
+			RequestBody:  UpdateRequest{},
+			ResponseBody: ProjectResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Project not found."},
@@ -85,7 +85,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "MembersResponse",
+			ResponseBody: MembersResponse{},
 			Errors: []documentation.Error{
 				{Status: 404, Code: "not_found", Description: "Project not found."},
 			},
@@ -99,7 +99,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			RequestBody: "AddMemberRequest",
+			RequestBody: AddMemberRequest{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid input."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
@@ -117,7 +117,7 @@ var Documentation = documentation.Module{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 				{Name: "userId", Type: "int64", Description: "User ID to remove."},
 			},
-			ResponseBody: "RemoveMemberResponse",
+			ResponseBody: RemoveMemberResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Member not found."},
@@ -132,7 +132,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "InvitesResponse",
+			ResponseBody: InvitesResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Caller is an API token."},
 				{Status: 404, Code: "not_found", Description: "Project not found."},
@@ -147,8 +147,8 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			RequestBody:  "CreateInviteRequest",
-			ResponseBody: "InviteResponse",
+			RequestBody:  CreateInviteRequest{},
+			ResponseBody: InviteResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid input."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, or the caller is an API token."},
@@ -196,7 +196,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "ApiTokensResponse",
+			ResponseBody: ApiTokensResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Caller is an API token."},
 				{Status: 404, Code: "not_found", Description: "Project not found."},
@@ -211,8 +211,8 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			RequestBody:  "CreateApiTokenRequest",
-			ResponseBody: "ApiTokenResponse",
+			RequestBody:  CreateApiTokenRequest{},
+			ResponseBody: ApiTokenResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid permission, expiry or environment list."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, or the caller is an API token."},
@@ -244,7 +244,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "WebhooksResponse",
+			ResponseBody: WebhooksResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Caller is an API token."},
 				{Status: 404, Code: "not_found", Description: "Project not found."},
@@ -259,8 +259,8 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			RequestBody:  "CreateWebhookRequest",
-			ResponseBody: "WebhookResponse",
+			RequestBody:  CreateWebhookRequest{},
+			ResponseBody: WebhookResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Invalid URL or event list."},
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions, or the caller is an API token."},
@@ -292,7 +292,7 @@ var Documentation = documentation.Module{
 			PathParams: []documentation.Field{
 				{Name: "slug", Type: "string", Description: "Project slug."},
 			},
-			ResponseBody: "AuditLogsResponse",
+			ResponseBody: AuditLogsResponse{},
 			Errors: []documentation.Error{
 				{Status: 403, Code: "permission_denied", Description: "Insufficient permissions."},
 				{Status: 404, Code: "not_found", Description: "Project not found."},
@@ -304,8 +304,8 @@ var Documentation = documentation.Module{
 			Summary:      "Rotate the root encryption key",
 			Description:  "Re-encrypts every project data key under a new base64 32-byte root key, in a single transaction. Restricted to the emails listed in CASIER_ADMIN_EMAILS and refused outright when that list is empty or when the caller is an API token. The response warns that ENCRYPTION_KEY must be updated in the environment before the next restart.",
 			Auth:         "bearer token required, instance admin user session",
-			RequestBody:  "RotateKeyRequest",
-			ResponseBody: "RotateKeyResponse",
+			RequestBody:  RotateKeyRequest{},
+			ResponseBody: RotateKeyResponse{},
 			Errors: []documentation.Error{
 				{Status: 400, Code: "invalid_argument", Description: "Key is not base64-encoded 32 bytes, or is identical to the current key."},
 				{Status: 403, Code: "permission_denied", Description: "Caller is not an instance admin, or is an API token."},

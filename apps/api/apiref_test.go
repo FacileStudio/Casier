@@ -26,6 +26,29 @@ func TestEveryRouteIsDocumented(t *testing.T) {
 	}
 }
 
+func TestRegistryIsComplete(t *testing.T) {
+	if issues := apiref.Incomplete(
+		refConfig(),
+		"/auth/logout",
+		"/auth/forgot-password",
+		"/auth/reset-password",
+		"/projects/{slug}",
+		"/projects/{slug}/members",
+		"/projects/{slug}/invites/{inviteId}",
+		"/projects/{slug}/tokens/{tokenId}",
+		"/projects/{slug}/webhooks/{webhookId}",
+		"/projects/{slug}/environments/{envSlug}",
+		"/projects/{slug}/environments/{envSlug}/secrets/{key}",
+		"/projects/{slug}/environments/{envSlug}/secrets/{key}/restore",
+		"/projects/{slug}/environments/{envSlug}/secrets/{key}/tags",
+		"/projects/{slug}/environments/{envSlug}/secrets/{key}/acls",
+		"/projects/{slug}/environments/{envSlug}/secrets/{key}/acls/{aclId}",
+		"/invites/{token}/accept",
+	); len(issues) > 0 {
+		t.Errorf("incomplete documentation routes: %v", issues)
+	}
+}
+
 func TestReferenceIsServed(t *testing.T) {
 	page := httptest.NewRecorder()
 	testRouter.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/docs", nil))
