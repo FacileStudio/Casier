@@ -36,18 +36,14 @@
 	const heroCtaLabel = $derived(ssoOnly ? 'Sign in with Facile' : 'Start managing secrets');
 
 	onMount(async () => {
+		if (!auth.loaded) {
+			await auth.check();
+		}
+
 		if (auth.isAuthenticated) {
 			goto('/projects', { replaceState: true });
 			return;
 		}
-
-		try {
-			await auth.check();
-			if (auth.isAuthenticated) {
-				goto('/projects', { replaceState: true });
-			}
-			return;
-		} catch {}
 
 		try {
 			const config = await api.get<AuthConfig>('/auth/config');
