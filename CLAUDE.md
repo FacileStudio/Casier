@@ -122,7 +122,7 @@ docker compose up --build
 ## CLI — a separate repo
 
 The `casier` CLI lives in **[FacileStudio/casier-cli](https://github.com/FacileStudio/casier-cli)**
-(checked out at `~/Projects/Facile/Code/casier-cli`), following the suite convention that every
+(checked out at `~/Code/Facile/casier-cli`), following the suite convention that every
 CLI is its own repo — as opus-cli, sablier-cli, nuage-cli, capsule-cli and ardoise-cli already
 are. It was split out of `cli/` on 2026-08-06 with `git subtree split`, so its history came
 with it. **This repo no longer builds, tests or ships the CLI**; its `CLAUDE.md` covers the
