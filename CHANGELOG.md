@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1] - 2026-11-03
+
+### Changed
+
+- Spaces use the share-circle icon
+- build(client): bump muse to v0.8.1
+
 ## [0.2.0] - 2026-11-03
 
 ### Changed
