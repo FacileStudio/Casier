@@ -136,7 +136,7 @@
 </script>
 
 {#if loading}
-	<div class="flex flex-col gap-4 border-b border-fc-border px-4 py-4 md:px-8 md:py-5">
+	<div class="flex flex-col gap-4 px-4 py-4 md:px-8 md:py-5">
 		<Skeleton class="h-3 w-24" />
 		<Skeleton class="h-6 w-56 max-w-full" />
 		<Skeleton class="h-4 w-80 max-w-full" />

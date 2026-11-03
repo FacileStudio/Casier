@@ -28,7 +28,7 @@
 	} = $props();
 </script>
 
-<div class="flex flex-col gap-4 border-b border-fc-border px-4 py-4 md:px-8 md:py-5">
+<div class="flex flex-col gap-4 px-4 py-4 md:px-8 md:py-5">
 	<div class="flex flex-col gap-2">
 		{#if back}
 			<a

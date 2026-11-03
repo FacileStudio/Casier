@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { Button, Card, Divider } from '@facile/muse';
+	import { Button, Card } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { api, type AuthConfig } from '$lib/backend';
 	import Logo from '$lib/components/Logo.svelte';
@@ -64,7 +64,7 @@
 
 {#if ready}
 	<div class="flex min-h-dvh flex-col bg-background text-foreground">
-		<header class="border-b border-border">
+		<header>
 			<div class="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
 				<a href="/" class="text-xl sm:text-2xl">
 					<Logo size={28} wordmark />
@@ -95,14 +95,13 @@
 				</div>
 			</section>
 
-			<div class="mx-auto max-w-5xl px-6"><Divider class="my-0" /></div>
 
 			<section class="mx-auto max-w-5xl px-6 py-16 sm:py-20">
 				<div class="grid gap-4 md:grid-cols-3">
 					{#each features as feature (feature.title)}
 						<Card class="flex flex-col gap-4">
 							<div
-								class="flex size-10 items-center justify-center rounded-md border border-border"
+								class="flex size-10 items-center justify-center rounded-md bg-muted"
 								aria-hidden="true"
 							>
 								<iconify-icon icon={feature.icon} width="20" height="20"></iconify-icon>
@@ -116,7 +115,6 @@
 				</div>
 			</section>
 
-			<div class="mx-auto max-w-5xl px-6"><Divider class="my-0" /></div>
 
 			<section class="mx-auto max-w-5xl px-6 py-16 sm:py-20">
 				<h2 class="text-center font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -134,7 +132,6 @@
 				</p>
 			</section>
 
-			<div class="mx-auto max-w-5xl px-6"><Divider class="my-0" /></div>
 
 			<section class="mx-auto max-w-5xl px-6 py-16 text-center sm:py-20">
 				<h2 class="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -153,7 +150,7 @@
 			</section>
 		</main>
 
-		<footer class="border-t border-border">
+		<footer>
 			<div
 				class="mx-auto flex max-w-5xl flex-col items-center justify-between gap-2 px-6 py-6 sm:flex-row"
 			>

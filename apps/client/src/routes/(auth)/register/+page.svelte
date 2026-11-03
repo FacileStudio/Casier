@@ -93,7 +93,7 @@
 	{/if}
 
 	{#if !ssoOnly}
-		<div class="mb-6 flex rounded-lg border border-border bg-muted p-1 gap-1">
+		<div class="mb-6 flex rounded-lg bg-muted p-1 gap-1">
 			<a
 				href="/login"
 				class="flex-1 rounded-md py-1.5 text-center text-sm font-medium transition-colors text-muted-foreground hover:text-foreground"

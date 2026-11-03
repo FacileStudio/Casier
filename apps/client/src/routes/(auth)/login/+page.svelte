@@ -91,7 +91,7 @@
 	{/if}
 
 	{#if !ssoOnly}
-		<div class="mb-6 flex rounded-lg border border-border bg-muted p-1 gap-1">
+		<div class="mb-6 flex rounded-lg bg-muted p-1 gap-1">
 			<a
 				href="/login"
 				aria-current="page"

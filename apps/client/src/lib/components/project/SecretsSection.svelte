@@ -707,7 +707,7 @@
 				A deleted key stays reserved until it is restored or purged, so it cannot be recreated
 				from scratch while it sits here.
 			</p>
-			<ul class="flex flex-col divide-y divide-fc-border">
+			<ul class="flex flex-col">
 				{#each trashed as secret (secret.id)}
 					<li class="flex items-center justify-between gap-3 py-3">
 						<div class="flex min-w-0 flex-col gap-1">
@@ -781,7 +781,7 @@
 	{:else if versions.length === 0}
 		<EmptyState bare icon={icons.history} title="No previous versions" />
 	{:else}
-		<ul class="flex flex-col divide-y divide-fc-border">
+		<ul class="flex flex-col">
 			{#each versions as version (version.version)}
 				<li class="flex items-center justify-between gap-3 py-3">
 					<div class="min-w-0">
