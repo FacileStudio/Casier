@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { MobileNav, SideBar, SpaceSwitcher, Topbar, icons } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
+	import { displayName } from '$lib/format';
 	import {
 		api,
 		ApiError,
@@ -63,11 +64,14 @@
 	);
 
 	/**
-	 * The API has no display name — an account is only ever an email. The user card
-	 * wants a name, not an address, so the local part stands in for one: a rail is
-	 * 220px wide and a full address either truncates to nonsense or blows the layout.
+	 * The user card shows the identity provider's display name and picture. A
+	 * password account has neither, so the email's local part stands in for the
+	 * name and muse's Avatar draws its initial.
 	 */
-	const user = $derived({ name: auth.email?.split('@')[0] || 'Account' });
+	const user = $derived({
+		name: displayName({ name: auth.name, email: auth.email ?? '' }) || 'Account',
+		avatar: auth.avatarUrl || undefined,
+	});
 
 	const spaces = $derived(projects.map((project) => ({ id: project.slug, name: project.name })));
 

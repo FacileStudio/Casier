@@ -34,6 +34,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Drawer from '$lib/components/Drawer.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
+	import PersonLabel from '$lib/components/PersonLabel.svelte';
 
 	let {
 		projectSlug,
@@ -711,8 +712,11 @@
 					<li class="flex items-center justify-between gap-3 py-3">
 						<div class="flex min-w-0 flex-col gap-1">
 							<span class="truncate font-fc-mono text-fc-sm text-fc-fg">{secret.key}</span>
-							<span class="text-fc-xs text-fc-fg-muted">
-								Deleted {formatDateTime(secret.deleted_at)} · purged {formatDate(secret.purge_at)}
+							<span class="flex min-w-0 items-center gap-1 text-fc-xs text-fc-fg-muted">
+								<PersonLabel person={secret.actor} />
+								<span class="shrink-0">
+									deleted {formatDateTime(secret.deleted_at)} · purged {formatDate(secret.purge_at)}
+								</span>
 							</span>
 						</div>
 						{#if canWrite}
@@ -787,8 +791,9 @@
 								<Badge tone="accent">current</Badge>
 							{/if}
 						</p>
-						<p class="truncate text-fc-xs text-fc-fg-muted">
-							{version.changed_by || 'unknown'} — {formatDateTime(version.created_at)}
+						<p class="flex min-w-0 items-center gap-1 text-fc-xs text-fc-fg-muted">
+							<PersonLabel person={version.actor} />
+							<span class="shrink-0">— {formatDateTime(version.created_at)}</span>
 						</p>
 					</div>
 					{#if canWrite && historyTarget && version.version !== historyTarget.version}

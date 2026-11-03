@@ -13,13 +13,14 @@
 	} from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { api, type AuthConfig } from '$lib/backend';
+	import { displayName } from '$lib/format';
 
 	let ssoOnly = $state(false);
 	let oidcEnabled = $state(false);
 	let loggingOut = $state(false);
 
 	const email = $derived(auth.email ?? '');
-	const name = $derived(email.split('@')[0] || 'Account');
+	const name = $derived(displayName({ name: auth.name, email }) || 'Account');
 	const signedInWith = $derived(ssoOnly ? 'Single sign-on' : oidcEnabled ? 'Password or SSO' : 'Password');
 
 	onMount(async () => {
@@ -53,6 +54,7 @@
 	<ProfileCard
 		{name}
 		{email}
+		avatar={auth.avatarUrl || undefined}
 		meta={[
 			{ label: 'Signed in with', value: signedInWith },
 			{ label: 'Interface', value: 'Casier web' },
@@ -61,7 +63,7 @@
 
 	<SettingsSection
 		title="Account"
-		description="An account in Casier is an email address and nothing else — there is no display name to change."
+		description="An account in Casier is an email address. With single sign-on, your name and picture come from your Facile account."
 	>
 		<SettingsRow
 			label="Email"
@@ -71,6 +73,16 @@
 		>
 			<Input id="account-email" type="email" value={email} disabled />
 		</SettingsRow>
+		{#if oidcEnabled}
+			<SettingsRow
+				label="Name and picture"
+				description="Set them in your Facile account. A change shows here on the next page load."
+			>
+				<Button variant="outline" href="https://sso.facile.studio/account" target="_blank">
+					Edit in Facile account
+				</Button>
+			</SettingsRow>
+		{/if}
 	</SettingsSection>
 
 	<SettingsSection

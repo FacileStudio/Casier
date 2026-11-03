@@ -14,6 +14,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
+	"github.com/FacileStudio/Casier/apps/api/internal/people"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/local"
@@ -96,6 +97,25 @@ func (service *Service) IdentityForUser(ctx context.Context, userID int64) (stri
 		return "", err
 	}
 	return out.Email, nil
+}
+
+// profile loads the signed-in user as the client renders them. A session whose
+// user row is gone answers 401, the same as RequireAuth would on the next call.
+func (service *Service) profile(ctx context.Context, userID string) (*MeResponse, error) {
+	var me MeResponse
+	result := service.orm.WithContext(ctx).
+		Table("users u").
+		Select(people.Columns).
+		Where("u.id = ?", userID).
+		Scan(&me)
+	if result.Error != nil {
+		return nil, errors.Internal("failed to load the account", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return nil, errors.Unauthorized("missing auth")
+	}
+	me.ID = userID
+	return &me, nil
 }
 
 func (service *Service) registerUser(ctx context.Context, email, password string) (int64, string, error) {

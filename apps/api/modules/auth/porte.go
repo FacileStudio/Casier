@@ -37,6 +37,10 @@ func NewUserStore(orm *gorm.DB) *UserStore {
 // missed on (provider, subject) fell straight through to Create and died on the
 // unique index. That is every existing user, on their first login after the
 // registre cutover.
+//
+// The picture claim is written on every sign-in, so the stored URL follows the
+// provider. Registre sends the same stable URL for everyone whether or not they
+// set a picture, and the client falls back to initials when it answers 404.
 func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (int64, error) {
 	email := strings.ToLower(strings.TrimSpace(claims.Email))
 	if email == "" {
@@ -68,7 +72,7 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		return 0, errors.Internal("failed to resolve the identity", err)
 	}
 
-	updates := map[string]any{"email": email}
+	updates := map[string]any{"email": email, "avatar_url": pictureURL(claims.Picture)}
 	if displayName := claims.DisplayName(); displayName != "" {
 		updates["name"] = displayName
 	}
@@ -76,6 +80,31 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		return 0, errors.Internal("failed to update the account", err)
 	}
 	return user.ID, nil
+}
+
+// pictureURL keeps the picture claim only when it is an https URL. Anything
+// else, such as a data: URI of generated initials, is no picture at all: the
+// client draws initials itself, and a stored data URI would bloat every row.
+func pictureURL(claim string) string {
+	if strings.HasPrefix(strings.ToLower(claim), "https://") {
+		return claim
+	}
+	return ""
+}
+
+// BackfillAvatars gives users who signed in before Casier stored the picture
+// claim the URL they would get on their next sign-in, derived from their
+// identity row for issuer. It only fills empty rows, so it is idempotent and
+// never overwrites a URL a sign-in wrote. A trailing slash on either the
+// configured issuer or the stored provider is ignored.
+func (s *UserStore) BackfillAvatars(ctx context.Context, issuer string) error {
+	base := strings.TrimRight(issuer, "/")
+	return s.orm.WithContext(ctx).Exec(
+		`UPDATE users u SET avatar_url = ? || i.subject
+		 FROM porte_identities i
+		 WHERE i.user_id = u.id AND rtrim(i.provider, '/') = ? AND u.avatar_url = ''`,
+		base+"/avatars/", base,
+	).Error
 }
 
 func (s *UserStore) CreateFromPassword(ctx context.Context, email, name string) (int64, error) {

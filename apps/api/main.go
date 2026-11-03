@@ -82,6 +82,9 @@ func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *s
 
 	var kit *oidc.Kit
 	if cfg.Issuer != "" {
+		if err := auth.NewUserStore(db).BackfillAvatars(ctx, cfg.Issuer); err != nil {
+			return nil, nil, nil, err
+		}
 		kit, err = oidc.New(ctx, cfg, oidc.Deps{
 			Users:      auth.NewUserStore(db),
 			Identities: store.Identities(),

@@ -1,9 +1,11 @@
 import { browser } from '$app/environment';
-import { api } from './backend';
+import { api, type Me } from './backend';
 
 class AuthState {
 	userId = $state<string | null>(null);
 	email = $state<string | null>(null);
+	name = $state('');
+	avatarUrl = $state('');
 	loaded = $state(false);
 	private checkPromise: Promise<void> | null = null;
 
@@ -16,9 +18,11 @@ class AuthState {
 		if (this.checkPromise) return this.checkPromise;
 		this.checkPromise = (async () => {
 			try {
-				const me = await api.get<{ id: string; email: string }>('/auth/me');
+				const me = await api.get<Me>('/auth/me');
 				this.userId = me.id;
 				this.email = me.email;
+				this.name = me.name ?? '';
+				this.avatarUrl = me.avatar_url ?? '';
 			} catch {
 				this.userId = null;
 				this.email = null;

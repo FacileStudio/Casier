@@ -1,6 +1,10 @@
 package projects
 
-import "time"
+import (
+	"time"
+
+	"github.com/FacileStudio/Casier/apps/api/internal/people"
+)
 
 // CreateRequest is the body of a project creation.
 type CreateRequest struct {
@@ -42,9 +46,11 @@ type ListResponse struct {
 
 // MemberResponse describes one project member.
 type MemberResponse struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+	ID        int64  `json:"id"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	AvatarURL string `json:"avatar_url"`
+	Role      string `json:"role"`
 }
 
 // MembersResponse is the list of a project's members.
@@ -91,15 +97,16 @@ type CreateApiTokenRequest struct {
 
 // ApiTokenResponse describes one machine token.
 type ApiTokenResponse struct {
-	ID           int64      `json:"id"`
-	Token        string     `json:"token,omitempty"`
-	Name         string     `json:"name"`
-	Environments string     `json:"environments"`
-	Permissions  string     `json:"permissions"`
-	ExpiresAt    time.Time  `json:"expires_at"`
-	LastUsedAt   time.Time  `json:"last_used_at"`
-	RevokedAt    *time.Time `json:"revoked_at"`
-	CreatedAt    time.Time  `json:"created_at"`
+	ID           int64          `json:"id"`
+	Token        string         `json:"token,omitempty"`
+	Name         string         `json:"name"`
+	Environments string         `json:"environments"`
+	Permissions  string         `json:"permissions"`
+	ExpiresAt    time.Time      `json:"expires_at"`
+	LastUsedAt   time.Time      `json:"last_used_at"`
+	RevokedAt    *time.Time     `json:"revoked_at"`
+	CreatedAt    time.Time      `json:"created_at"`
+	Owner        *people.Person `json:"owner"`
 }
 
 // ApiTokensResponse is the list of a project's tokens.
@@ -130,13 +137,14 @@ type WebhooksResponse struct {
 
 // AuditLogEntry is one audited action.
 type AuditLogEntry struct {
-	ID        int64     `json:"id"`
-	UserEmail string    `json:"user_email"`
-	Action    string    `json:"action"`
-	Resource  string    `json:"resource"`
-	Detail    string    `json:"detail"`
-	ClientIP  string    `json:"client_ip"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        int64          `json:"id"`
+	UserEmail string         `json:"user_email"`
+	Actor     *people.Person `json:"actor"`
+	Action    string         `json:"action"`
+	Resource  string         `json:"resource"`
+	Detail    string         `json:"detail"`
+	ClientIP  string         `json:"client_ip"`
+	CreatedAt time.Time      `json:"created_at"`
 }
 
 // AuditLogsResponse is a page of a project's audit trail.

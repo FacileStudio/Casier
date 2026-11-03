@@ -110,10 +110,13 @@ export type AuthResponse = {
 	token: string;
 };
 
-export type Me = {
-	id: string;
+export type Person = {
 	email: string;
+	name: string;
+	avatar_url: string;
 };
+
+export type Me = Person & { id: string };
 
 export type ProjectRole = 'owner' | 'admin' | 'member' | 'viewer';
 
@@ -174,6 +177,7 @@ export type TrashedSecret = {
 	tags: string[] | null;
 	deleted_at: string;
 	deleted_by: string;
+	actor: Person | null;
 	purge_at: string;
 };
 
@@ -197,6 +201,7 @@ export type RotationSummary = {
 export type SecretVersion = {
 	version: number;
 	changed_by: string;
+	actor: Person | null;
 	created_at: string;
 };
 
@@ -214,9 +219,8 @@ export type ExportResult = {
 	content: string;
 };
 
-export type Member = {
+export type Member = Person & {
 	id: number;
-	email: string;
 	role: ProjectRole;
 };
 
@@ -234,6 +238,7 @@ export type ApiToken = {
 	last_used_at: string;
 	revoked_at: string | null;
 	created_at: string;
+	owner: Person | null;
 };
 
 export type ApiTokensResponse = {
@@ -243,6 +248,7 @@ export type ApiTokensResponse = {
 export type AuditLogEntry = {
 	id: number;
 	user_email: string;
+	actor: Person | null;
 	action: string;
 	resource: string;
 	detail: string;

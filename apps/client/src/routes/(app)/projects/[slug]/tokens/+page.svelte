@@ -30,6 +30,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import Drawer from '$lib/components/Drawer.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
+	import PersonLabel from '$lib/components/PersonLabel.svelte';
 
 	type ProjectContext = {
 		readonly project: Project | null;
@@ -194,6 +195,7 @@
 					<thead>
 						<tr>
 							<th>Name</th>
+							<th>Owner</th>
 							<th>Status</th>
 							<th>Permissions</th>
 							<th>Environments</th>
@@ -206,6 +208,7 @@
 						{#each tokens as token (token.id)}
 							<tr class={isRevoked(token) || isExpired(token) ? 'opacity-55' : ''}>
 								<td class="font-medium text-fc-fg">{token.name}</td>
+								<td class="max-w-48 whitespace-nowrap"><PersonLabel person={token.owner} /></td>
 								<td>
 									{#if isRevoked(token)}
 										<Badge tone="neutral">Revoked {formatDate(token.revoked_at ?? '')}</Badge>

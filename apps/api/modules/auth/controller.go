@@ -53,7 +53,7 @@ func (c *Controller) me(ctx context.Context) (*MeResponse, error) {
 	if !ok {
 		return nil, errors.Unauthorized("missing auth")
 	}
-	return &MeResponse{ID: identity.UserID, Email: identity.Email}, nil
+	return c.service.profile(ctx, identity.UserID)
 }
 
 func intToStr(id int64) string {

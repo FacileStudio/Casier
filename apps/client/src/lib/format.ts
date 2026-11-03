@@ -22,3 +22,12 @@ export function formatDateTime(value: string): string {
 		new Date(value)
 	);
 }
+
+/**
+ * The name a person is shown under: the display name the identity provider
+ * sent, else the local part of their email, since a 220px rail cannot fit a
+ * full address.
+ */
+export function displayName(person: { name?: string; email?: string } | null | undefined): string {
+	return person?.name || person?.email?.split('@')[0] || '';
+}

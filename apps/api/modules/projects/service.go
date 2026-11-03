@@ -17,6 +17,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
+	"github.com/FacileStudio/Casier/apps/api/internal/people"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -261,27 +262,17 @@ func (service *Service) listMembers(ctx context.Context, slug string, userID int
 		return nil, err
 	}
 
-	var results []struct {
-		ID    int64
-		Email string
-		Role  string
-	}
-
+	members := []MemberResponse{}
 	err = service.orm.WithContext(ctx).
 		Table("project_members pm").
-		Select("u.id, u.email, pm.role").
+		Select("u.id, "+people.Columns+", pm.role").
 		Joins("join users u on u.id = pm.user_id").
 		Joins("join projects p on p.id = pm.project_id").
 		Where("p.slug = ?", slug).
 		Order("pm.created_at asc").
-		Scan(&results).Error
+		Scan(&members).Error
 	if err != nil {
 		return nil, errors.Internal("failed to list members", err)
-	}
-
-	members := make([]MemberResponse, len(results))
-	for i, r := range results {
-		members[i] = MemberResponse{ID: r.ID, Email: r.Email, Role: r.Role}
 	}
 	return members, nil
 }
@@ -767,6 +758,15 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 		scopes[grant.TokenID] = append(scopes[grant.TokenID], grant.Slug)
 	}
 
+	ownerIDs := make([]string, len(tokens))
+	for i, t := range tokens {
+		ownerIDs[i] = strconv.FormatInt(t.CreatedBy, 10)
+	}
+	owners, err := people.Resolve(ctx, service.orm, ownerIDs)
+	if err != nil {
+		return nil, errors.Internal("failed to resolve token owners", err)
+	}
+
 	result := make([]ApiTokenResponse, len(tokens))
 	for i, t := range tokens {
 		result[i] = ApiTokenResponse{
@@ -778,6 +778,7 @@ func (service *Service) listApiTokens(ctx context.Context, slug string, callerID
 			LastUsedAt:   t.LastUsedAt,
 			RevokedAt:    t.RevokedAt,
 			CreatedAt:    t.CreatedAt,
+			Owner:        people.Lookup(owners, strconv.FormatInt(t.CreatedBy, 10)),
 		}
 	}
 	return result, nil
@@ -940,11 +941,21 @@ func (service *Service) listAuditLogs(ctx context.Context, slug string, callerID
 		return nil, errors.Internal("failed to list audit logs", err)
 	}
 
+	actorIDs := make([]string, len(logs))
+	for i, l := range logs {
+		actorIDs[i] = l.UserID
+	}
+	actors, err := people.Resolve(ctx, service.orm, actorIDs)
+	if err != nil {
+		return nil, errors.Internal("failed to resolve audit actors", err)
+	}
+
 	result := make([]AuditLogEntry, len(logs))
 	for i, l := range logs {
 		result[i] = AuditLogEntry{
 			ID:        l.ID,
 			UserEmail: l.UserEmail,
+			Actor:     people.Lookup(actors, l.UserID),
 			Action:    l.Action,
 			Resource:  l.Resource,
 			Detail:    l.Detail,

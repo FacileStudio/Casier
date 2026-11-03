@@ -12,6 +12,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
+	"github.com/FacileStudio/Casier/apps/api/internal/people"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
@@ -791,11 +792,21 @@ func (service *Service) listVersions(ctx context.Context, envID int64, key strin
 		return nil, errors.Internal("failed to list versions", err)
 	}
 
+	actorIDs := make([]string, len(versions))
+	for i, v := range versions {
+		actorIDs[i] = v.ChangedBy
+	}
+	actors, err := people.Resolve(ctx, service.orm, actorIDs)
+	if err != nil {
+		return nil, errors.Internal("failed to resolve version authors", err)
+	}
+
 	result := make([]VersionResponse, len(versions))
 	for i, v := range versions {
 		result[i] = VersionResponse{
 			Version:   v.Version,
 			ChangedBy: v.ChangedBy,
+			Actor:     people.Lookup(actors, v.ChangedBy),
 			CreatedAt: v.CreatedAt,
 		}
 	}
@@ -1164,25 +1175,15 @@ func (service *Service) listACLs(ctx context.Context, envID int64, key string, p
 		return nil, err
 	}
 
-	var results []struct {
-		ID       int64
-		Email    string
-		CanRead  bool
-		CanWrite bool
-	}
+	acls := []ACLResponse{}
 	err = service.orm.WithContext(ctx).
 		Table("secret_acls a").
-		Select("a.id, u.email, a.can_read, a.can_write").
+		Select("a.id, "+people.Columns+", a.can_read, a.can_write").
 		Joins("join users u on u.id = a.user_id").
 		Where("a.secret_id = ?", secret.ID).
-		Scan(&results).Error
+		Scan(&acls).Error
 	if err != nil {
 		return nil, errors.Internal("failed to list ACLs", err)
-	}
-
-	acls := make([]ACLResponse, len(results))
-	for i, r := range results {
-		acls[i] = ACLResponse{ID: r.ID, Email: r.Email, CanRead: r.CanRead, CanWrite: r.CanWrite}
 	}
 	return acls, nil
 }
@@ -1321,12 +1322,18 @@ func (service *Service) listTrash(ctx context.Context, envID int64, person calle
 	}
 
 	ids := make([]int64, len(records))
+	actorIDs := make([]string, len(records))
 	for i, r := range records {
 		ids[i] = r.ID
+		actorIDs[i] = r.DeletedBy
 	}
 	grants, err := service.secretGrants(ctx, service.orm, ids, person.userID)
 	if err != nil {
 		return nil, err
+	}
+	actors, err := people.Resolve(ctx, service.orm, actorIDs)
+	if err != nil {
+		return nil, errors.Internal("failed to resolve who deleted secrets", err)
 	}
 
 	for _, r := range records {
@@ -1339,6 +1346,7 @@ func (service *Service) listTrash(ctx context.Context, envID int64, person calle
 			Tags:      splitTags(r.Tags),
 			DeletedAt: r.DeletedAt.Time,
 			DeletedBy: r.DeletedBy,
+			Actor:     people.Lookup(actors, r.DeletedBy),
 			PurgeAt:   purgeAt(r.DeletedAt.Time),
 		})
 	}

@@ -27,6 +27,7 @@
 		type ProjectRole,
 	} from '$lib/backend';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import { displayName } from '$lib/format';
 	import Drawer from '$lib/components/Drawer.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 
@@ -182,12 +183,12 @@
 						<tr>
 							<td>
 								<div class="flex min-w-0 items-center gap-3">
-									<Avatar name={member.email} size="sm" />
+									<Avatar src={member.avatar_url || undefined} name={displayName(member)} alt="" size="sm" />
 									<div class="flex min-w-0 flex-col">
-										<span class="truncate font-medium text-fc-fg">{member.email}</span>
-										{#if member.email === auth.email}
-											<span class="text-fc-xs text-fc-fg-muted">This is you</span>
-										{/if}
+										<span class="truncate font-medium text-fc-fg">{displayName(member)}</span>
+										<span class="truncate text-fc-xs text-fc-fg-muted">
+											{member.email}{member.email === auth.email ? ' · This is you' : ''}
+										</span>
 									</div>
 								</div>
 							</td>

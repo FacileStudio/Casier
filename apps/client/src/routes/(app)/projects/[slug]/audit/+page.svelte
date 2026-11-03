@@ -20,6 +20,7 @@
 	} from '$lib/backend';
 	import { formatDateTime } from '$lib/format';
 	import ErrorState from '$lib/components/ErrorState.svelte';
+	import PersonLabel from '$lib/components/PersonLabel.svelte';
 
 	type ProjectContext = {
 		readonly project: Project | null;
@@ -112,7 +113,9 @@
 					{#each logs as log (log.id)}
 						<tr>
 							<td class="whitespace-nowrap text-fc-fg-muted">{formatDateTime(log.created_at)}</td>
-							<td class="whitespace-nowrap">{log.user_email || '—'}</td>
+							<td class="max-w-48 whitespace-nowrap">
+								<PersonLabel person={log.actor} fallback={log.user_email || '—'} />
+							</td>
 							<td><Badge tone={actionTone(log.action)}>{log.action}</Badge></td>
 							<td class="font-fc-mono text-fc-xs text-fc-fg-muted">{log.resource || '—'}</td>
 							<td class="max-w-64 truncate text-fc-fg-muted" title={log.detail}>

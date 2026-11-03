@@ -327,5 +327,10 @@ the same file.
 - No inline comments in code
 - Secrets encrypted at rest with AES-256-GCM (per-secret random nonce)
 - Session tokens, API tokens and password reset tokens are all SHA-256 hashed before storage
+- **Profile pictures are URLs, never bytes.** `users.avatar_url` holds Registre's stable
+  `picture` claim (`<issuer>/avatars/<sub>`), written on every sign-in and backfilled at boot
+  from `porte_identities` for the configured issuer. Every person in a response goes through
+  `internal/people` (`Columns` for flat rows, `Resolve` + `Lookup` for `actor`/`owner`), and the
+  client renders them with muse `Avatar` via `PersonLabel`, which falls back to initials on 404.
 - A new route is not done until it has a case in the authorization matrix — the `chi.Walk`
   meta-test will fail the build until it does, which is the point

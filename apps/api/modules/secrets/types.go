@@ -1,6 +1,10 @@
 package secrets
 
-import "time"
+import (
+	"time"
+
+	"github.com/FacileStudio/Casier/apps/api/internal/people"
+)
 
 // CreateRequest is the body of a secret creation.
 type CreateRequest struct {
@@ -44,12 +48,13 @@ type ListResponse struct {
 // not a read path: restoring a secret is what puts it back within reach of the
 // audited reveal routes.
 type TrashedSecretResponse struct {
-	ID        int64     `json:"id"`
-	Key       string    `json:"key"`
-	Tags      []string  `json:"tags"`
-	DeletedAt time.Time `json:"deleted_at"`
-	DeletedBy string    `json:"deleted_by"`
-	PurgeAt   time.Time `json:"purge_at"`
+	ID        int64          `json:"id"`
+	Key       string         `json:"key"`
+	Tags      []string       `json:"tags"`
+	DeletedAt time.Time      `json:"deleted_at"`
+	DeletedBy string         `json:"deleted_by"`
+	Actor     *people.Person `json:"actor"`
+	PurgeAt   time.Time      `json:"purge_at"`
 }
 
 // TrashResponse is the recoverable trash plus its retention window.
@@ -74,9 +79,10 @@ type RotationSummaryResponse struct {
 
 // VersionResponse is one stored version of a secret.
 type VersionResponse struct {
-	Version   int       `json:"version"`
-	ChangedBy string    `json:"changed_by"`
-	CreatedAt time.Time `json:"created_at"`
+	Version   int            `json:"version"`
+	ChangedBy string         `json:"changed_by"`
+	Actor     *people.Person `json:"actor"`
+	CreatedAt time.Time      `json:"created_at"`
 }
 
 // VersionsResponse is the version history of a secret.
@@ -130,10 +136,12 @@ type SetACLRequest struct {
 
 // ACLResponse describes one user's access to a secret.
 type ACLResponse struct {
-	ID       int64  `json:"id"`
-	Email    string `json:"email"`
-	CanRead  bool   `json:"can_read"`
-	CanWrite bool   `json:"can_write"`
+	ID        int64  `json:"id"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	AvatarURL string `json:"avatar_url"`
+	CanRead   bool   `json:"can_read"`
+	CanWrite  bool   `json:"can_write"`
 }
 
 // ACLsResponse is the per-secret access control list.

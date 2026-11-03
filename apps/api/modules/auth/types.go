@@ -27,10 +27,13 @@ type AuthResponse struct {
 	Token  string `json:"token"`
 }
 
-// MeResponse describes the signed-in user.
+// MeResponse describes the signed-in user: the id plus the email, name and
+// picture URL the client draws them with.
 type MeResponse struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID        string `json:"id"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	AvatarURL string `json:"avatar_url"`
 }
 
 // ForgotPasswordRequest asks for a password reset email for an address.
