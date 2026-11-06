@@ -81,12 +81,12 @@ Set `ENCRYPTION_KEY` — base64, 32 bytes decoded, from `openssl rand -base64 32
 `POSTGRES_USER` and `POSTGRES_PASSWORD` rather than keeping the built-in defaults. Set
 `APP_ENV=production`, and `CASIER_ADMIN_EMAILS` if anyone should be able to rotate the root
 key. `CORS_ALLOWED_ORIGINS` already defaults to the public host in the compose file, which
-also seeds `PUBLIC_URL` and `OIDC_SUCCESS_URL`.
+also seeds `OIDC_SUCCESS_URL`.
 
-For SSO, set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URL`
+`OIDC_ISSUER` is required in production. Set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URL`
 together, pointing the redirect at
-`https://casier.facile.studio/api/auth/oidc/callback`. For password reset, set `SMTP_HOST`
-and `SMTP_FROM`. For log shipping, set `JOURNAL_URL` ending in `/api` and a `JOURNAL_TOKEN`
+`https://casier.facile.studio/api/auth/oidc/callback`. Set `APP_VERSION` at release so `GET /version`
+reports the tag. For log shipping, set `JOURNAL_URL` ending in `/api` and a `JOURNAL_TOKEN`
 minted on Journal's Keys page.
 
 ### Rotating the root key

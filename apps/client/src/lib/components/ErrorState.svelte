@@ -4,9 +4,10 @@
 	 * list that failed to load and a list with nothing in it occupy the same shape.
 	 */
 	import { Button, Card } from '@facile/muse';
+	import { t } from '$lib/i18n/index.svelte';
 
 	let {
-		message = 'Something went wrong.',
+		message,
 		onretry,
 	}: { message?: string; onretry?: () => void } = $props();
 </script>
@@ -19,8 +20,8 @@
 		class="block text-fc-fg-muted"
 		aria-hidden="true"
 	></iconify-icon>
-	<p class="mx-auto max-w-sm text-fc-sm text-fc-fg-muted">{message}</p>
+	<p class="mx-auto max-w-sm text-fc-sm text-fc-fg-muted">{message ?? t('common.genericError')}</p>
 	{#if onretry}
-		<Button variant="outline" onclick={onretry}>Try again</Button>
+		<Button variant="outline" onclick={onretry}>{t('common.tryAgain')}</Button>
 	{/if}
 </Card>

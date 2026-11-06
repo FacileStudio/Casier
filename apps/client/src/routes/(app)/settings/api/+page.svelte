@@ -2,50 +2,41 @@
 	import { browser } from '$app/environment';
 	import { Button, SecretField, SettingsRow, SettingsSection, icons } from '@facile/muse';
 	import { API_BASE } from '$lib/backend';
+	import { t } from '$lib/i18n/index.svelte';
 
-	const commands = [
+	const commands = $derived([
 		{
-			label: 'Sign in',
+			label: t('api.cli.login.label'),
 			command: 'casier login',
-			description: 'Discovers this instance through /auth/config and stores a session token.',
+			description: t('api.cli.login.description'),
 		},
 		{
-			label: 'Link a directory',
+			label: t('api.cli.init.label'),
 			command: 'casier init',
-			description: 'Writes the project and environment this directory reads from.',
+			description: t('api.cli.init.description'),
 		},
 		{
-			label: 'Run with secrets',
+			label: t('api.cli.run.label'),
 			command: 'casier run -- npm start',
-			description: 'Injects the environment for one process. Nothing is written to disk.',
+			description: t('api.cli.run.description'),
 		},
-	];
+	]);
 
 	const baseUrl = $derived(browser ? `${window.location.origin}${API_BASE}` : API_BASE);
 </script>
 
 <svelte:head>
-	<title>API — Casier</title>
+	<title>{t('settings.head.api')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-10">
-	<SettingsSection
-		title="Endpoint"
-		description="Point the CLI or any HTTP client here. The URL is not a secret — the token is."
-	>
-		<SettingsRow
-			label="Base URL"
-			description="Behind a reverse proxy the API answers under /api; in development it answers at the root."
-			stacked
-		>
+	<SettingsSection title={t('api.endpoint.title')} description={t('api.endpoint.description')}>
+		<SettingsRow label={t('api.baseUrl.label')} description={t('api.baseUrl.description')} stacked>
 			<SecretField value={baseUrl} sensitive={false} class="w-full" />
 		</SettingsRow>
 	</SettingsSection>
 
-	<SettingsSection
-		title="Command line"
-		description="The casier CLI pulls the same secrets into your shell, your scripts and your CI."
-	>
+	<SettingsSection title={t('api.cli.title')} description={t('api.cli.description')}>
 		{#each commands as entry (entry.command)}
 			<SettingsRow label={entry.label} description={entry.description} stacked>
 				<SecretField value={entry.command} sensitive={false} class="w-full" />
@@ -53,25 +44,16 @@
 		{/each}
 	</SettingsSection>
 
-	<SettingsSection
-		title="Tokens"
-		description="Casier scopes a machine credential to one project, so tokens are issued there rather than here."
-	>
+	<SettingsSection title={t('api.tokens.title')} description={t('api.tokens.description')}>
 		{#snippet actions()}
-			<Button variant="outline" href="/projects" icon={icons.folder}>Projects</Button>
+			<Button variant="outline" href="/projects" icon={icons.folder}>{t('api.tokens.projects')}</Button>
 		{/snippet}
 
-		<SettingsRow
-			label="Where tokens live"
-			description="Open a project, then API tokens. A token is bound to that project, to a permission set and to the environments you name — it can never read past them."
-		>
-			<Button variant="outline" href="/projects" icon={icons.key}>Issue a token</Button>
+		<SettingsRow label={t('api.tokens.where.label')} description={t('api.tokens.where.description')}>
+			<Button variant="outline" href="/projects" icon={icons.key}>{t('api.tokens.issue')}</Button>
 		</SettingsRow>
 
-		<SettingsRow
-			label="How the CLI uses one"
-			description="Non-interactive callers send it as CASIER_TOKEN. Tokens expire — 90 days by default, 730 at most — and are revoked rather than deleted so the audit log still names them."
-		>
+		<SettingsRow label={t('api.tokens.cli.label')} description={t('api.tokens.cli.description')}>
 			<SecretField value="CASIER_TOKEN" sensitive={false} class="w-full sm:w-64" />
 		</SettingsRow>
 	</SettingsSection>

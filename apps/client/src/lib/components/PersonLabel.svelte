@@ -8,13 +8,14 @@
 	import { Avatar } from '@facile/muse';
 	import type { Person } from '$lib/backend';
 	import { displayName } from '$lib/format';
+	import { t } from '$lib/i18n/index.svelte';
 
 	let {
 		person,
-		fallback = 'unknown',
+		fallback,
 	}: { person: Person | null | undefined; fallback?: string } = $props();
 
-	const label = $derived(displayName(person) || fallback);
+	const label = $derived(displayName(person) || fallback || t('common.deletedUser'));
 </script>
 
 <span class="inline-flex min-w-0 items-center gap-2" title={person?.email || fallback}>

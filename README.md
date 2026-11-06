@@ -18,7 +18,7 @@ Live at [casier.facile.studio](https://casier.facile.studio).
 - Scoped machine tokens bound to a project, specific environments, and read or write
 - Per-secret ACLs on top of project roles, plus an append-only audit log
 - Flags secrets that have gone unrotated past the project's rotation policy
-- Email and password accounts with password reset, or OIDC SSO with an `SSO_ONLY` mode
+- Sign-in through Facile (Registre) only; the CLI and CI use scoped API tokens
 - Project invites, membership roles, and outbound webhooks on secret changes
 - A Rust CLI that injects secrets into a process, diffs environments, and gates CI
 
@@ -86,10 +86,8 @@ facile install casier
 | `DATABASE_URL` | Postgres connection string, required |
 | `ENCRYPTION_KEY` | Base64-encoded **32 bytes** protecting every project data key; required |
 | `CORS_ALLOWED_ORIGINS` | Allowed cross-origin callers; `*` is refused at startup |
-| `PUBLIC_URL` | Public origin used to build password reset links |
 | `CASIER_ADMIN_EMAILS` | Who may call `POST /admin/rotate-key`; empty means nobody |
-| `SMTP_HOST` | Enables the mailer, and makes `SMTP_FROM` and a public origin required |
-| `OIDC_ISSUER` | Enables OIDC; three companion variables become required with it |
+| `OIDC_ISSUER` | Registre's issuer URL; required when `APP_ENV=production`, with three companion variables |
 
 Full reference: [docs/configuration.md](docs/configuration.md).
 

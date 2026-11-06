@@ -12,6 +12,7 @@
 	import PageHeader from '$lib/components/PageHeader.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import { Badge, Skeleton, Tabs, icons } from '@facile/muse';
+	import { t } from '$lib/i18n/index.svelte';
 
 	let { children } = $props();
 
@@ -39,7 +40,7 @@
 			{
 				id: 'secrets',
 				href: `/projects/${slug}`,
-				label: 'Secrets',
+				label: t('project.tab.secrets'),
 				icon: icons.key,
 				exact: true,
 				visible: true,
@@ -47,7 +48,7 @@
 			{
 				id: 'members',
 				href: `/projects/${slug}/members`,
-				label: 'Members',
+				label: t('project.tab.members'),
 				icon: icons.usersGroup,
 				exact: false,
 				visible: true,
@@ -55,7 +56,7 @@
 			{
 				id: 'tokens',
 				href: `/projects/${slug}/tokens`,
-				label: 'API tokens',
+				label: t('project.tab.tokens'),
 				icon: icons.code,
 				exact: false,
 				visible: canAdmin,
@@ -63,7 +64,7 @@
 			{
 				id: 'audit',
 				href: `/projects/${slug}/audit`,
-				label: 'Audit log',
+				label: t('project.tab.audit'),
 				icon: icons.history,
 				exact: false,
 				visible: true,
@@ -71,7 +72,7 @@
 			{
 				id: 'settings',
 				href: `/projects/${slug}/settings`,
-				label: 'Settings',
+				label: t('project.tab.settings'),
 				icon: icons.settings,
 				exact: false,
 				visible: canAdmin,
@@ -103,7 +104,7 @@
 		try {
 			await Promise.all([reloadProject(), reloadEnvironments()]);
 		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to load project';
+			loadError = err instanceof Error ? err.message : t('project.error.load');
 		} finally {
 			loading = false;
 		}
@@ -154,15 +155,15 @@
 	<PageHeader
 		title={project.name}
 		description={project.description || undefined}
-		back={{ href: '/projects', label: 'All projects' }}
+		back={{ href: '/projects', label: t('nav.allProjects') }}
 	>
 		{#snippet actions()}
 			<Badge tone={project ? (roleTones[project.role] ?? 'neutral') : 'neutral'}>
-				{project?.role}
+				{project ? t(`role.${project.role}`) : ''}
 			</Badge>
 		{/snippet}
 		{#snippet tabs()}
-			<Tabs items={navTabs} value={activeTab} label="Project sections" />
+			<Tabs items={navTabs} value={activeTab} label={t('project.sections')} />
 		{/snippet}
 	</PageHeader>
 

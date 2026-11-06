@@ -10,6 +10,7 @@
 	} from '$lib/backend';
 	import { Button, EmptyState, Tabs, icons } from '@facile/muse';
 	import SecretsSection from '$lib/components/project/SecretsSection.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 
 	type ProjectContext = {
 		readonly project: Project | null;
@@ -71,30 +72,30 @@
 </script>
 
 <svelte:head>
-	<title>{ctx.project?.name ?? 'Project'} — Casier</title>
+	<title>{ctx.project?.name ?? t('project.fallbackName')} — Casier</title>
 </svelte:head>
 
 <div class="flex flex-col gap-6 px-4 py-6 md:px-8">
 	{#if ctx.environments.length === 0}
 		<EmptyState
 			icon={icons.server}
-			title="No environments"
-			description="A project needs at least one environment before it can hold secrets. Environments keep production, staging and local values apart."
+			title={t('env.empty.title')}
+			description={t('env.empty.description')}
 		>
 			{#if ctx.canAdmin}
 				<Button href="/projects/{ctx.slug}/settings" icon={icons.plus}>
-					Create an environment
+					{t('env.create')}
 				</Button>
 			{/if}
 		</EmptyState>
 	{:else}
 		<div class="flex flex-wrap items-center gap-3">
 			<div class="min-w-0 flex-1">
-				<Tabs items={envTabs} bind:value={selectedEnvSlug} label="Environments" />
+				<Tabs items={envTabs} bind:value={selectedEnvSlug} label={t('env.tabs')} />
 			</div>
 			{#if ctx.canAdmin}
 				<Button href="/projects/{ctx.slug}/settings" variant="outline" icon={icons.settings}>
-					Manage environments
+					{t('env.manage')}
 				</Button>
 			{/if}
 		</div>

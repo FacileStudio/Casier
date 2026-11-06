@@ -23,6 +23,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     expose:
       - "4000"
     networks:
@@ -64,13 +66,6 @@ services:
       # sign in here too. Unset, the route is absent and the CLI falls back to
       # its browser flow, so this is additive and safe to leave empty.
       OIDC_CLI_AUDIENCE: ${OIDC_CLI_AUDIENCE:-}
-      SSO_ONLY: ${SSO_ONLY:-false}
-      PUBLIC_URL: ${PUBLIC_URL:-}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM: ${SMTP_FROM:-}
       JOURNAL_URL: ${JOURNAL_URL:-}
       JOURNAL_TOKEN: ${JOURNAL_TOKEN:-}
     depends_on:

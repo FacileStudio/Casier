@@ -1,3 +1,5 @@
+import { locale } from '$lib/i18n/index.svelte';
+
 const GO_ZERO_TIME = '0001-01-01T00:00:00Z';
 
 export function isZeroTime(value: string): boolean {
@@ -6,7 +8,7 @@ export function isZeroTime(value: string): boolean {
 
 export function formatDate(value: string): string {
 	if (isZeroTime(value)) return '—';
-	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value));
+	return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium' }).format(new Date(value));
 }
 
 export function daysSince(value: string): number | null {
@@ -18,7 +20,7 @@ export function daysSince(value: string): number | null {
 
 export function formatDateTime(value: string): string {
 	if (isZeroTime(value)) return '—';
-	return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
+	return new Intl.DateTimeFormat(locale(), { dateStyle: 'medium', timeStyle: 'short' }).format(
 		new Date(value)
 	);
 }

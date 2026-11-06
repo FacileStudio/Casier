@@ -14,22 +14,19 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type AuthConfig } from '$lib/backend';
 	import { displayName } from '$lib/format';
+	import { t } from '$lib/i18n/index.svelte';
 
-	let ssoOnly = $state(false);
 	let oidcEnabled = $state(false);
 	let loggingOut = $state(false);
 
 	const email = $derived(auth.email ?? '');
-	const name = $derived(displayName({ name: auth.name, email }) || 'Account');
-	const signedInWith = $derived(ssoOnly ? 'Single sign-on' : oidcEnabled ? 'Password or SSO' : 'Password');
+	const name = $derived(displayName({ name: auth.name, email }) || t('common.account'));
 
 	onMount(async () => {
 		try {
 			const config = await api.get<AuthConfig>('/auth/config');
-			ssoOnly = config.sso_only;
 			oidcEnabled = config.oidc_enabled;
 		} catch {
-			ssoOnly = false;
 			oidcEnabled = false;
 		}
 	});
@@ -39,7 +36,7 @@
 		try {
 			await api.post('/auth/logout', {});
 		} catch {
-			toast.warning('The server did not confirm the sign-out, ending the session locally anyway.');
+			toast.warning(t('profile.logout.warning'));
 		}
 		auth.logout();
 		await goto('/login');
@@ -47,7 +44,7 @@
 </script>
 
 <svelte:head>
-	<title>Settings — Casier</title>
+	<title>{t('settings.head.profile')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-10">
@@ -56,80 +53,44 @@
 		{email}
 		avatar={auth.avatarUrl || undefined}
 		meta={[
-			{ label: 'Signed in with', value: signedInWith },
-			{ label: 'Interface', value: 'Casier web' },
+			{ label: t('profile.signedInWith'), value: 'Facile' },
+			{ label: t('profile.interface'), value: 'Casier web' },
 		]}
 	/>
 
-	<SettingsSection
-		title="Account"
-		description="An account in Casier is an email address. With single sign-on, your name and picture come from your Facile account."
-	>
+	<SettingsSection title={t('profile.account.title')} description={t('profile.account.description')}>
 		<SettingsRow
-			label="Email"
-			description="Your identity across every project you belong to. Members are invited by this address."
+			label={t('common.email')}
+			description={t('profile.email.description')}
 			for="account-email"
 			stacked
 		>
 			<Input id="account-email" type="email" value={email} disabled />
 		</SettingsRow>
 		{#if oidcEnabled}
-			<SettingsRow
-				label="Name and picture"
-				description="Set them in your Facile account. A change shows here on the next page load."
-			>
+			<SettingsRow label={t('profile.picture.label')} description={t('profile.picture.description')}>
 				<Button variant="outline" href="https://sso.facile.studio/account" target="_blank">
-					Edit in Facile account
+					{t('profile.picture.edit')}
 				</Button>
 			</SettingsRow>
 		{/if}
 	</SettingsSection>
 
-	<SettingsSection
-		title="Authentication"
-		description="How this instance lets you in. It is set by the server, not by you."
-	>
-		{#if ssoOnly}
-			<SettingsRow
-				label="Single sign-on only"
-				description="Passwords are disabled on this instance. Your identity provider owns your credentials — change them there."
-			>
-				<Badge tone="info">Managed by your identity provider</Badge>
-			</SettingsRow>
-		{:else}
-			<SettingsRow
-				label="Password"
-				description="Casier never shows a password back to you, so a change goes through the reset email like any other."
-			>
-				<Button variant="outline" href="/forgot-password" icon={icons.mail}>Reset password</Button>
-			</SettingsRow>
-
-			{#if oidcEnabled}
-				<SettingsRow
-					label="Single sign-on"
-					description="This instance also accepts SSO. Signing in that way links to the same account as long as the email matches."
-				>
-					<Badge tone="neutral">Available at sign-in</Badge>
-				</SettingsRow>
-			{/if}
-		{/if}
+	<SettingsSection title={t('profile.auth.title')} description={t('profile.auth.description')}>
+		<SettingsRow label={t('profile.auth.label')} description={t('profile.auth.rowDescription')}>
+			<Badge tone="info">{t('profile.auth.badge')}</Badge>
+		</SettingsRow>
 	</SettingsSection>
 
-	<SettingsSection
-		title="Session"
-		description="Sessions are per browser. Signing out here leaves your other devices alone."
-	>
-		<SettingsRow
-			label="Log out"
-			description="Ends this session and returns you to the sign-in page. API tokens keep working — revoke those from the project that owns them."
-		>
+	<SettingsSection title={t('profile.session.title')} description={t('profile.session.description')}>
+		<SettingsRow label={t('profile.logout.label')} description={t('profile.logout.description')}>
 			<Button
 				variant="outline"
 				icon={icons.logout}
 				disabled={loggingOut}
 				onclick={handleLogout}
 			>
-				{loggingOut ? 'Signing out…' : 'Log out'}
+				{loggingOut ? t('profile.logout.busy') : t('profile.logout.label')}
 			</Button>
 		</SettingsRow>
 	</SettingsSection>

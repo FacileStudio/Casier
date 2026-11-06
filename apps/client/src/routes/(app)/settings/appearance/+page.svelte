@@ -1,46 +1,41 @@
 <script lang="ts">
 	import { OptionCards, SettingsRow, SettingsSection, StatusDot, icons } from '@facile/muse';
+	import { t } from '$lib/i18n/index.svelte';
 	import { theme, type ThemePreference } from '$lib/theme.svelte';
 
-	const modes = [
-		{ value: 'system', label: 'System', icon: icons.monitor },
-		{ value: 'light', label: 'Light', icon: icons.sun },
-		{ value: 'dark', label: 'Dark', icon: icons.moon },
-	];
+	const modes = $derived([
+		{ value: 'system', label: t('appearance.mode.system'), icon: icons.monitor },
+		{ value: 'light', label: t('appearance.mode.light'), icon: icons.sun },
+		{ value: 'dark', label: t('appearance.mode.dark'), icon: icons.moon },
+	]);
 
 	let mode = $state<string>(theme.preference);
 </script>
 
 <svelte:head>
-	<title>Appearance — Casier</title>
+	<title>{t('settings.head.appearance')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-10">
-	<SettingsSection
-		title="Theme"
-		description="Stored in this browser. Every device you sign in from keeps its own choice."
-	>
+	<SettingsSection title={t('appearance.theme.title')} description={t('appearance.theme.description')}>
 		<SettingsRow
-			label="Colour scheme"
-			description="System follows your operating system and keeps following it while the app is open."
+			label={t('appearance.scheme.label')}
+			description={t('appearance.scheme.description')}
 			stacked
 		>
 			<OptionCards
 				options={modes}
 				bind:value={mode}
 				name="theme-mode"
-				label="Colour scheme"
+				label={t('appearance.scheme.label')}
 				onSelect={(next) => theme.set(next as ThemePreference)}
 			/>
 		</SettingsRow>
 
-		<SettingsRow
-			label="Showing now"
-			description="What the two-token palette resolves to right now — chroma-zero either way."
-		>
+		<SettingsRow label={t('appearance.now.label')} description={t('appearance.now.description')}>
 			<StatusDot
 				tone="neutral"
-				label={theme.resolved === 'dark' ? 'Dark' : 'Light'}
+				label={theme.resolved === 'dark' ? t('appearance.mode.dark') : t('appearance.mode.light')}
 			/>
 		</SettingsRow>
 	</SettingsSection>

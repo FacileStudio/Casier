@@ -44,34 +44,30 @@ the 2026-08-04 rename.
 | Method | Path | Auth |
 |---|---|---|
 | GET | `/api/auth/config` | public |
-| POST | `/api/auth/register` | public |
-| POST | `/api/auth/login` | public |
-| POST | `/api/auth/forgot-password` | public |
-| POST | `/api/auth/reset-password` | public |
 | POST | `/api/auth/logout` | session |
 | GET | `/api/auth/me` | session |
 | GET | `/api/auth/oidc` | public |
 | GET | `/api/auth/oidc/callback` | public |
 | POST | `/api/auth/cli` | public |
 | POST | `/api/auth/sync-profile` | session |
+| POST | `/api/registre/deletions` | signed Registre notice |
 
-`GET /api/auth/config` returns `{"sso_only","oidc_enabled","password_reset_enabled"}`.
-`password_reset_enabled` is true only when passwords are on *and* a mailer is configured, so
-the login screen never offers a reset that cannot be delivered.
+`GET /api/auth/config` returns `{"sso_only","oidc_enabled"}`; `sso_only` is always `true`.
 
-The five password routes are **not registered at all** when `SSO_ONLY=true` — they answer
-`404` rather than a policy error. The four OIDC routes are registered only when
-`OIDC_ISSUER` is set and provider discovery succeeded at startup; a discovery failure is
-logged and leaves them unregistered.
+There are no password routes: `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`
+and `/api/auth/reset-password` answer `404`. People sign in through Registre
+(`/api/auth/oidc`); the CLI and CI use `casier_` API tokens or the CLI exchange. `GET
+/api/auth/me` also returns the person's `locale` (`fr`, `en`, `es` or `de`).
 
-Register and login set the `casier_session` cookie alongside returning the token, so the
-dashboard never touches `localStorage`. Logout clears it and answers `204`.
+`POST /api/registre/deletions` is Registre's signed `user.deleted` push. It sits outside the
+session middleware and the handler verifies the notice itself. Casier also polls Registre for
+deletions with its own OIDC client credentials, so a missed push is harmless.
+
+Logout clears the `casier_session` cookie and answers `204`.
 
 `POST /api/auth/cli` exchanges an OIDC ID token for a session token. Unlike the browser
 callback it does **not** auto-provision an unknown user.
 
-Register, login, forgot-password, reset-password, and the CLI exchange are rate limited to 5
-requests per minute per IP by a token-bucket limiter.
 
 ## Projects
 

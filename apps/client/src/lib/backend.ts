@@ -105,10 +105,8 @@ export type AuthConfig = {
 	oidc_enabled: boolean;
 };
 
-export type AuthResponse = {
-	user_id: string;
-	token: string;
-};
+/** The author name the API stores on rows written by someone whose account was erased. */
+export const DELETED_USER = 'Deleted user';
 
 export type Person = {
 	email: string;
@@ -116,7 +114,7 @@ export type Person = {
 	avatar_url: string;
 };
 
-export type Me = Person & { id: string };
+export type Me = Person & { id: string; locale: string };
 
 export type ProjectRole = 'owner' | 'admin' | 'member' | 'viewer';
 

@@ -65,15 +65,20 @@ Everything arrives as `Authorization: Bearer <token>`, and `middleware.RequireAu
 back to the `casier_session` cookie when the header is absent, which is what lets the
 same-origin dashboard work without touching `localStorage`.
 
-**Sessions** are issued by `/api/auth/register` and `/api/auth/login`, stored SHA-256-hashed,
+**Sessions** are issued by the Registre OIDC callback and by the CLI exchange, stored SHA-256-hashed,
 and carry both a 24-hour sliding window and a 7-day hard ceiling — an active session refreshes,
 but never outlives a week. A cleanup goroutine prunes expired rows.
 
-**Password reset** is only offered when the mailer is configured. Tokens are stored as a
-SHA-256 digest, are single use, and live 30 minutes. Without `SMTP_HOST`,
-`/api/auth/forgot-password` refuses rather than pretending the mail went out.
+**There is no password sign-in.** An existing local account links to its Facile identity by
+verified email on the first sign-in, and only when it holds no other subject of the same
+issuer. API tokens (`casier_` prefix) authenticate on their own, with no session.
 
-**OIDC** is enabled by `OIDC_ISSUER` and federates to Authentik at `porte.facile.studio`.
+**Deletions.** Registre tells Casier when a person is erased (a signed push plus a poll,
+state in `directory_deletion_state`). Their personal projects, tokens and account go; a
+project other members use keeps its secrets, with authorship anonymised ("Deleted user") and
+a new owner when the person was the last one.
+
+**OIDC** is enabled by `OIDC_ISSUER` and federates to Registre.
 Alongside the browser flow, `POST /api/auth/cli` exchanges an OIDC ID token for a session
 token — and unlike the browser callback it does **not** auto-provision an unknown user.
 User OIDC access and refresh tokens are themselves stored encrypted on the user row.
@@ -122,9 +127,9 @@ and drops the old column.
 
 | Table | What it holds |
 |---|---|
-| `users` | Email, name, `password_hash`, encrypted OIDC tokens, `profile_synced_at` |
+| `users` | Email, name, avatar URL, `locale` (from the OIDC `locale` claim) |
 | `sessions` | Token hash as primary key, `user_id`, `expires_at` |
-| `password_resets` | `token_hash` primary key, `used`, `expires_at` |
+| `directory_deletion_state` | One row: the deletion poll's cursor and handled subjects |
 | `projects` | Name, unique `slug`, `encrypted_data_key`, `data_key_nonce`, `rotation_days` |
 | `project_members` | Role per user, unique on `(project_id, user_id)` |
 | `environments` | Name, slug unique per project, `position`, `protected` (see the fourth authorization layer) |

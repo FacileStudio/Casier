@@ -13,6 +13,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import {
 		api,
+		DELETED_USER,
 		type AuditLogEntry,
 		type AuditLogsResponse,
 		type Environment,
@@ -21,6 +22,7 @@
 	import { formatDateTime } from '$lib/format';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import PersonLabel from '$lib/components/PersonLabel.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 
 	type ProjectContext = {
 		readonly project: Project | null;
@@ -56,7 +58,7 @@
 			);
 			logs = res.logs ?? [];
 		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to load audit log';
+			loadError = err instanceof Error ? err.message : t('audit.error.load');
 		} finally {
 			loading = false;
 		}
@@ -69,18 +71,18 @@
 </script>
 
 <svelte:head>
-	<title>Audit log — {ctx.project?.name ?? 'Project'} — Casier</title>
+	<title>{t('audit.head', { project: ctx.project?.name ?? t('project.fallbackName') })}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-10 px-4 py-6 md:px-8">
 	<SettingsSection
-		title="Audit log"
-		description="Every change to a secret, a member, a token or a setting, newest first. Revealing a value is recorded too — reading a secret is an event, not a free action."
+		title={t('project.tab.audit')}
+		description={t('audit.description')}
 		bare
 	>
 		{#snippet actions()}
 			<Button variant="outline" icon={icons.refresh} disabled={loading} onclick={loadLogs}>
-				Refresh
+				{t('common.refresh')}
 			</Button>
 		{/snippet}
 
@@ -95,18 +97,18 @@
 		{:else if logs.length === 0}
 			<EmptyState
 				icon={icons.history}
-				title="No activity yet"
-				description="Changes to secrets, members and settings will show up here."
+				title={t('audit.empty.title')}
+				description={t('audit.empty.description')}
 			/>
 		{:else}
 			<Table>
 				<thead>
 					<tr>
-						<th>When</th>
-						<th>Who</th>
-						<th>Action</th>
-						<th>Resource</th>
-						<th>Detail</th>
+						<th>{t('audit.col.when')}</th>
+						<th>{t('audit.col.who')}</th>
+						<th>{t('audit.col.action')}</th>
+						<th>{t('audit.col.resource')}</th>
+						<th>{t('audit.col.detail')}</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -114,7 +116,7 @@
 						<tr>
 							<td class="whitespace-nowrap text-fc-fg-muted">{formatDateTime(log.created_at)}</td>
 							<td class="max-w-48 whitespace-nowrap">
-								<PersonLabel person={log.actor} fallback={log.user_email || '—'} />
+								<PersonLabel person={log.actor} fallback={log.user_email && log.user_email !== DELETED_USER ? log.user_email : undefined} />
 							</td>
 							<td><Badge tone={actionTone(log.action)}>{log.action}</Badge></td>
 							<td class="font-fc-mono text-fc-xs text-fc-fg-muted">{log.resource || '—'}</td>
@@ -125,7 +127,7 @@
 					{/each}
 				</tbody>
 			</Table>
-			<p class="text-fc-xs text-fc-fg-muted">Showing the 50 most recent events.</p>
+			<p class="text-fc-xs text-fc-fg-muted">{t('audit.limit')}</p>
 		{/if}
 	</SettingsSection>
 </div>

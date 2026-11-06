@@ -29,6 +29,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import { displayName } from '$lib/format';
 	import Drawer from '$lib/components/Drawer.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 
 	type ProjectContext = {
@@ -50,12 +51,6 @@
 		viewer: 'neutral',
 	};
 
-	const roleDescriptions: Record<ProjectRole, string> = {
-		owner: 'Everything, including deleting the project',
-		admin: 'Members, tokens, environments and secrets',
-		member: 'Reads and writes secrets',
-		viewer: 'Reads secrets, changes nothing',
-	};
 
 	let members = $state<Member[]>([]);
 	let loading = $state(true);
@@ -77,7 +72,7 @@
 			const res = await api.get<MembersResponse>(`/projects/${ctx.slug}/members`);
 			members = res.members ?? [];
 		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to load members';
+			loadError = err instanceof Error ? err.message : t('members.error.load');
 		} finally {
 			loading = false;
 		}
@@ -99,10 +94,10 @@
 				{ email: newEmail.trim(), role: newRole },
 			);
 			addOpen = false;
-			toast.success(`${newEmail.trim()} added as ${newRole}`);
+			toast.success(t('members.added', { email: newEmail.trim(), role: t(`role.${newRole as ProjectRole}`) }));
 			await loadMembers();
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to add member');
+			toast.danger(err instanceof Error ? err.message : t('members.error.add'));
 		} finally {
 			adding = false;
 		}
@@ -119,11 +114,11 @@
 		try {
 			await api.del(`/projects/${ctx.slug}/members/${removeTarget.id}`);
 			members = members.filter((member) => member.id !== removeTarget?.id);
-			toast.success(`${removeTarget.email} removed`);
+			toast.success(t('members.removed', { email: removeTarget.email }));
 			removeOpen = false;
 			removeTarget = null;
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to remove member');
+			toast.danger(err instanceof Error ? err.message : t('members.error.remove'));
 		} finally {
 			removing = false;
 		}
@@ -136,18 +131,18 @@
 </script>
 
 <svelte:head>
-	<title>Members — {ctx.project?.name ?? 'Project'} — Casier</title>
+	<title>{t('members.head', { project: ctx.project?.name ?? t('project.fallbackName') })}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-10 px-4 py-6 md:px-8">
 	<SettingsSection
-		title="Members"
-		description="Everyone who can reach this project's secrets. A role is set when the member is added and applies to every environment."
+		title={t('members.title')}
+		description={t('members.description')}
 		bare
 	>
 		{#snippet actions()}
 			{#if ctx.canAdmin}
-				<Button icon={icons.plus} onclick={openAdd}>Add member</Button>
+				<Button icon={icons.plus} onclick={openAdd}>{t('members.add')}</Button>
 			{/if}
 		{/snippet}
 
@@ -162,20 +157,20 @@
 		{:else if members.length === 0}
 			<EmptyState
 				icon={icons.usersGroup}
-				title="No members yet"
-				description="Add a teammate to share this project's secrets with them."
+				title={t('members.empty.title')}
+				description={t('members.empty.description')}
 			>
 				{#if ctx.canAdmin}
-					<Button icon={icons.plus} onclick={openAdd}>Add member</Button>
+					<Button icon={icons.plus} onclick={openAdd}>{t('members.add')}</Button>
 				{/if}
 			</EmptyState>
 		{:else}
 			<Table>
 				<thead>
 					<tr>
-						<th>Person</th>
-						<th>Role</th>
-						<th class="w-1 text-right" aria-label="Actions"></th>
+						<th>{t('members.col.person')}</th>
+						<th>{t('members.col.role')}</th>
+						<th class="w-1 text-right" aria-label={t('common.actions')}></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -187,16 +182,16 @@
 									<div class="flex min-w-0 flex-col">
 										<span class="truncate font-medium text-fc-fg">{displayName(member)}</span>
 										<span class="truncate text-fc-xs text-fc-fg-muted">
-											{member.email}{member.email === auth.email ? ' · This is you' : ''}
+											{member.email}{member.email === auth.email ? ` · ${t('members.you')}` : ''}
 										</span>
 									</div>
 								</div>
 							</td>
 							<td>
 								<div class="flex min-w-0 flex-col gap-1">
-									<Badge tone={roleTones[member.role] ?? 'neutral'}>{member.role}</Badge>
+									<Badge tone={roleTones[member.role] ?? 'neutral'}>{t(`role.${member.role}`)}</Badge>
 									<span class="text-fc-xs text-fc-fg-muted">
-										{roleDescriptions[member.role] ?? ''}
+										{t(`members.role.${member.role}`)}
 									</span>
 								</div>
 							</td>
@@ -205,7 +200,7 @@
 									{#if ctx.canAdmin && member.email !== auth.email && member.role !== 'owner'}
 										<IconButton
 											variant="danger"
-											aria-label={`Remove ${member.email}`}
+											aria-label={t('members.remove.aria', { email: member.email })}
 											onclick={() => openRemove(member)}
 										>
 											<iconify-icon icon={icons.remove} width="18" aria-hidden="true"
@@ -222,9 +217,9 @@
 	</SettingsSection>
 </div>
 
-<Drawer bind:open={addOpen} title="Add member">
+<Drawer bind:open={addOpen} title={t('members.add')}>
 	<form onsubmit={handleAdd} class="flex flex-col gap-4">
-		<Field label="Email" helper="Must already be a Casier account on this instance.">
+		<Field label={t('common.email')} helper={t('members.emailHelper')}>
 			<Input
 				type="email"
 				placeholder="teammate@example.com"
@@ -233,11 +228,11 @@
 				disabled={adding}
 			/>
 		</Field>
-		<Field label="Role" helper="A role can only be changed by removing and re-adding the member.">
+		<Field label={t('members.col.role')} helper={t('members.roleHelper')}>
 			<Select bind:value={newRole} disabled={adding}>
-				<option value="admin">Admin — manage members, tokens and environments</option>
-				<option value="member">Member — read and write secrets</option>
-				<option value="viewer">Viewer — read-only</option>
+				<option value="admin">{t('members.option.admin')}</option>
+				<option value="member">{t('members.option.member')}</option>
+				<option value="viewer">{t('members.option.viewer')}</option>
 			</Select>
 		</Field>
 		<div class="flex justify-end gap-2 pt-1">
@@ -248,11 +243,11 @@
 				disabled={adding}
 				onclick={() => (addOpen = false)}
 			>
-				Cancel
+				{t('common.cancel')}
 			</Button>
 			<Button type="submit" size="lg" disabled={adding || !newEmail.trim()}>
-				{#if adding}<Spinner label="Loading" size="sm" class="border-current border-t-transparent" />{/if}
-				{adding ? 'Adding…' : 'Add member'}
+				{#if adding}<Spinner label={t('common.loading')} size="sm" class="border-current border-t-transparent" />{/if}
+				{adding ? t('common.adding') : t('members.add')}
 			</Button>
 		</div>
 	</form>
@@ -260,9 +255,9 @@
 
 <ConfirmDialog
 	bind:open={removeOpen}
-	title="Remove member"
-	message={`This removes ${removeTarget?.email ?? ''} from the project. They immediately lose access to every secret in every environment, and any session they have open stops working.`}
-	confirmLabel="Remove member"
+	title={t('members.remove.title')}
+	message={t('members.remove.message', { email: removeTarget?.email ?? '' })}
+	confirmLabel={t('members.remove.title')}
 	loading={removing}
 	onconfirm={handleRemove}
 />

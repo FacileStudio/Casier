@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+### Changed
+
+- feat!: people sign in through Registre only. The login page is muse `AuthScreen`; the landing page uses `LandingHeader`, `LandingFooter` and `SignInWithFacile`
+- build(api): bump porte to v0.12.0, add porte/directory v0.3.0, bump tronc to v0.17.1
+- build(client): bump muse to v0.12.1; `provideLocale` follows the `locale` claim stored on the account
+- feat(client): every screen is available in fr, en, es and de (es and de are machine translations and need native review); dates and numbers use `Intl` in the session locale
+- feat(api): tronc's security headers are on (anti-framing enforced, the full CSP report-only), with the iconify script, the plan catalog and the icon API allowed
+- feat(api): `OIDC_ISSUER` is required when `APP_ENV=production`
+- OIDC account linking follows porte's rules: an existing account links only by verified email, and only when it holds no other identity of the same issuer
+- ci: `ci.yml` runs gofmt, vet, build and tests against Postgres, the client check, message test and build, and filet (replaces `filet.yml`)
+
+### Removed
+
+- `POST /api/auth/register`, `/login`, `/forgot-password` and `/reset-password`, the register, forgot-password and reset-password pages, and the password form on the login page
+- `SSO_ONLY`, `PUBLIC_URL` and the `SMTP_*` settings, the mailer, and the `password_resets` table
+- API tokens (`casier_` prefix) and the CLI sign-in are untouched
+
+### Added
+
+- feat(api): GDPR deletion. Registre's `user.deleted` notice (signed push on `/api/registre/deletions` plus a poll) erases the person's personal projects, tokens, invites and account; projects other members use keep their secrets, authorship becomes "Deleted user", and the longest-standing admin or member becomes owner when the person was the last owner
+- feat(api): `GET /version`, set at build time with the `APP_VERSION` build arg
+- feat(api): `users.locale`, returned by `GET /api/auth/me`
+- migration `00003_launch.sql`: `porte_login_codes.provider` and `.subject`, `users.locale`, `directory_deletion_state`, and the drop of `password_resets`
+
 ## [0.3.0] - 2026-11-06
 
 ### Added
