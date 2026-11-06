@@ -4,6 +4,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type Project, type ProjectRole, type ProjectsResponse } from '$lib/backend';
 	import { formatDate } from '$lib/format';
+	import { t } from '$lib/i18n/index.svelte';
 	import {
 		Badge,
 		Button,
@@ -40,9 +41,7 @@
 	let creating = $state(false);
 
 	let nameError = $derived(
-		createName.length > 0 && createName.trim().length < 2
-			? 'Name must be at least 2 characters'
-			: undefined
+		createName.length > 0 && createName.trim().length < 2 ? t('projects.nameTooShort') : undefined
 	);
 
 	async function loadProjects() {
@@ -52,7 +51,7 @@
 			const res = await api.get<ProjectsResponse>('/projects');
 			projects = (res.projects ?? []).toSorted((a, b) => a.name.localeCompare(b.name));
 		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to load projects';
+			loadError = err instanceof Error ? err.message : t('projects.error.load');
 		} finally {
 			loading = false;
 		}
@@ -74,11 +73,11 @@
 				{ name: createName.trim(), description: createDescription.trim() },
 			);
 			createOpen = false;
-			toast.success(`Project "${project.name}" created`);
+			toast.success(t('projects.created', { name: project.name }));
 			await app.refreshProjects();
 			goto(`/projects/${project.slug}`);
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to create project');
+			toast.danger(err instanceof Error ? err.message : t('projects.error.create'));
 		} finally {
 			creating = false;
 		}
@@ -90,16 +89,16 @@
 </script>
 
 <svelte:head>
-	<title>Projects — Casier</title>
+	<title>{t('projects.head')}</title>
 </svelte:head>
 
 {#snippet newProjectButton()}
-	<Button icon={icons.plus} onclick={openCreate}>New project</Button>
+	<Button icon={icons.plus} onclick={openCreate}>{t('projects.new')}</Button>
 {/snippet}
 
 <PageHeader
-	title="Projects"
-	description="Every project has its own encryption key and its own environments."
+	title={t('nav.projects')}
+	description={t('projects.description')}
 	actions={newProjectButton}
 />
 
@@ -115,8 +114,8 @@
 	{:else if projects.length === 0}
 		<EmptyState
 			icon={icons.folder}
-			title="No projects yet"
-			description="A project groups the secrets for one app or service, across all of its environments."
+			title={t('projects.empty.title')}
+			description={t('projects.empty.description')}
 		>
 			{@render newProjectButton()}
 		</EmptyState>
@@ -134,13 +133,13 @@
 							</span>
 							<span class="truncate text-fc-sm font-medium text-fc-fg">{project.name}</span>
 						</div>
-						<Badge tone={roleTones[project.role] ?? 'neutral'}>{project.role}</Badge>
+						<Badge tone={roleTones[project.role] ?? 'neutral'}>{t(`role.${project.role}`)}</Badge>
 					</div>
 					<p class="line-clamp-2 text-fc-sm text-fc-fg-muted">
-						{project.description || 'No description'}
+						{project.description || t('projects.noDescription')}
 					</p>
 					<div class="mt-auto flex items-center gap-2 text-fc-xs text-fc-fg-muted">
-						<span class="truncate">Updated {formatDate(project.updated_at)}</span>
+						<span class="truncate">{t('projects.updated', { date: formatDate(project.updated_at) })}</span>
 						<iconify-icon
 							icon={icons.arrow}
 							width="16"
@@ -154,15 +153,15 @@
 	{/if}
 </div>
 
-<Drawer bind:open={createOpen} title="New project">
+<Drawer bind:open={createOpen} title={t('projects.new')}>
 	<form onsubmit={handleCreate} class="flex flex-col gap-4">
-		<Field label="Name" error={nameError}>
+		<Field label={t('common.name')} error={nameError}>
 			<Input placeholder="my-project" bind:value={createName} required disabled={creating} />
 		</Field>
-		<Field label="Description" helper="Optional">
+		<Field label={t('projects.description.label')} helper={t('common.optional')}>
 			<Textarea
 				rows={2}
-				placeholder="What lives in this project?"
+				placeholder={t('projects.description.placeholder')}
 				bind:value={createDescription}
 				disabled={creating}
 			/>
@@ -175,7 +174,7 @@
 				disabled={creating}
 				onclick={() => (createOpen = false)}
 			>
-				Cancel
+				{t('common.cancel')}
 			</Button>
 			<Button
 				type="submit"
@@ -183,8 +182,8 @@
 				class="w-full sm:w-auto"
 				disabled={creating || createName.trim().length < 2 || Boolean(nameError)}
 			>
-				{#if creating}<Spinner label="Loading" size="sm" />{/if}
-				{creating ? 'Creating…' : 'Create'}
+				{#if creating}<Spinner label={t('common.loading')} size="sm" />{/if}
+				{creating ? t('common.creating') : t('common.create')}
 			</Button>
 		</div>
 	</form>

@@ -15,6 +15,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type Environment, type Project } from '$lib/backend';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 
 	type ProjectContext = {
 		readonly project: Project | null;
@@ -57,17 +58,15 @@
 	);
 
 	let rotationError = $derived(
-		Number.isInteger(rotation) && rotation >= 0 && rotation <= 3650
-			? ''
-			: 'Use a whole number of days between 0 and 3650'
+		Number.isInteger(rotation) && rotation >= 0 && rotation <= 3650 ? '' : t('psettings.rotation.invalid')
 	);
 
 	let rotationDescription = $derived(
 		rotationError
 			? rotationError
 			: rotation === 0
-				? 'Rotation reminders are off. Secrets are never flagged as stale.'
-				: `Secrets whose value has not changed in ${rotation} days are flagged for rotation in every environment of this project.`
+				? t('psettings.rotation.off')
+				: t('psettings.rotation.on', { days: rotation })
 	);
 
 	let canSave = $derived(dirty && name.trim().length >= 2 && !rotationError && !saving);
@@ -99,7 +98,7 @@
 					rotation_days: rotation,
 				},
 			);
-			toast.success('Project updated');
+			toast.success(t('psettings.updated'));
 			await app?.refreshProjects();
 			if (updated.slug && updated.slug !== ctx.slug) {
 				await goto(`/projects/${updated.slug}/settings`, { replaceState: true });
@@ -107,7 +106,7 @@
 				await ctx.reloadProject();
 			}
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to update project');
+			toast.danger(err instanceof Error ? err.message : t('psettings.error.update'));
 		} finally {
 			saving = false;
 		}
@@ -124,9 +123,9 @@
 			);
 			newEnvName = '';
 			await ctx.reloadEnvironments();
-			toast.success(`Environment "${env.name}" created`);
+			toast.success(t('psettings.env.created', { name: env.name }));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to create environment');
+			toast.danger(err instanceof Error ? err.message : t('psettings.error.createEnv'));
 		} finally {
 			addingEnv = false;
 		}
@@ -142,11 +141,11 @@
 			await ctx.reloadEnvironments();
 			toast.success(
 				env.protected
-					? `"${env.name}" is no longer protected`
-					: `"${env.name}" now requires owner or admin to write`
+					? t('psettings.env.unprotected', { name: env.name })
+					: t('psettings.env.nowProtected', { name: env.name })
 			);
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to change protection');
+			toast.danger(err instanceof Error ? err.message : t('psettings.error.protect'));
 		} finally {
 			togglingEnvSlug = null;
 		}
@@ -166,9 +165,9 @@
 			deleteEnvOpen = false;
 			envToDelete = null;
 			await ctx.reloadEnvironments();
-			toast.success(`Environment "${env.name}" deleted`);
+			toast.success(t('psettings.env.deleted', { name: env.name }));
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to delete environment');
+			toast.danger(err instanceof Error ? err.message : t('psettings.error.deleteEnv'));
 		} finally {
 			deletingEnv = false;
 		}
@@ -180,30 +179,30 @@
 		deletingProject = true;
 		try {
 			await api.del(`/projects/${ctx.slug}`);
-			toast.success(`Project "${project.name}" deleted`);
+			toast.success(t('psettings.delete.deleted', { name: project.name }));
 			await app?.refreshProjects();
 			await goto('/projects');
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to delete project');
+			toast.danger(err instanceof Error ? err.message : t('psettings.error.deleteProject'));
 			deletingProject = false;
 		}
 	}
 </script>
 
 <svelte:head>
-	<title>Settings — {ctx.project?.name ?? 'Project'} — Casier</title>
+	<title>{t('psettings.head', { project: ctx.project?.name ?? t('project.fallbackName') })}</title>
 </svelte:head>
 
 {#if ctx.canAdmin}
 	<div class="mx-auto flex w-full max-w-fc-lg flex-col gap-10 px-4 py-6 md:px-8">
 		<form onsubmit={handleSave}>
 			<SettingsSection
-				title="General"
-				description="How this project is named and how long a secret may sit unchanged before Casier flags it."
+				title={t('psettings.general.title')}
+				description={t('psettings.general.description')}
 			>
 				<SettingsRow
-					label="Name"
-					description="Renaming a project rewrites its slug, and every URL that names it moves with it."
+					label={t('common.name')}
+					description={t('psettings.name.description')}
 					for="project-name"
 					stacked
 				>
@@ -211,8 +210,8 @@
 				</SettingsRow>
 
 				<SettingsRow
-					label="Description"
-					description="What lives in this project. Shown on the project list."
+					label={t('projects.description.label')}
+					description={t('psettings.description.description')}
 					for="project-description"
 					stacked
 				>
@@ -221,11 +220,15 @@
 						rows={3}
 						bind:value={description}
 						disabled={saving}
-						placeholder="What lives in this project?"
+						placeholder={t('projects.description.placeholder')}
 					/>
 				</SettingsRow>
 
-				<SettingsRow label="Rotation reminder" description={rotationDescription} for="project-rotation">
+				<SettingsRow
+					label={t('psettings.rotation.label')}
+					description={rotationDescription}
+					for="project-rotation"
+				>
 					<div class="flex items-center gap-2">
 						<Input
 							id="project-rotation"
@@ -238,39 +241,39 @@
 							aria-invalid={rotationError ? 'true' : undefined}
 							class="w-28"
 						/>
-						<span class="text-fc-sm text-fc-fg-muted">days</span>
+						<span class="text-fc-sm text-fc-fg-muted">{t('psettings.rotation.days')}</span>
 					</div>
 				</SettingsRow>
 
 				<SettingsRow
-					label="Save"
-					description={dirty ? 'You have unsaved changes.' : 'Nothing has changed yet.'}
+					label={t('common.save')}
+					description={dirty ? t('psettings.save.dirty') : t('psettings.save.clean')}
 				>
 					<Button type="submit" disabled={!canSave}>
-						{saving ? 'Saving…' : 'Save changes'}
+						{saving ? t('common.saving') : t('psettings.save.button')}
 					</Button>
 				</SettingsRow>
 			</SettingsSection>
 		</form>
 
 		<SettingsSection
-			title="Environments"
-			description="Each environment holds its own copy of every secret. A protected one takes owner or admin to write to."
+			title={t('psettings.envs.title')}
+			description={t('psettings.envs.description')}
 		>
 			{#each ctx.environments as env (env.id)}
 				<SettingsRow label={env.name} description={env.slug}>
 					<div class="flex shrink-0 items-center gap-1">
 							{#if env.protected}
-								<Badge tone="info">Protected</Badge>
+								<Badge tone="info">{t('psettings.env.protected')}</Badge>
 							{/if}
 							<IconButton
 								variant="ghost"
 								aria-label={env.protected
-									? `Remove protection from ${env.name}`
-									: `Protect ${env.name}`}
+									? t('psettings.env.unprotectAria', { name: env.name })
+									: t('psettings.env.protectAria', { name: env.name })}
 								title={env.protected
-									? 'Allow any member to write here'
-									: 'Require owner or admin to write here'}
+									? t('psettings.env.unprotectTitle')
+									: t('psettings.env.protectTitle')}
 								disabled={togglingEnvSlug === env.slug}
 								onclick={() => toggleEnvProtection(env)}
 							>
@@ -284,10 +287,10 @@
 							</IconButton>
 							<IconButton
 								variant="danger"
-								aria-label={`Delete environment ${env.name}`}
+								aria-label={t('psettings.env.deleteAria', { name: env.name })}
 								title={ctx.environments.length <= 1
-									? 'A project keeps at least one environment'
-									: `Delete ${env.name}`}
+									? t('psettings.env.keepOne')
+									: t('psettings.env.deleteTitle', { name: env.name })}
 								disabled={ctx.environments.length <= 1}
 								onclick={() => askDeleteEnv(env)}
 							>
@@ -298,8 +301,8 @@
 			{/each}
 
 			<SettingsRow
-				label="Add an environment"
-				description="The slug is derived from the name and is what the CLI and every token scope refer to."
+				label={t('psettings.env.add.label')}
+				description={t('psettings.env.add.description')}
 				for="new-environment"
 				stacked
 			>
@@ -318,22 +321,22 @@
 						disabled={addingEnv || !newEnvName.trim()}
 						class="sm:shrink-0"
 					>
-						{addingEnv ? 'Adding…' : 'Add'}
+						{addingEnv ? t('common.adding') : t('common.add')}
 					</Button>
 				</form>
 			</SettingsRow>
 		</SettingsSection>
 
 		<SettingsSection
-			title="Danger zone"
-			description="Irreversible, and nobody can undo it for you."
+			title={t('psettings.danger.title')}
+			description={t('psettings.danger.description')}
 		>
 			<SettingsRow
-				label="Delete this project"
-				description={`Erases every environment, every secret value and version, every member and every API token ${ctx.project?.name ?? 'this project'} holds. Anything reading from it breaks immediately. There is no backup and no undo.`}
+				label={t('psettings.delete.label')}
+				description={t('psettings.delete.description', { name: ctx.project?.name ?? '' })}
 			>
 				<Button variant="danger" icon={icons.remove} onclick={() => (deleteProjectOpen = true)}>
-					Delete project
+					{t('psettings.delete.button')}
 				</Button>
 			</SettingsRow>
 		</SettingsSection>
@@ -341,18 +344,18 @@
 
 	<ConfirmDialog
 		bind:open={deleteEnvOpen}
-		title="Delete environment"
-		message={`Deleting "${envToDelete?.name ?? ''}" destroys every secret stored in it, including all past versions, and every API token scope that named it. Other environments in this project are untouched. This cannot be undone.`}
-		confirmLabel="Delete environment"
+		title={t('psettings.env.deleteDialog')}
+		message={t('psettings.env.deleteMessage', { name: envToDelete?.name ?? '' })}
+		confirmLabel={t('psettings.env.deleteDialog')}
 		loading={deletingEnv}
 		onconfirm={handleDeleteEnv}
 	/>
 
 	<ConfirmDialog
 		bind:open={deleteProjectOpen}
-		title="Delete project"
-		message={`Deleting "${ctx.project?.name ?? ''}" permanently destroys all of its environments, secrets, members and API tokens. Anything reading these secrets will stop working. This cannot be undone.`}
-		confirmLabel="Delete project"
+		title={t('psettings.delete.button')}
+		message={t('psettings.delete.message', { name: ctx.project?.name ?? '' })}
+		confirmLabel={t('psettings.delete.button')}
 		loading={deletingProject}
 		onconfirm={handleDeleteProject}
 	/>

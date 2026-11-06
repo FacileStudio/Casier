@@ -17,7 +17,6 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/database"
 	documentation "github.com/FacileStudio/Casier/apps/api/internal/documentation"
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
-	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/migrations"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
@@ -26,7 +25,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 
 	"github.com/FacileStudio/Journal/sdk/journal"
-	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
@@ -67,52 +66,61 @@ func refConfig() apiref.Config {
 	}
 }
 
-func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *slog.Logger) (*session.Manager, *local.Kit, *oidc.Kit, error) {
+func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *slog.Logger) (*session.Manager, *oidc.Kit, error) {
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	store := portepg.New(sqlDB)
 	cfg := appEnv.Porte()
 
 	sessions, err := session.New(cfg, session.Deps{Sessions: store.Sessions(), Logger: appLogger})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
+	}
+	if cfg.Issuer == "" {
+		return sessions, nil, nil
 	}
 
-	var kit *oidc.Kit
-	if cfg.Issuer != "" {
-		if err := auth.NewUserStore(db).BackfillAvatars(ctx, cfg.Issuer); err != nil {
-			return nil, nil, nil, err
-		}
-		kit, err = oidc.New(ctx, cfg, oidc.Deps{
-			Users:      auth.NewUserStore(db),
-			Identities: store.Identities(),
-			Sessions:   sessions,
-			Codes:      store.LoginCodes(),
-			Logger:     appLogger,
-		})
-		if err != nil {
-			return nil, nil, nil, err
-		}
+	users := auth.NewUserStore(db)
+	if err := users.BackfillAvatars(ctx, cfg.Issuer); err != nil {
+		return nil, nil, err
 	}
-
-	var passwords *local.Kit
-	passwords, err = local.New(local.Config{AllowRegistration: !appEnv.SSOOnly, MinPasswordLength: 8}, local.Deps{
-		Users:      auth.NewUserStore(db),
+	kit, err := oidc.New(ctx, cfg, oidc.Deps{
+		Users:      users,
 		Identities: store.Identities(),
 		Sessions:   sessions,
+		Codes:      store.LoginCodes(),
 		Logger:     appLogger,
-		Count:      auth.NewUserStore(db).CountUsers,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
-
-	return sessions, passwords, kit, nil
+	return sessions, kit, nil
 }
 
-var authService *auth.Service
+// startDeletions follows Registre's GDPR deletions when OIDC is configured,
+// signing its polls with the app's own OIDC client. It returns at once: the
+// poll runs in the background, so a Registre that is down never holds up boot.
+// Casier runs one replica, so this is the one deletion poller. Without OIDC
+// there is nothing to follow and the receiver is nil.
+func startDeletions(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *slog.Logger) (*auth.Deletions, error) {
+	if appEnv.OIDC == nil {
+		return nil, nil
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	client := directory.Client{
+		Issuer:       appEnv.OIDC.Issuer,
+		ClientID:     appEnv.OIDC.ClientID,
+		ClientSecret: appEnv.OIDC.ClientSecret,
+	}
+	deletions := auth.NewDeletions(db, client, portepg.New(sqlDB).EraseIdentity, appLogger)
+	go deletions.Run(ctx)
+	return deletions, nil
+}
 
 func main() {
 	if healthcheck.Handle(os.Args) {
@@ -183,20 +191,14 @@ func run() int {
 	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
 	defer cancelCleanup()
 
-	appMailer, err := mailer.New(appEnv.SMTP)
-	if err != nil {
-		appLogger.Error("invalid SMTP configuration", slog.Any("error", err))
-		return 1
-	}
-
-	sessions, passwords, kit, err := buildAuth(shutdownCtx, db, appEnv, appLogger)
+	sessions, kit, err := buildAuth(shutdownCtx, db, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to initialise porte", slog.Any("error", err))
 		return 1
 	}
 
 	store := portepg.New(sqlDB)
-	authService = auth.NewService(db, keyring, appLogger, appMailer, appEnv.PublicURL, sessions, passwords, store.Identities())
+	authService := auth.NewService(db, keyring, appLogger, sessions, store.Identities())
 	authService.StartSessionCleanup(shutdownCtx)
 
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
@@ -206,11 +208,19 @@ func run() int {
 	secretsService := secrets.NewService(db, appLogger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
 	secretsService.StartTrashPurge(shutdownCtx)
 
+	clientDir := spa.DirFromEnv()
+	deletions, err := startDeletions(shutdownCtx, db, appEnv, appLogger)
+	if err != nil {
+		appLogger.Error("failed to start the deletion receiver", slog.Any("error", err))
+		return 1
+	}
+
 	router := httpx.NewRouter(httpx.Config{
 		TrustedProxies: appEnv.TrustedProxies,
 		CDNProxies:     appEnv.CDNProxies,
 		CDNHeader:      appEnv.CDNHeader,
 		Logger:         appLogger,
+		Security:       securityConfig(clientDir, appLogger),
 		CORS: troncmiddleware.CORSConfig{
 			AllowedOrigins:   appEnv.CORSAllowedOrigins,
 			AllowCredentials: true,
@@ -218,10 +228,11 @@ func run() int {
 	})
 
 	health.Mount(router, health.DB(sqlDB))
+	router.Get("/version", versionHandler)
 	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
-		auth.RegisterRoutes(r, sessions, kit, authService, appEnv)
+		auth.RegisterRoutes(r, sessions, kit, authService, deletionsHandler(deletions))
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
@@ -230,7 +241,6 @@ func run() int {
 	router.Get("/spaces", redirectToProjects)
 	router.Get("/spaces/*", redirectToProjects)
 
-	clientDir := spa.DirFromEnv()
 	if spa.Available(clientDir) {
 		router.Handle("/*", spa.Handler(spa.Config{Dir: clientDir}))
 		appLogger.Info("serving client", slog.String("dir", clientDir))
@@ -273,4 +283,11 @@ func run() int {
 	}
 
 	return 0
+}
+
+func deletionsHandler(deletions *auth.Deletions) http.Handler {
+	if deletions == nil {
+		return nil
+	}
+	return deletions.Handler()
 }

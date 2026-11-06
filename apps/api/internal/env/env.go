@@ -3,7 +3,6 @@ package env
 import (
 	"fmt"
 
-	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/porte"
 	troncenv "github.com/FacileStudio/tronc/env"
 )
@@ -27,20 +26,17 @@ type OIDCConfig struct {
 }
 
 // Config is the process configuration: the tronc core plus Casier's OIDC and
-// service accounts.
+// service accounts. Sign-in goes through Registre only, so there is no
+// password, SMTP or SSO_ONLY setting.
 type Config struct {
 	troncenv.Core
 	EncryptionKey string
 	OIDC          *OIDCConfig
-	SMTP          *mailer.SMTPConfig
-	PublicURL     string
-	SSOOnly       bool
 	AdminEmails   []string
 }
 
 func (c Config) Porte() porte.Config {
 	cfg := porte.Config{
-		SSOOnly:            c.SSOOnly,
 		AcceptLegacyCookie: true,
 	}
 	if c.OIDC == nil {
@@ -56,12 +52,8 @@ func (c Config) Porte() porte.Config {
 }
 
 // Load reads and validates the environment, wiring the OIDC config through
-// porte's own Config. The public origin is what a link in an email has to
-// point at, so it falls back to the first CORS origin the same way
-// OIDC_SUCCESS_URL does; and SMTP_HOST is the switch that enables mail — unset
-// means no mailer and a password reset flow that refuses rather than silently
-// drops mail, while set makes the whole relay config add up now, at startup,
-// instead of at the first reset request.
+// porte's own Config. A production boot without OIDC_ISSUER is refused: with
+// no password sign-in left, such a deployment would have no way in at all.
 func Load() (Config, error) {
 	core, err := troncenv.LoadCore()
 	if err != nil {
@@ -77,58 +69,39 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
-	if cfg.SSOOnly, err = troncenv.Bool("SSO_ONLY", false); err != nil {
-		return Config{}, err
-	}
-
 	cfg.AdminEmails = troncenv.List("CASIER_ADMIN_EMAILS")
 
-	cfg.PublicURL = troncenv.String("PUBLIC_URL", "")
-	if cfg.PublicURL == "" && len(cfg.CORSAllowedOrigins) > 0 {
-		cfg.PublicURL = cfg.CORSAllowedOrigins[0]
-	}
-
 	if issuer := troncenv.String("OIDC_ISSUER", ""); issuer != "" {
-		clientID := troncenv.String("OIDC_CLIENT_ID", "")
-		clientSecret := troncenv.String("OIDC_CLIENT_SECRET", "")
-		redirectURL := troncenv.String("OIDC_REDIRECT_URL", "")
-		if clientID == "" || clientSecret == "" || redirectURL == "" {
-			return Config{}, fmt.Errorf("OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URL are required when OIDC_ISSUER is set")
-		}
-		successURL := troncenv.String("OIDC_SUCCESS_URL", "")
-		if successURL == "" && len(cfg.CORSAllowedOrigins) > 0 {
-			successURL = cfg.CORSAllowedOrigins[0]
-		}
-		cfg.OIDC = &OIDCConfig{
-			Issuer:       issuer,
-			ClientID:     clientID,
-			ClientSecret: clientSecret,
-			RedirectURL:  redirectURL,
-			SuccessURL:   successURL,
-			CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
-		}
-	}
-
-	if host := troncenv.String("SMTP_HOST", ""); host != "" {
-		port, err := troncenv.Int("SMTP_PORT", mailer.DefaultPort)
+		oidcConfig, err := loadOIDC(issuer, cfg.CORSAllowedOrigins)
 		if err != nil {
 			return Config{}, err
 		}
-		from := troncenv.String("SMTP_FROM", "")
-		if from == "" {
-			return Config{}, fmt.Errorf("SMTP_FROM is required when SMTP_HOST is set")
-		}
-		if cfg.PublicURL == "" {
-			return Config{}, fmt.Errorf("PUBLIC_URL or CORS_ALLOWED_ORIGINS is required when SMTP_HOST is set, a password reset link needs a public origin")
-		}
-		cfg.SMTP = &mailer.SMTPConfig{
-			Host:     host,
-			Port:     port,
-			Username: troncenv.String("SMTP_USERNAME", ""),
-			Password: troncenv.String("SMTP_PASSWORD", ""),
-			From:     from,
-		}
+		cfg.OIDC = oidcConfig
+	}
+	if cfg.OIDC == nil && core.IsProduction() {
+		return Config{}, fmt.Errorf("OIDC_ISSUER is required in production: Casier signs in through Registre only")
 	}
 
 	return cfg, nil
+}
+
+func loadOIDC(issuer string, corsOrigins []string) (*OIDCConfig, error) {
+	clientID := troncenv.String("OIDC_CLIENT_ID", "")
+	clientSecret := troncenv.String("OIDC_CLIENT_SECRET", "")
+	redirectURL := troncenv.String("OIDC_REDIRECT_URL", "")
+	if clientID == "" || clientSecret == "" || redirectURL == "" {
+		return nil, fmt.Errorf("OIDC_CLIENT_ID, OIDC_CLIENT_SECRET, and OIDC_REDIRECT_URL are required when OIDC_ISSUER is set")
+	}
+	successURL := troncenv.String("OIDC_SUCCESS_URL", "")
+	if successURL == "" && len(corsOrigins) > 0 {
+		successURL = corsOrigins[0]
+	}
+	return &OIDCConfig{
+		Issuer:       issuer,
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		RedirectURL:  redirectURL,
+		SuccessURL:   successURL,
+		CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
+	}, nil
 }

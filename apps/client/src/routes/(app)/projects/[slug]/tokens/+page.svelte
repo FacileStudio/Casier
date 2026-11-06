@@ -31,6 +31,7 @@
 	import Drawer from '$lib/components/Drawer.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
 	import PersonLabel from '$lib/components/PersonLabel.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 
 	type ProjectContext = {
 		readonly project: Project | null;
@@ -62,8 +63,8 @@
 
 	const environmentHelper = $derived(
 		ctx.environments.length > 0
-			? `Comma-separated environment slugs, or * for every environment. This project has: ${ctx.environments.map((env) => env.slug).join(', ')}.`
-			: 'Comma-separated environment slugs, or * for every environment.'
+			? t('tokens.environments.helperList', { slugs: ctx.environments.map((env) => env.slug).join(', ') })
+			: t('tokens.environments.helperAll')
 	);
 
 	function isRevoked(token: ApiToken) {
@@ -81,7 +82,7 @@
 			const res = await api.get<ApiTokensResponse>(`/projects/${ctx.slug}/tokens`);
 			tokens = res.tokens ?? [];
 		} catch (err) {
-			loadError = err instanceof Error ? err.message : 'Failed to load tokens';
+			loadError = err instanceof Error ? err.message : t('tokens.error.load');
 		} finally {
 			loading = false;
 		}
@@ -112,15 +113,13 @@
 			);
 			createdToken = token.token ?? '';
 			if (!createdToken) {
-				toast.warning(
-					`Token "${token.name}" was created, but the server did not return its value. Revoke it and issue another.`
-				);
+				toast.warning(t('tokens.createdNoValue', { name: token.name }));
 			} else {
-				toast.success(`Token "${token.name}" created`);
+				toast.success(t('tokens.created', { name: token.name }));
 			}
 			await loadTokens();
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to create token');
+			toast.danger(err instanceof Error ? err.message : t('tokens.error.create'));
 		} finally {
 			creating = false;
 		}
@@ -136,12 +135,12 @@
 		revoking = true;
 		try {
 			await api.del(`/projects/${ctx.slug}/tokens/${revokeTarget.id}`);
-			toast.success(`Token "${revokeTarget.name}" revoked`);
+			toast.success(t('tokens.revoked', { name: revokeTarget.name }));
 			revokeOpen = false;
 			revokeTarget = null;
 			await loadTokens();
 		} catch (err) {
-			toast.danger(err instanceof Error ? err.message : 'Failed to revoke token');
+			toast.danger(err instanceof Error ? err.message : t('tokens.error.revoke'));
 		} finally {
 			revoking = false;
 		}
@@ -160,18 +159,18 @@
 </script>
 
 <svelte:head>
-	<title>API tokens — {ctx.project?.name ?? 'Project'} — Casier</title>
+	<title>{t('tokens.head', { project: ctx.project?.name ?? t('project.fallbackName') })}</title>
 </svelte:head>
 
 {#if ctx.canAdmin}
 	<div class="flex flex-col gap-10 px-4 py-6 md:px-8">
 		<SettingsSection
-			title="API tokens"
-			description="Machine credentials for CI and the casier CLI. A token is bound to this project, to a permission set and to the environments it names — it can never read past them, and revoking one never touches the others."
+			title={t('project.tab.tokens')}
+			description={t('tokens.description')}
 			bare
 		>
 			{#snippet actions()}
-				<Button icon={icons.plus} onclick={openCreate}>New token</Button>
+				<Button icon={icons.plus} onclick={openCreate}>{t('tokens.new')}</Button>
 			{/snippet}
 
 			{#if loading}
@@ -185,23 +184,23 @@
 			{:else if tokens.length === 0}
 				<EmptyState
 					icon={icons.key}
-					title="No API tokens"
-					description="Create one to give a pipeline or a machine scoped access to this project."
+					title={t('tokens.empty.title')}
+					description={t('tokens.empty.description')}
 				>
-					<Button icon={icons.plus} onclick={openCreate}>Create a token</Button>
+					<Button icon={icons.plus} onclick={openCreate}>{t('tokens.create')}</Button>
 				</EmptyState>
 			{:else}
 				<Table>
 					<thead>
 						<tr>
-							<th>Name</th>
-							<th>Owner</th>
-							<th>Status</th>
-							<th>Permissions</th>
-							<th>Environments</th>
-							<th>Last used</th>
-							<th>Expires</th>
-							<th class="w-1 text-right" aria-label="Actions"></th>
+							<th>{t('tokens.col.name')}</th>
+							<th>{t('tokens.col.owner')}</th>
+							<th>{t('tokens.col.status')}</th>
+							<th>{t('tokens.col.permissions')}</th>
+							<th>{t('tokens.col.environments')}</th>
+							<th>{t('tokens.col.lastUsed')}</th>
+							<th>{t('tokens.col.expires')}</th>
+							<th class="w-1 text-right" aria-label={t('common.actions')}></th>
 						</tr>
 					</thead>
 					<tbody>
@@ -211,11 +210,11 @@
 								<td class="max-w-48 whitespace-nowrap"><PersonLabel person={token.owner} /></td>
 								<td>
 									{#if isRevoked(token)}
-										<Badge tone="neutral">Revoked {formatDate(token.revoked_at ?? '')}</Badge>
+										<Badge tone="neutral">{t('tokens.status.revoked', { date: formatDate(token.revoked_at ?? '') })}</Badge>
 									{:else if isExpired(token)}
-										<Badge tone="warning">Expired</Badge>
+										<Badge tone="warning">{t('tokens.status.expired')}</Badge>
 									{:else}
-										<Badge tone="success">Active</Badge>
+										<Badge tone="success">{t('tokens.status.active')}</Badge>
 									{/if}
 								</td>
 								<td>
@@ -224,11 +223,11 @@
 									</Badge>
 								</td>
 								<td class="font-fc-mono text-fc-xs text-fc-fg-muted">
-									{token.environments || 'all'}
+									{token.environments || t('common.all')}
 								</td>
 								<td class="whitespace-nowrap text-fc-fg-muted">
 									{formatDateTime(token.last_used_at) === '—'
-										? 'Never'
+										? t('common.never')
 										: formatDateTime(token.last_used_at)}
 								</td>
 								<td class="whitespace-nowrap text-fc-fg-muted">{formatDate(token.expires_at)}</td>
@@ -241,7 +240,7 @@
 												icon={icons.revoke}
 												onclick={() => openRevoke(token)}
 											>
-												Revoke
+												{t('tokens.revoke')}
 											</Button>
 										{/if}
 									</div>
@@ -254,38 +253,35 @@
 		</SettingsSection>
 	</div>
 
-	<Drawer bind:open={createOpen} title="New API token">
+	<Drawer bind:open={createOpen} title={t('tokens.drawer.title')}>
 		{#if createdToken}
 			<div class="flex flex-col gap-4">
-				<Alert tone="warning" title="Copy it now">
-					This is the only time the token is shown. Casier stores a hash of it, so it cannot be
-					shown again — losing it means issuing another.
-				</Alert>
+				<Alert tone="warning" title={t('tokens.copy.title')}>{t('tokens.copy.body')}</Alert>
 
 				<SecretField
 					value={createdToken}
 					visible
 					autoHideMs={0}
-					label="Token"
-					helper="Store it in your CI secret store, or hand it to the CLI as CASIER_TOKEN."
+					label={t('tokens.copy.label')}
+					helper={t('tokens.copy.helper')}
 				/>
 
 				<div class="flex justify-end">
-					<Button size="lg" onclick={() => (createOpen = false)}>Done</Button>
+					<Button size="lg" onclick={() => (createOpen = false)}>{t('common.done')}</Button>
 				</div>
 			</div>
 		{:else}
 			<form onsubmit={handleCreate} class="flex flex-col gap-4">
-				<Field label="Name" helper="Where the token will live — a machine, a pipeline, a script.">
+				<Field label={t('common.name')} helper={t('tokens.name.helper')}>
 					<Input placeholder="ci-deploy" bind:value={newName} required disabled={creating} />
 				</Field>
-				<Field label="Permissions">
+				<Field label={t('tokens.col.permissions')}>
 					<Select bind:value={newPermissions} disabled={creating}>
-						<option value="read">Read — fetch secrets</option>
-						<option value="read,write">Read and write — fetch and update secrets</option>
+						<option value="read">{t('tokens.permissions.read')}</option>
+						<option value="read,write">{t('tokens.permissions.write')}</option>
 					</Select>
 				</Field>
-				<Field label="Environments" helper={environmentHelper}>
+				<Field label={t('tokens.col.environments')} helper={environmentHelper}>
 					<Input
 						placeholder="*"
 						bind:value={newEnvironments}
@@ -294,14 +290,14 @@
 					/>
 				</Field>
 				<Field
-					label="Expires in"
-					helper="A machine credential that never lapses is the one nobody remembers to rotate."
+					label={t('tokens.expires.label')}
+					helper={t('tokens.expires.helper')}
 				>
 					<Select bind:value={newExpiresInDays} disabled={creating}>
-						<option value="30">30 days</option>
-						<option value="90">90 days</option>
-						<option value="365">1 year</option>
-						<option value="730">2 years</option>
+						<option value="30">{t('tokens.expires.30')}</option>
+						<option value="90">{t('tokens.expires.90')}</option>
+						<option value="365">{t('tokens.expires.365')}</option>
+						<option value="730">{t('tokens.expires.730')}</option>
 					</Select>
 				</Field>
 				<div class="flex justify-end gap-2 pt-1">
@@ -312,11 +308,11 @@
 						disabled={creating}
 						onclick={() => (createOpen = false)}
 					>
-						Cancel
+						{t('common.cancel')}
 					</Button>
 					<Button type="submit" size="lg" disabled={creating || !newName.trim()}>
-						{#if creating}<Spinner label="Loading" size="sm" class="border-current border-t-transparent" />{/if}
-						{creating ? 'Creating…' : 'Create token'}
+						{#if creating}<Spinner label={t('common.loading')} size="sm" class="border-current border-t-transparent" />{/if}
+						{creating ? t('common.creating') : t('tokens.createSubmit')}
 					</Button>
 				</div>
 			</form>
@@ -325,9 +321,9 @@
 
 	<ConfirmDialog
 		bind:open={revokeOpen}
-		title="Revoke token"
-		message={`"${revokeTarget?.name ?? ''}" stops working immediately, and any CI pipeline or CLI still using it starts failing. It cannot be un-revoked. The row stays listed so the audit log still names what it changed.`}
-		confirmLabel="Revoke token"
+		title={t('tokens.revoke.title')}
+		message={t('tokens.revoke.message', { name: revokeTarget?.name ?? '' })}
+		confirmLabel={t('tokens.revoke.title')}
 		loading={revoking}
 		onconfirm={handleRevoke}
 	/>

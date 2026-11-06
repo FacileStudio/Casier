@@ -13,46 +13,36 @@ import (
 
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
-	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/people"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/porte"
-	"github.com/FacileStudio/porte/local"
 	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
 )
 
-// Service implements authentication: sessions, passwords via porte, OIDC and
-// password reset, with a mailer seam for the reset delivery.
+// Service implements authentication: porte sessions and OIDC for people, and
+// scoped API tokens for machines and the CLI.
 type Service struct {
-	orm          *gorm.DB
-	keyring      *crypto.Keyring
-	logger       *slog.Logger
-	mailer       mailer.Mailer
-	publicURL    string
-	sessions     *session.Manager
-	passwords    *local.Kit
-	identities   porte.IdentityStore
-	controller   *Controller
-	deliverReset func(ctx context.Context, email string)
+	orm        *gorm.DB
+	keyring    *crypto.Keyring
+	logger     *slog.Logger
+	sessions   *session.Manager
+	identities porte.IdentityStore
+	controller *Controller
 }
 
-// NewService wires an auth service onto the database and the porte kits.
-func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, mail mailer.Mailer, publicURL string, sessions *session.Manager, passwords *local.Kit, identities porte.IdentityStore) *Service {
+// NewService wires an auth service onto the database and the porte session manager.
+func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, sessions *session.Manager, identities porte.IdentityStore) *Service {
 	service := &Service{
 		orm:        orm,
 		keyring:    keyring,
 		logger:     logger,
-		mailer:     mail,
-		publicURL:  publicURL,
 		sessions:   sessions,
-		passwords:  passwords,
 		identities: identities,
 	}
 	service.controller = newController(service)
-	service.deliverReset = service.sendPasswordReset
 	return service
 }
 
@@ -105,7 +95,7 @@ func (service *Service) profile(ctx context.Context, userID string) (*MeResponse
 	var me MeResponse
 	result := service.orm.WithContext(ctx).
 		Table("users u").
-		Select(people.Columns).
+		Select(people.Columns+", u.locale").
 		Where("u.id = ?", userID).
 		Scan(&me)
 	if result.Error != nil {
@@ -116,44 +106,6 @@ func (service *Service) profile(ctx context.Context, userID string) (*MeResponse
 	}
 	me.ID = userID
 	return &me, nil
-}
-
-func (service *Service) registerUser(ctx context.Context, email, password string) (int64, string, error) {
-	w := &noopResponseWriter{}
-	r, _ := http.NewRequestWithContext(ctx, "POST", "/", nil)
-	return service.passwords.Register(ctx, w, r, email, "", password)
-}
-
-func (service *Service) loginUser(ctx context.Context, email, password string) (int64, string, error) {
-	w := &noopResponseWriter{}
-	r, _ := http.NewRequestWithContext(ctx, "POST", "/", nil)
-	return service.passwords.Login(ctx, w, r, email, password)
-}
-
-func (service *Service) authenticateRequest(ctx context.Context, bearer string) (int64, string, error) {
-	token := strings.TrimPrefix(bearer, "Bearer ")
-	r, _ := http.NewRequestWithContext(ctx, "GET", "/", nil)
-	r.Header.Set("Authorization", "Bearer "+token)
-	w := &noopResponseWriter{}
-	id, err := service.sessions.Authenticate(w, r)
-	if err != nil {
-		return 0, "", err
-	}
-	return id.UserID, "", nil
-}
-
-type noopResponseWriter struct{}
-
-func (w *noopResponseWriter) Header() http.Header         { return http.Header{} }
-func (w *noopResponseWriter) Write(b []byte) (int, error) { return len(b), nil }
-func (w *noopResponseWriter) WriteHeader(int)             {}
-
-func (service *Service) ConfigExtra() func() map[string]any {
-	return func() map[string]any {
-		return map[string]any{
-			"password_reset_enabled": service.mailer != nil,
-		}
-	}
 }
 
 func (service *Service) StartSessionCleanup(ctx context.Context) {

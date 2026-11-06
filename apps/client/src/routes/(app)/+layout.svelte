@@ -5,6 +5,7 @@
 	import { MobileNav, SideBar, SpaceSwitcher, Topbar, icons } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { displayName } from '$lib/format';
+	import { t } from '$lib/i18n/index.svelte';
 	import {
 		api,
 		ApiError,
@@ -51,7 +52,7 @@
 
 	const navPages = $derived([
 		{
-			label: 'Projects',
+			label: t('nav.projects'),
 			href: '/projects',
 			icon: icons.folder,
 			active:
@@ -64,12 +65,12 @@
 	);
 
 	/**
-	 * The user card shows the identity provider's display name and picture. A
-	 * password account has neither, so the email's local part stands in for the
-	 * name and muse's Avatar draws its initial.
+	 * The user card shows the identity provider's display name and picture. An
+	 * account without a display name falls back to the email's local part, and
+	 * muse's Avatar draws its initial.
 	 */
 	const user = $derived({
-		name: displayName({ name: auth.name, email: auth.email ?? '' }) || 'Account',
+		name: displayName({ name: auth.name, email: auth.email ?? '' }) || t('common.account'),
 		avatar: auth.avatarUrl || undefined,
 	});
 
@@ -97,7 +98,7 @@
 				{spaces}
 				{activeSpaceId}
 				onSpaceSelect={selectProject}
-				personalSpaceLabel="All projects"
+				personalSpaceLabel={t('nav.allProjects')}
 			/>
 		</div>
 		<main class="min-w-0 flex-1 overflow-auto overscroll-contain pb-24 md:pb-0">
@@ -109,7 +110,7 @@
 							{spaces}
 							activeId={activeSpaceId}
 							onSelect={selectProject}
-							personalLabel="All projects"
+							personalLabel={t('nav.allProjects')}
 						/>
 					</div>
 				{/if}
@@ -128,7 +129,7 @@
 		<span
 			class="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-foreground motion-reduce:animate-none"
 			role="status"
-			aria-label="Loading"
+			aria-label={t('common.loading')}
 		></span>
 	</div>
 {/if}

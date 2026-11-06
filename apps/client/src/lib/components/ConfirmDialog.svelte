@@ -11,12 +11,13 @@
 	 * pending: spinner on Confirm, both buttons disabled, Escape and backdrop inert.
 	 */
 	import { ConfirmModal } from '@facile/muse';
+	import { t } from '$lib/i18n/index.svelte';
 
 	let {
 		open = $bindable(false),
 		title,
 		message,
-		confirmLabel = 'Delete',
+		confirmLabel,
 		loading = false,
 		onconfirm,
 	}: {
@@ -49,7 +50,7 @@
 	bind:open
 	{title}
 	description={message}
-	{confirmLabel}
+	confirmLabel={confirmLabel ?? t('sec.delete')}
 	tone="danger"
 	onConfirm={confirm}
 />

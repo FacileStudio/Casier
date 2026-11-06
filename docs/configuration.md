@@ -48,31 +48,21 @@ mistake: it is base64-decodable but decodes to 24 bytes, so it is rejected.
 `CASIER_ADMIN_EMAILS` fails closed. An empty list means nobody can rotate the root key, not
 that everybody can.
 
-## Auth and mail
+## Auth
 
 | Variable | Required | Default | What it does |
 |---|---|---|---|
-| `SSO_ONLY` | no | `false` | Must parse as a boolean. Removes the password routes from the router |
-| `PUBLIC_URL` | no | first CORS origin | Public origin used to build links that leave the server |
-| `OIDC_ISSUER` | no | — | Enables OIDC; makes the next three required |
+| `OIDC_ISSUER` | in production | — | Registre's issuer URL; makes the next three required. A production boot without it exits 1 |
 | `OIDC_CLIENT_ID` | with issuer | — | Client identifier |
 | `OIDC_CLIENT_SECRET` | with issuer | — | Client secret |
 | `OIDC_REDIRECT_URL` | with issuer | — | Callback URL, e.g. `https://casier.facile.studio/api/auth/oidc/callback` |
 | `OIDC_SUCCESS_URL` | no | first CORS origin | Where to send the browser after login |
-| `SMTP_HOST` | no | — | Enables the mailer. Unset means password reset refuses instead of dropping mail |
-| `SMTP_PORT` | no | `587` | STARTTLS port |
-| `SMTP_USERNAME` | no | — | Optional; an internal relay often has none |
-| `SMTP_PASSWORD` | no | — | Required if a username is set |
-| `SMTP_FROM` | with `SMTP_HOST` | — | Sender address; missing it exits 1 |
 
 Setting `OIDC_ISSUER` while leaving client id, secret, or redirect empty exits 1 with an
-explicit message. `OIDC_SUCCESS_URL` and `PUBLIC_URL` both fall back to the first CORS
-origin, because deployments almost never want to write the same hostname three times.
+explicit message. `OIDC_SUCCESS_URL` falls back to the first CORS origin.
 
-`SMTP_HOST` is the switch, and it validates everything at startup rather than at the first
-reset request: with it set, `SMTP_FROM` is required and so is a public origin, since a reset
-link needs somewhere to point. A reset flow that fails silently is how a forgotten password
-becomes a support ticket.
+The same client credentials sign the deletion poll against Registre. `SSO_ONLY`, `PUBLIC_URL`
+and the `SMTP_*` variables are no longer read; delete them from the environment.
 
 ## Static client
 
@@ -99,7 +89,7 @@ Interpolated by `docker-compose.yml`; they never reach the Go process directly.
 | `POSTGRES_DB` | `casier` | Internal database name |
 
 Compose also defaults `CORS_ALLOWED_ORIGINS` to `https://casier.facile.studio`, which in
-turn seeds `PUBLIC_URL` and `OIDC_SUCCESS_URL` when those are left empty.
+turn seeds `OIDC_SUCCESS_URL` when it is left empty.
 
 ## CLI
 
@@ -129,6 +119,6 @@ carrying `slug` and `environment`; `environment` defaults to `dev`.
 - **`*` in the CORS list panics** rather than allowing everything, because the API sends
   credentials.
 - **No `CASIER_ADMIN_EMAILS` means no root key rotation at all.**
-- **`SMTP_HOST` without `SMTP_FROM` or a public origin exits 1**, at startup, on purpose.
+- **A production boot without `OIDC_ISSUER` exits 1**: with no password sign-in left, such an instance would have no way in.
 - **`.env.example` is a compose template** and drifts. This page is derived from the code
   that reads the variables.

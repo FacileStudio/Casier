@@ -6,6 +6,7 @@ class AuthState {
 	email = $state<string | null>(null);
 	name = $state('');
 	avatarUrl = $state('');
+	locale = $state<string | null>(null);
 	loaded = $state(false);
 	private checkPromise: Promise<void> | null = null;
 
@@ -23,6 +24,7 @@ class AuthState {
 				this.email = me.email;
 				this.name = me.name ?? '';
 				this.avatarUrl = me.avatar_url ?? '';
+				this.locale = me.locale || null;
 			} catch {
 				this.userId = null;
 				this.email = null;

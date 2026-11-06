@@ -6,11 +6,11 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 
 | Layer    | Stack                                                        |
 | -------- | ------------------------------------------------------------ |
-| API      | Go 1.25, Chi router, GORM, PostgreSQL 16, tronc v0.9.0      |
+| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.17.1, porte v0.12.0 |
 | Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/muse`) |
 | Build    | `go build`, Bun                                              |
 | Deploy   | Docker Compose, single distroless container serving API + client |
-| Auth     | Email + password (session-based, argon2id), optional OIDC SSO |
+| Auth     | Sign in with Facile (Registre OIDC) only; scoped API tokens for machines |
 | Crypto   | AES-256-GCM encryption for secret values at rest             |
 
 ## Project Structure
@@ -29,7 +29,7 @@ apps/
       app.css           Design tokens (Facile Suite palette + muse token aliases)
       routes/           SvelteKit file-based routing
         +page.svelte    Public landing page
-        (auth)/         Split-screen auth shell (login, register, password reset)
+        login/          muse AuthScreen (the only sign-in page)
         (app)/          Authenticated shell: sidebar + mobile nav
           projects/     Project index, and per-project secrets/members/tokens/audit/settings
           settings/     Account, appearance, about
@@ -104,19 +104,12 @@ docker compose up --build
 | JOURNAL_URL            | No       | Journal ingest URL — must end in `/api`, or every log line is silently dropped |
 | JOURNAL_TOKEN          | No       | Per-app Journal API key                  |
 | CLIENT_DIR             | No       | Built client directory served by the API (default: ./client) |
-| OIDC_ISSUER            | No       | OIDC provider URL (enables SSO)                  |
+| OIDC_ISSUER            | In production | Registre issuer URL; sign-in is OIDC only      |
 | OIDC_CLIENT_ID         | If OIDC  | OIDC client ID                                   |
 | OIDC_CLIENT_SECRET     | If OIDC  | OIDC client secret                               |
 | OIDC_REDIRECT_URL      | If OIDC  | Callback URL for OIDC flow                       |
 | OIDC_SUCCESS_URL       | No       | Redirect after OIDC login (default: first CORS origin) |
-| SSO_ONLY               | No       | Hide password auth when true                     |
 | CASIER_ADMIN_EMAILS    | No       | Comma-separated emails allowed to call `POST /admin/rotate-key`. Empty means nobody — the endpoint fails closed. |
-| PUBLIC_URL             | No       | Public origin for links that leave the server (password reset). Defaults to the first CORS origin |
-| SMTP_HOST              | No       | The switch for mail delivery. Without it `/auth/forgot-password` answers 503 rather than pretending |
-| SMTP_PORT              | No       | Default 587 (STARTTLS)                           |
-| SMTP_USERNAME          | No       | Optional — an internal relay often has none, but a username without a password is refused |
-| SMTP_PASSWORD          | If user  | Required when SMTP_USERNAME is set               |
-| SMTP_FROM              | If SMTP  | Envelope sender, e.g. `Casier <no-reply@facile.studio>` |
 | TEST_DATABASE_URL      | No       | Test-only. Postgres for the HTTP authorization matrix; unset makes it skip loudly |
 
 ## CLI — a separate repo
@@ -267,7 +260,7 @@ databases in place on startup and is a no-op afterwards.
 ## Design system
 
 **muse (`@facile/muse`) is the design system, and it owns the palette.** As of 2026-08-08
-Casier pins `github:FacileStudio/muse#v0.5.0` and `app.css` is 71 lines: import Tailwind,
+Casier pins `github:FacileStudio/muse#v0.12.1` and `app.css` is 71 lines: import Tailwind,
 import `@facile/muse/styles`, `@source` the package so v4 scans it, and one `@theme inline`
 block aliasing the suite's semantic names (`--color-background`, `--color-muted-foreground`, …)
 **onto** muse's `fc-*` tokens. The aliases point that way round on purpose — muse is the source
@@ -326,7 +319,7 @@ the same file.
 - Svelte 5 runes enforced
 - No inline comments in code
 - Secrets encrypted at rest with AES-256-GCM (per-secret random nonce)
-- Session tokens, API tokens and password reset tokens are all SHA-256 hashed before storage
+- Session tokens and API tokens are SHA-256 hashed before storage
 - **Profile pictures are URLs, never bytes.** `users.avatar_url` holds Registre's stable
   `picture` claim (`<issuer>/avatars/<sub>`), written on every sign-in and backfilled at boot
   from `porte_identities` for the configured issuer. Every person in a response goes through

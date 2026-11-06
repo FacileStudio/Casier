@@ -30,8 +30,7 @@ func TestRegistryIsComplete(t *testing.T) {
 	if issues := apiref.Incomplete(
 		refConfig(),
 		"/auth/logout",
-		"/auth/forgot-password",
-		"/auth/reset-password",
+		"/registre/deletions",
 		"/projects/{slug}",
 		"/projects/{slug}/members",
 		"/projects/{slug}/invites/{inviteId}",

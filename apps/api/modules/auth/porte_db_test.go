@@ -68,3 +68,64 @@ func TestUpsertFromOIDCRefusesAnUnverifiedAddress(t *testing.T) {
 		t.Fatal("an unverified address matched an existing account; that is account takeover")
 	}
 }
+
+// TestUpsertFromOIDCRefusesARecycledAddress covers porte's second linking rule:
+// an account that already holds one subject of the issuer is not handed to a
+// second subject just because it presents the same verified address.
+func TestUpsertFromOIDCRefusesARecycledAddress(t *testing.T) {
+	db := resetTestDB(t)
+	store := NewUserStore(db)
+	ctx := context.Background()
+
+	owner, err := store.UpsertFromOIDC(ctx, porte.Claims{
+		Provider: testIssuer, Subject: "first-owner", Email: "shared@facile.studio", EmailVerified: true,
+	})
+	if err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO porte_identities (user_id, provider, subject) VALUES (?, ?, ?)`,
+		owner, testIssuer, "first-owner").Error; err != nil {
+		t.Fatalf("seeding the identity porte writes after a sign-in: %v", err)
+	}
+
+	if _, err := store.UpsertFromOIDC(ctx, porte.Claims{
+		Provider: testIssuer + "/", Subject: "second-owner", Email: "shared@facile.studio", EmailVerified: true,
+	}); err == nil {
+		t.Fatal("a second subject of the same issuer linked an account that already has one")
+	}
+
+	again, err := store.UpsertFromOIDC(ctx, porte.Claims{
+		Provider: testIssuer, Subject: "first-owner", Email: "shared@facile.studio", EmailVerified: true,
+	})
+	if err != nil || again != owner {
+		t.Fatalf("the real owner signing in again got (%d, %v), want (%d, nil)", again, err, owner)
+	}
+}
+
+// TestUpsertFromOIDCStoresTheLocale checks the claim lands on the account and
+// that a sign-in without one keeps what is stored.
+func TestUpsertFromOIDCStoresTheLocale(t *testing.T) {
+	db := resetTestDB(t)
+	store := NewUserStore(db)
+	ctx := context.Background()
+
+	id, err := store.UpsertFromOIDC(ctx, porte.Claims{
+		Provider: testIssuer, Subject: "polyglot", Email: "p@facile.studio", EmailVerified: true, Locale: "de",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFromOIDC: %v", err)
+	}
+	if _, err := store.UpsertFromOIDC(ctx, porte.Claims{
+		Provider: testIssuer, Subject: "polyglot", Email: "p@facile.studio", EmailVerified: true,
+	}); err != nil {
+		t.Fatalf("UpsertFromOIDC without a locale: %v", err)
+	}
+	var user schemas.User
+	if err := db.First(&user, id).Error; err != nil {
+		t.Fatalf("reading the user: %v", err)
+	}
+	if user.Locale != "de" {
+		t.Errorf("locale = %q, want de", user.Locale)
+	}
+}

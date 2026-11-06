@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -21,10 +20,8 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
-	"github.com/FacileStudio/Casier/apps/api/internal/authcrypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
-	"github.com/FacileStudio/Casier/apps/api/internal/mailer"
 	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
@@ -33,7 +30,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
-	"github.com/FacileStudio/porte/local"
+	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
@@ -79,10 +76,9 @@ var rejectedAtTheDoor = []string{anon, badToken, tExpired, tRevoked}
 var liveTokens = []string{tRead, tWrite, tDev, tBeta}
 
 const (
-	fixturePassword = "correct-horse-battery-staple"
-	rotatorEmail    = "rotator@casier.test"
-	outsiderEmail   = "outsider@casier.test"
-	memberEmail     = "member@casier.test"
+	rotatorEmail  = "rotator@casier.test"
+	outsiderEmail = "outsider@casier.test"
+	memberEmail   = "member@casier.test"
 
 	projectAlpha = "alpha"
 	envDev       = "dev"
@@ -167,11 +163,10 @@ type fixture struct {
 }
 
 var (
-	testDB       *gorm.DB
-	testRouter   chi.Router
-	testKeyring  *crypto.Keyring
-	passwordHash string
-	databaseOn   bool
+	testDB      *gorm.DB
+	testRouter  chi.Router
+	testKeyring *crypto.Keyring
+	databaseOn  bool
 )
 
 func TestMain(m *testing.M) {
@@ -184,12 +179,7 @@ func TestMain(m *testing.M) {
 			fmt.Fprintf(os.Stderr, "authz: %v\n", err)
 			os.Exit(1)
 		}
-		hash, err := seedPasswordHash()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "authz: %v\n", err)
-			os.Exit(1)
-		}
-		testDB, passwordHash, databaseOn = db, hash, true
+		testDB, databaseOn = db, true
 	}
 
 	key, err := crypto.KeyFromBase64(seedRootKey)
@@ -211,10 +201,6 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-type discardMailer struct{}
-
-func (discardMailer) Send(context.Context, mailer.Message) error { return nil }
-
 // buildTestRouter assembles the router exactly as main.go's run() does, so
 // every request in the matrix travels the middleware chain that ships. Testing
 // the service layer directly is precisely how a route-level gap survives.
@@ -222,10 +208,6 @@ func (discardMailer) Send(context.Context, mailer.Message) error { return nil }
 // It tolerates a nil database so the route-coverage test can walk the mounted
 // routes without Postgres: no service touches the handle until a request
 // arrives.
-// buildTestRouter assembles the full middleware chain with a stub mailer, so
-// the matrix answers who may call the password reset routes rather than
-// whether the deployment can send mail — the no-mailer 503 is its own property
-// and is covered in modules/auth.
 func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Router {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	appEnv := env.Config{
@@ -239,18 +221,9 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	if err != nil {
 		panic(fmt.Sprintf("session.New: %v", err))
 	}
-	passwords, err := local.New(local.Config{AllowRegistration: true, MinPasswordLength: 8}, local.Deps{
-		Users:      auth.NewUserStore(db),
-		Identities: store.Identities(),
-		Sessions:   sessions,
-		Logger:     logger,
-		Count:      auth.NewUserStore(db).CountUsers,
-	})
-	if err != nil {
-		panic(fmt.Sprintf("local.New: %v", err))
-	}
 	var kit *oidc.Kit
-	authService := auth.NewService(db, keyring, logger, discardMailer{}, "https://casier.test", sessions, passwords, store.Identities())
+	authService := auth.NewService(db, keyring, logger, sessions, store.Identities())
+	deletions := auth.NewDeletions(db, directory.Client{Issuer: "https://sso.casier.test"}, nil, logger)
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
 	projectsService := projects.NewService(db, keyring, auditLogger)
@@ -262,7 +235,7 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
-		auth.RegisterRoutes(r, sessions, kit, authService, appEnv)
+		auth.RegisterRoutes(r, sessions, kit, authService, deletions.Handler())
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
@@ -277,12 +250,6 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 func hashToken(token string) string {
 	sum := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(sum[:])
-}
-
-// seedPasswordHash runs argon2 once per test binary; it is deliberately
-// expensive, so the fixture reuses one hash for every user.
-func seedPasswordHash() (string, error) {
-	return authcrypto.HashPassword(fixturePassword)
 }
 
 // seed builds the fixture the matrix asserts against: a project with dev and
@@ -316,8 +283,8 @@ func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
 		}
 		f.userIDs[u.email] = record.ID
 
-		if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject, password_hash) VALUES (?, 'local', ?, ?)`,
-			record.ID, fmt.Sprintf("%d", record.ID), passwordHash).Error; err != nil {
+		if err := db.Exec(`INSERT INTO porte_identities (user_id, provider, subject) VALUES (?, 'https://sso.casier.test', ?)`,
+			record.ID, fmt.Sprintf("%d", record.ID)).Error; err != nil {
 			return f, fmt.Errorf("seed identity %s: %w", u.email, err)
 		}
 
@@ -586,24 +553,8 @@ func routeCases(f fixture) []routeCase {
 			outcomes: []outcome{ok(200, everyone...)},
 		},
 		{
-			name: "register", method: "POST", pattern: "/api/auth/register", path: "/api/auth/register",
-			body:     `{"email":"newcomer@casier.test","password":"a-long-enough-password"}`,
-			outcomes: []outcome{ok(201, everyone...)},
-		},
-		{
-			name: "login", method: "POST", pattern: "/api/auth/login", path: "/api/auth/login",
-			body:     `{"email":"owner@casier.test","password":"` + fixturePassword + `"}`,
-			outcomes: []outcome{ok(200, everyone...)},
-		},
-		{
-			name: "forgot password", method: "POST", pattern: "/api/auth/forgot-password", path: "/api/auth/forgot-password",
-			body:     `{"email":"owner@casier.test"}`,
-			outcomes: []outcome{ok(200, everyone...)},
-		},
-		{
-			name: "reset password with an unknown token", method: "POST", pattern: "/api/auth/reset-password", path: "/api/auth/reset-password",
-			body:     `{"token":"not-a-token","password":"a-long-enough-password"}`,
-			outcomes: []outcome{fails(400, "invalid_argument", everyone...)},
+			name: "registre deletion notice", method: "POST", pattern: "/api/registre/deletions", path: "/api/registre/deletions",
+			outcomes: []outcome{ok(400, everyone...)},
 		},
 
 		{
