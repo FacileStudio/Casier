@@ -5,6 +5,7 @@
 	import { auth } from '$lib/auth.svelte';
 	import { api, type AuthConfig } from '$lib/backend';
 	import Logo from '$lib/components/Logo.svelte';
+	import LandingOffers from '$lib/components/LandingOffers.svelte';
 
 	type Feature = { icon: string; title: string; body: string };
 
@@ -148,6 +149,7 @@
 					</Button>
 				</div>
 			</section>
+			<LandingOffers />
 		</main>
 
 		<footer>
