@@ -246,7 +246,7 @@
 				{t('common.cancel')}
 			</Button>
 			<Button type="submit" size="lg" disabled={adding || !newEmail.trim()}>
-				{#if adding}<Spinner label={t('common.loading')} size="sm" class="border-current border-t-transparent" />{/if}
+				{#if adding}<Spinner label={t('common.loading')} size="sm" />{/if}
 				{adding ? t('common.adding') : t('members.add')}
 			</Button>
 		</div>

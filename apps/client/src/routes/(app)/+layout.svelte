@@ -2,7 +2,7 @@
 	import { setContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, SideBar, SpaceSwitcher, Topbar, icons } from '@facile/muse';
+	import { MobileNav, SideBar, SpaceSwitcher, Spinner, Topbar, icons } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { displayName } from '$lib/format';
 	import { t } from '$lib/i18n/index.svelte';
@@ -126,10 +126,6 @@
 	</div>
 {:else}
 	<div class="flex h-[100dvh] items-center justify-center">
-		<span
-			class="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-foreground motion-reduce:animate-none"
-			role="status"
-			aria-label={t('common.loading')}
-		></span>
+		<Spinner label={t('common.loading')} />
 	</div>
 {/if}
