@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- build(client): bump muse to v0.16.1, replace the deprecated `outline` button variant with `secondary` and the `danger` icon buttons with `ghost-danger`.
+- build(api): `GET /version` is baked at build time from `apps/client/package.json` by `scripts/version.sh`. The `APP_VERSION` build arg is gone from the Dockerfile and compose file, so a stale Dokploy env can no longer show the wrong version. The response is unchanged.
+
 ## [0.5.3] - 2026-11-07
 
 ### Changed

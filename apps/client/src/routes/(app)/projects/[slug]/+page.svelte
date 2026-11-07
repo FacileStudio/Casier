@@ -94,7 +94,7 @@
 				<Tabs items={envTabs} bind:value={selectedEnvSlug} label={t('env.tabs')} />
 			</div>
 			{#if ctx.canAdmin}
-				<Button href="/projects/{ctx.slug}/settings" variant="outline" icon={icons.settings}>
+				<Button href="/projects/{ctx.slug}/settings" variant="secondary" icon={icons.settings}>
 					{t('env.manage')}
 				</Button>
 			{/if}
