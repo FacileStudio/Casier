@@ -9,7 +9,6 @@ export const shell = {
 	'common.creating': ['Creating…', 'Création…', 'Creando…', 'Wird erstellt…'],
 	'common.add': ['Add', 'Ajouter', 'Añadir', 'Hinzufügen'],
 	'common.adding': ['Adding…', 'Ajout…', 'Añadiendo…', 'Wird hinzugefügt…'],
-	'common.done': ['Done', 'Terminé', 'Hecho', 'Fertig'],
 	'common.refresh': ['Refresh', 'Actualiser', 'Actualizar', 'Aktualisieren'],
 	'common.loading': ['Loading', 'Chargement', 'Cargando', 'Wird geladen'],
 	'common.loadingDots': ['Loading…', 'Chargement…', 'Cargando…', 'Wird geladen…'],
@@ -27,8 +26,6 @@ export const shell = {
 		'Zwischenablage nicht verfügbar'
 	],
 	'common.optional': ['Optional', 'Facultatif', 'Opcional', 'Optional'],
-	'common.never': ['Never', 'Jamais', 'Nunca', 'Nie'],
-	'common.all': ['all', 'tous', 'todos', 'alle'],
 	'common.name': ['Name', 'Nom', 'Nombre', 'Name'],
 	'common.email': ['Email', 'E-mail', 'Correo electrónico', 'E-Mail'],
 	'common.actions': ['Actions', 'Actions', 'Acciones', 'Aktionen'],

@@ -2,10 +2,11 @@
 	import { setContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, SideBar, SpaceSwitcher, Spinner, Topbar, icons } from '@facile/muse';
+	import { MobileNav, SideBar, SpaceSwitcher, Spinner, Topbar, icons, toast, type Locale, type Theme } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { displayName } from '$lib/format';
-	import { t } from '$lib/i18n/index.svelte';
+	import { locale, rememberLocale, t } from '$lib/i18n/index.svelte';
+	import { theme } from '$lib/theme.svelte';
 	import {
 		api,
 		ApiError,
@@ -71,7 +72,27 @@
 	 */
 	const user = $derived({
 		name: displayName({ name: auth.name, email: auth.email ?? '' }) || t('common.account'),
+		email: auth.email ?? undefined,
 		avatar: auth.avatarUrl || undefined,
+	});
+
+	async function signOut() {
+		try {
+			await api.post('/auth/logout', {});
+		} catch {
+			toast.warning(t('profile.logout.warning'));
+		}
+		auth.logout();
+		await goto('/login');
+	}
+
+	const userMenu = $derived({
+		helpHref: 'https://github.com/FacileStudio/Casier/tree/main/docs',
+		onSignOut: signOut,
+		locale: locale(),
+		onLocaleChange: (next: Locale) => rememberLocale(next),
+		theme: theme.preference,
+		onThemeChange: (next: Theme) => theme.set(next),
 	});
 
 	const spaces = $derived(projects.map((project) => ({ id: project.slug, name: project.name })));
@@ -95,6 +116,7 @@
 				{user}
 				userHref="/settings"
 				userActive={onSettings}
+				{userMenu}
 				{spaces}
 				{activeSpaceId}
 				onSpaceSelect={selectProject}
@@ -122,6 +144,7 @@
 			{user}
 			profileHref="/settings"
 			profileActive={onSettings}
+			{userMenu}
 		/>
 	</div>
 {:else}

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- feat(client): the sidebar user card opens the shared muse user menu (account, settings, language, theme, help, sign out). The cog link and the in-settings sign-out are gone.
+- feat(client): settings use muse `SettingsLayout` with Profile, Preferences, API tokens and Advanced. Profile is read-only and links to Facile; language and theme live in Preferences. `/settings/appearance` and `/settings/api` redirect to `/settings/preferences` and `/settings/tokens`.
+- feat(client): project tokens use muse `TokensSection`. The API calls, permissions, environments and expiry are unchanged; the default expiry in the create drawer is now 30 days.
+- build(client): bump muse to v0.14.1.
+
 ## [0.4.1] - 2026-11-07
 
 ### Changed

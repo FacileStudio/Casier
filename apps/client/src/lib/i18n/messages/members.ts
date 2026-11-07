@@ -108,7 +108,6 @@ export const members = {
 		'No se pudo quitar al miembro',
 		'Mitglied konnte nicht entfernt werden'
 	],
-
 	'tokens.head': [
 		'API tokens — {project} — Casier',
 		'Jetons d’API — {project} — Casier',
@@ -121,47 +120,10 @@ export const members = {
 		'Credenciales de máquina para CI y la CLI casier. Un token queda ligado a este proyecto, a un conjunto de permisos y a los entornos que nombra: nunca puede leer más allá, y revocar uno no afecta a los demás.',
 		'Maschinenzugänge für CI und die casier-CLI. Ein Token ist an dieses Projekt, einen Berechtigungssatz und die genannten Umgebungen gebunden — es kann nie darüber hinaus lesen, und der Widerruf eines Tokens berührt die anderen nicht.'
 	],
-	'tokens.new': ['New token', 'Nouveau jeton', 'Nuevo token', 'Neues Token'],
-	'tokens.empty.title': ['No API tokens', 'Aucun jeton d’API', 'Sin tokens de API', 'Keine API-Tokens'],
-	'tokens.empty.description': [
-		'Create one to give a pipeline or a machine scoped access to this project.',
-		'Créez-en un pour donner à un pipeline ou à une machine un accès limité à ce projet.',
-		'Crea uno para dar a un pipeline o a una máquina acceso acotado a este proyecto.',
-		'Erstelle eines, um einer Pipeline oder Maschine eingeschränkten Zugriff auf dieses Projekt zu geben.'
-	],
 	'tokens.create': ['Create a token', 'Créer un jeton', 'Crear un token', 'Token erstellen'],
-	'tokens.col.name': ['Name', 'Nom', 'Nombre', 'Name'],
-	'tokens.col.owner': ['Owner', 'Propriétaire', 'Propietario', 'Eigentümer'],
-	'tokens.col.status': ['Status', 'Statut', 'Estado', 'Status'],
-	'tokens.col.permissions': ['Permissions', 'Permissions', 'Permisos', 'Berechtigungen'],
 	'tokens.col.environments': ['Environments', 'Environnements', 'Entornos', 'Umgebungen'],
-	'tokens.col.lastUsed': ['Last used', 'Dernière utilisation', 'Último uso', 'Zuletzt verwendet'],
-	'tokens.col.expires': ['Expires', 'Expire', 'Caduca', 'Läuft ab'],
-	'tokens.status.revoked': ['Revoked {date}', 'Révoqué le {date}', 'Revocado el {date}', 'Widerrufen am {date}'],
 	'tokens.status.expired': ['Expired', 'Expiré', 'Caducado', 'Abgelaufen'],
-	'tokens.status.active': ['Active', 'Actif', 'Activo', 'Aktiv'],
 	'tokens.revoke': ['Revoke', 'Révoquer', 'Revocar', 'Widerrufen'],
-	'tokens.drawer.title': ['New API token', 'Nouveau jeton d’API', 'Nuevo token de API', 'Neues API-Token'],
-	'tokens.copy.title': ['Copy it now', 'Copiez-le maintenant', 'Cópialo ahora', 'Jetzt kopieren'],
-	'tokens.copy.body': [
-		'This is the only time the token is shown. Casier stores a hash of it, so it cannot be shown again — losing it means issuing another.',
-		'C’est la seule fois où le jeton est affiché. Casier n’en conserve qu’un hachage : il ne peut plus être montré, et le perdre oblige à en émettre un autre.',
-		'Esta es la única vez que se muestra el token. Casier guarda un hash, así que no se puede volver a mostrar: perderlo obliga a emitir otro.',
-		'Das Token wird nur dieses eine Mal angezeigt. Casier speichert nur einen Hash und kann es nicht erneut anzeigen — geht es verloren, musst du ein neues ausstellen.'
-	],
-	'tokens.copy.label': ['Token', 'Jeton', 'Token', 'Token'],
-	'tokens.copy.helper': [
-		'Store it in your CI secret store, or hand it to the CLI as CASIER_TOKEN.',
-		'Conservez-le dans le coffre à secrets de votre CI, ou donnez-le à la CLI sous CASIER_TOKEN.',
-		'Guárdalo en el almacén de secretos de tu CI, o pásalo a la CLI como CASIER_TOKEN.',
-		'Lege es im Secret-Speicher deiner CI ab oder übergib es der CLI als CASIER_TOKEN.'
-	],
-	'tokens.name.helper': [
-		'Where the token will live — a machine, a pipeline, a script.',
-		'Où le jeton vivra : une machine, un pipeline, un script.',
-		'Dónde vivirá el token: una máquina, un pipeline, un script.',
-		'Wo das Token liegen wird — eine Maschine, eine Pipeline, ein Skript.'
-	],
 	'tokens.permissions.read': [
 		'Read — fetch secrets',
 		'Lecture : récupérer les secrets',
@@ -186,31 +148,12 @@ export const members = {
 		'Slugs de entorno separados por comas, o * para todos los entornos. Este proyecto tiene: {slugs}.',
 		'Kommagetrennte Umgebungs-Slugs oder * für alle Umgebungen. Dieses Projekt hat: {slugs}.'
 	],
-	'tokens.expires.label': ['Expires in', 'Expire dans', 'Caduca en', 'Läuft ab in'],
-	'tokens.expires.helper': [
-		'A machine credential that never lapses is the one nobody remembers to rotate.',
-		'Un identifiant machine qui n’expire jamais est celui que personne ne pense à renouveler.',
-		'Una credencial de máquina que nunca caduca es la que nadie recuerda rotar.',
-		'Ein Maschinenzugang, der nie abläuft, ist der, den niemand rotiert.'
-	],
-	'tokens.expires.30': ['30 days', '30 jours', '30 días', '30 Tage'],
-	'tokens.expires.90': ['90 days', '90 jours', '90 días', '90 Tage'],
-	'tokens.expires.365': ['1 year', '1 an', '1 año', '1 Jahr'],
-	'tokens.expires.730': ['2 years', '2 ans', '2 años', '2 Jahre'],
-	'tokens.createSubmit': ['Create token', 'Créer le jeton', 'Crear token', 'Token erstellen'],
 	'tokens.created': ['Token "{name}" created', 'Jeton « {name} » créé', 'Token «{name}» creado', 'Token „{name}“ erstellt'],
 	'tokens.createdNoValue': [
 		'Token "{name}" was created, but the server did not return its value. Revoke it and issue another.',
 		'Le jeton « {name} » a été créé, mais le serveur n’a pas renvoyé sa valeur. Révoquez-le et émettez-en un autre.',
 		'El token «{name}» se creó, pero el servidor no devolvió su valor. Revócalo y emite otro.',
 		'Das Token „{name}“ wurde erstellt, aber der Server hat den Wert nicht zurückgegeben. Widerrufe es und stelle ein neues aus.'
-	],
-	'tokens.revoke.title': ['Revoke token', 'Révoquer le jeton', 'Revocar token', 'Token widerrufen'],
-	'tokens.revoke.message': [
-		'"{name}" stops working immediately, and any CI pipeline or CLI still using it starts failing. It cannot be un-revoked. The row stays listed so the audit log still names what it changed.',
-		'« {name} » cesse de fonctionner immédiatement, et tout pipeline CI ou CLI qui l’utilise encore échoue. Une révocation est irréversible. La ligne reste listée pour que le journal d’audit nomme toujours ce qu’il a modifié.',
-		'«{name}» deja de funcionar de inmediato, y cualquier pipeline de CI o CLI que lo siga usando empezará a fallar. No se puede deshacer la revocación. La fila sigue listada para que el registro de auditoría nombre lo que cambió.',
-		'„{name}“ funktioniert sofort nicht mehr, und jede CI-Pipeline oder CLI, die es noch nutzt, schlägt fehl. Der Widerruf lässt sich nicht rückgängig machen. Die Zeile bleibt gelistet, damit das Audit-Log weiter nennt, was es geändert hat.'
 	],
 	'tokens.revoked': ['Token "{name}" revoked', 'Jeton « {name} » révoqué', 'Token «{name}» revocado', 'Token „{name}“ widerrufen'],
 	'tokens.error.load': [

@@ -1,4 +1,5 @@
 import { browser } from '$app/environment';
+import { applyTheme } from '@facile/muse';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 
@@ -8,44 +9,34 @@ function isPreference(value: string | null): value is ThemePreference {
 	return value === 'light' || value === 'dark' || value === 'system';
 }
 
+function stored(): string | null {
+	try {
+		return localStorage.getItem(STORAGE_KEY);
+	} catch {
+		return null;
+	}
+}
+
 class ThemeState {
 	preference = $state<ThemePreference>('system');
-	resolved = $state<'light' | 'dark'>('light');
 
-	/** Reads the stored preference and starts tracking the OS setting. */
 	restore() {
 		if (!browser) return;
-
-		const stored = localStorage.getItem(STORAGE_KEY);
-		this.preference = isPreference(stored) ? stored : 'system';
-		this.apply();
-
-		const query = window.matchMedia('(prefers-color-scheme: dark)');
-		query.addEventListener('change', () => {
-			if (this.preference === 'system') this.apply();
-		});
+		const value = stored();
+		this.preference = isPreference(value) ? value : 'system';
+		applyTheme(this.preference);
 	}
 
 	set(next: ThemePreference) {
 		this.preference = next;
 		if (!browser) return;
-		localStorage.setItem(STORAGE_KEY, next);
-		this.apply();
-	}
-
-	/**
-	 * Sets both classes, never just `dark`. muse paints dark from
-	 * `@media (prefers-color-scheme: dark)` scoped to `:root:not(.light)`, so on a
-	 * dark-preferring OS removing `dark` is not enough to get light back — only an
-	 * explicit `light` class escapes the media block.
-	 */
-	private apply() {
-		if (!browser) return;
-		const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-		const dark = this.preference === 'dark' || (this.preference === 'system' && prefersDark);
-		this.resolved = dark ? 'dark' : 'light';
-		document.documentElement.classList.toggle('dark', dark);
-		document.documentElement.classList.toggle('light', !dark);
+		try {
+			localStorage.setItem(STORAGE_KEY, next);
+		} catch {
+			return;
+		} finally {
+			applyTheme(next);
+		}
 	}
 }
 

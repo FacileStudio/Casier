@@ -26,7 +26,7 @@
 </script>
 
 <svelte:head>
-	<title>{t('settings.head.api')}</title>
+	<title>{t('settings.head.tokens')}</title>
 </svelte:head>
 
 <div class="flex flex-col gap-10">
