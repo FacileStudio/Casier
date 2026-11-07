@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"context"
-	"net"
 	"net/http"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
@@ -35,13 +34,9 @@ func RequireAuthOrToken(authService Authenticator) func(http.Handler) http.Handl
 			if authorization != "" {
 				userID, scope, err := authService.AuthenticateAPI(r.Context(), authorization)
 				if err == nil {
-					clientIP, _, _ := net.SplitHostPort(r.RemoteAddr)
-					if clientIP == "" {
-						clientIP = r.RemoteAddr
-					}
 					ctx := authcontext.WithIdentity(r.Context(), authcontext.Identity{
 						UserID:   userID,
-						ClientIP: clientIP,
+						ClientIP: authcontext.ClientIP(r),
 						Scope:    scope,
 					})
 					next.ServeHTTP(w, r.WithContext(ctx))

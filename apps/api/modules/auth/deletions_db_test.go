@@ -58,7 +58,7 @@ func seedErasure(t *testing.T, db *gorm.DB) erasureFixture {
 	exec(t, db, `INSERT INTO api_tokens (token_hash, name, project_id, created_by) VALUES ('tok-kept', 'ci', ?, ?)`, f.shared, f.kept)
 	exec(t, db, `INSERT INTO invites (token, project_id, role, created_by) VALUES ('inv', ?, 'member', ?)`, f.shared, f.gone)
 	exec(t, db, `INSERT INTO webhooks (project_id, url, created_by) VALUES (?, 'https://hook.test', ?)`, f.shared, f.gone)
-	exec(t, db, `INSERT INTO audit_logs (project_id, user_id, user_email, action) VALUES (?, ?, 'gone@facile.studio', 'write')`, f.shared, intToStr(f.gone))
+	exec(t, db, `INSERT INTO audit_logs (project_id, user_id, user_email, action, client_ip) VALUES (?, ?, 'gone@facile.studio', 'write', '203.0.113.7')`, f.shared, intToStr(f.gone))
 	return f
 }
 
@@ -95,6 +95,7 @@ func erasureChecks(f erasureFixture) []erasureCheck {
 		{"the successor owner", `SELECT count(*) FROM project_members WHERE project_id = ? AND user_id = ? AND role = 'owner'`, []any{f.shared, f.kept}, 1},
 		{"the shared webhook", `SELECT count(*) FROM webhooks WHERE created_by = 0`, nil, 1},
 		{"anonymised audit authors", `SELECT count(*) FROM audit_logs WHERE project_id = ? AND user_email = ? AND user_id = ''`, []any{f.shared, DeletedUserName}, 1},
+		{"the erased person's address", `SELECT count(*) FROM audit_logs WHERE client_ip <> ''`, nil, 0},
 		{"anonymised history authors", `SELECT count(*) FROM secret_versions WHERE changed_by = ''`, nil, 1},
 		{"anonymised trash authors", `SELECT count(*) FROM secrets WHERE deleted_by = ''`, nil, 1},
 		{"the other person", `SELECT count(*) FROM users WHERE id = ?`, []any{f.kept}, 1},

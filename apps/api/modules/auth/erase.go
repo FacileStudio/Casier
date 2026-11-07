@@ -32,7 +32,7 @@ func eraseSteps() []string {
 		`DELETE FROM api_tokens WHERE created_by = @id`,
 		`DELETE FROM invites WHERE created_by = @id`,
 		`UPDATE webhooks SET created_by = 0 WHERE created_by = @id`,
-		`UPDATE audit_logs SET user_id = '', user_email = @name WHERE user_id = @text_id`,
+		`UPDATE audit_logs SET user_id = '', user_email = @name, client_ip = '' WHERE user_id = @text_id`,
 		`UPDATE secret_versions SET changed_by = '' WHERE changed_by = @text_id`,
 		`UPDATE secrets SET deleted_by = '' WHERE deleted_by = @text_id`,
 		`DELETE FROM users WHERE id = @id`,

@@ -13,6 +13,8 @@
 - OIDC account linking follows porte's rules: an existing account links only by verified email, and only when it holds no other identity of the same issuer
 - ci: `ci.yml` runs gofmt, vet, build and tests against Postgres, the client check, message test and build, and filet (replaces `filet.yml`)
 
+- fix(api): the audit log records the address tronc's RealIP resolved, not the first `X-Forwarded-For` entry a client could write; GDPR erasure also clears the stored address on the erased person's audit rows
+
 ### Removed
 
 - `POST /api/auth/register`, `/login`, `/forgot-password` and `/reset-password`, the register, forgot-password and reset-password pages, and the password form on the login page
