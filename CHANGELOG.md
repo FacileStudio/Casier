@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-07
 ### Changed
 
 - feat!: people sign in through Registre only. The login page is muse `AuthScreen`; the landing page uses `LandingHeader`, `LandingFooter` and `SignInWithFacile`
@@ -12,7 +13,6 @@
 - feat(api): `OIDC_ISSUER` is required when `APP_ENV=production`
 - OIDC account linking follows porte's rules: an existing account links only by verified email, and only when it holds no other identity of the same issuer
 - ci: `ci.yml` runs gofmt, vet, build and tests against Postgres, the client check, message test and build, and filet (replaces `filet.yml`)
-
 - fix(api): the audit log records the address tronc's RealIP resolved, not the first `X-Forwarded-For` entry a client could write; GDPR erasure also clears the stored address on the erased person's audit rows
 
 ### Removed
