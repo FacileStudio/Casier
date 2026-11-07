@@ -71,7 +71,11 @@ func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *s
 	if err != nil {
 		return nil, nil, err
 	}
-	store := portepg.New(sqlDB)
+	store, err := newPorteStore(sqlDB)
+	if err != nil {
+		return nil, nil, err
+	}
+	resealInBackground(ctx, store, appLogger)
 	cfg := appEnv.Porte()
 
 	sessions, err := session.New(cfg, session.Deps{Sessions: store.Sessions(), Logger: appLogger})
@@ -197,7 +201,11 @@ func run() int {
 		return 1
 	}
 
-	store := portepg.New(sqlDB)
+	store, err := newPorteStore(sqlDB)
+	if err != nil {
+		appLogger.Error("failed to open the porte store", slog.Any("error", err))
+		return 1
+	}
 	authService := auth.NewService(db, keyring, appLogger, sessions, store.Identities())
 	authService.StartSessionCleanup(shutdownCtx)
 
