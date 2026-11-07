@@ -2,6 +2,8 @@ package authcontext
 
 import (
 	"context"
+	"net"
+	"net/http"
 	"strings"
 )
 
@@ -106,4 +108,16 @@ func ScopeFromContext(parentContext context.Context) *TokenScope {
 		return nil
 	}
 	return identity.Scope
+}
+
+// ClientIP is the caller's address as tronc's RealIP middleware resolved it. It
+// never reads X-Forwarded-For itself: RealIP already walked the header from the
+// right and only through trusted proxies, so a client-written entry cannot
+// reach the audit log.
+func ClientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || host == "" {
+		return r.RemoteAddr
+	}
+	return host
 }

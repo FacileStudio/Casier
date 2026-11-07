@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -61,16 +60,10 @@ func (service *Service) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		_, port, _ := net.SplitHostPort(r.RemoteAddr)
-		_ = port
-		clientIP := r.RemoteAddr
-		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-			clientIP = strings.Split(fwd, ",")[0]
-		}
 		ctx := authcontext.WithIdentity(r.Context(), authcontext.Identity{
 			UserID:   userID,
 			Email:    email,
-			ClientIP: clientIP,
+			ClientIP: authcontext.ClientIP(r),
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}))

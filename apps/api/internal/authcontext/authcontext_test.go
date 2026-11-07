@@ -2,6 +2,8 @@ package authcontext
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 )
@@ -121,5 +123,18 @@ func TestScopeFromContext(t *testing.T) {
 	scope := ScopeFromContext(tokenCtx)
 	if scope == nil || scope.TokenID != 3 || scope.ProjectID != 9 {
 		t.Fatalf("token identity yielded %#v", scope)
+	}
+}
+
+func TestClientIPIgnoresForwardedFor(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.Header.Set("X-Forwarded-For", "6.6.6.6")
+	r.RemoteAddr = "203.0.113.9:4411"
+	if got := ClientIP(r); got != "203.0.113.9" {
+		t.Fatalf("ClientIP = %q", got)
+	}
+	r.RemoteAddr = "203.0.113.10"
+	if got := ClientIP(r); got != "203.0.113.10" {
+		t.Fatalf("ClientIP without a port = %q", got)
 	}
 }
