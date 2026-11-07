@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- build(client): bump muse to v0.14.2 (the user menu no longer overflows the viewport edge).
+- feat(client): the user menu has a Subscription row that links to the Facile spaces page.
+
 ## [0.5.0] - 2026-11-07
 
 ### Changed

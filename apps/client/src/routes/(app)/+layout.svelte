@@ -87,6 +87,7 @@
 	}
 
 	const userMenu = $derived({
+		subscription: { plan: 'Gratuit', href: 'https://sso.facile.studio/spaces' },
 		helpHref: 'https://github.com/FacileStudio/Casier/tree/main/docs',
 		onSignOut: signOut,
 		locale: locale(),
