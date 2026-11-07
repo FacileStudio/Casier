@@ -311,7 +311,7 @@
 						{t('common.cancel')}
 					</Button>
 					<Button type="submit" size="lg" disabled={creating || !newName.trim()}>
-						{#if creating}<Spinner label={t('common.loading')} size="sm" class="border-current border-t-transparent" />{/if}
+						{#if creating}<Spinner label={t('common.loading')} size="sm" />{/if}
 						{creating ? t('common.creating') : t('tokens.createSubmit')}
 					</Button>
 				</div>
