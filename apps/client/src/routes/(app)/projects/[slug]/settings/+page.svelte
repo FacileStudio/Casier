@@ -286,7 +286,7 @@
 								></iconify-icon>
 							</IconButton>
 							<IconButton
-								variant="danger"
+								variant="ghost-danger"
 								aria-label={t('psettings.env.deleteAria', { name: env.name })}
 								title={ctx.environments.length <= 1
 									? t('psettings.env.keepOne')

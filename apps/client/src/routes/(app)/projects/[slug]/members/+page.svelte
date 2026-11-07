@@ -199,7 +199,7 @@
 								<div class="flex justify-end">
 									{#if ctx.canAdmin && member.email !== auth.email && member.role !== 'owner'}
 										<IconButton
-											variant="danger"
+											variant="ghost-danger"
 											aria-label={t('members.remove.aria', { email: member.email })}
 											onclick={() => openRemove(member)}
 										>

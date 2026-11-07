@@ -85,8 +85,8 @@ also seeds `OIDC_SUCCESS_URL`.
 
 `OIDC_ISSUER` is required in production. Set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URL`
 together, pointing the redirect at
-`https://casier.facile.studio/api/auth/oidc/callback`. Set `APP_VERSION` at release so `GET /version`
-reports the tag. For log shipping, set `JOURNAL_URL` ending in `/api` and a `JOURNAL_TOKEN`
+`https://casier.facile.studio/api/auth/oidc/callback`. `GET /version` reports the version in
+`apps/client/package.json`, baked in at build time. For log shipping, set `JOURNAL_URL` ending in `/api` and a `JOURNAL_TOKEN`
 minted on Journal's Keys page.
 
 ### Rotating the root key

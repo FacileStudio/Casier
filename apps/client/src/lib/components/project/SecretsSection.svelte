@@ -488,7 +488,7 @@
 				{/if}
 			</span>
 			<Button
-				variant="outline"
+				variant="secondary"
 				size="sm"
 				icon={staleOnly ? icons.refresh : icons.filter}
 				class="shrink-0"
@@ -509,9 +509,9 @@
 			/>
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
-			<Button variant="outline" icon={icons.remove} onclick={openTrash}>{t('sec.trash')}</Button>
+			<Button variant="secondary" icon={icons.remove} onclick={openTrash}>{t('sec.trash')}</Button>
 			<Button
-				variant="outline"
+				variant="secondary"
 				icon={icons.download}
 				disabled={exporting || secrets.length === 0}
 				onclick={handleExport}
@@ -519,7 +519,7 @@
 				{exporting ? t('sec.exporting') : t('sec.export')}
 			</Button>
 			{#if canWrite}
-				<Button variant="outline" icon={icons.upload} onclick={() => (importOpen = true)}>
+				<Button variant="secondary" icon={icons.upload} onclick={() => (importOpen = true)}>
 					{t('sec.import')}
 				</Button>
 				<Button icon={icons.plus} onclick={openAdd}>{t('sec.add')}</Button>
@@ -554,7 +554,7 @@
 				: t('sec.noMatches.search', { search })}
 		>
 			<Button
-				variant="outline"
+				variant="secondary"
 				icon={icons.refresh}
 				onclick={() => {
 					search = '';
@@ -721,7 +721,7 @@
 						</div>
 						{#if canWrite}
 							<Button
-								variant="outline"
+								variant="secondary"
 								icon={icons.refresh}
 								class="shrink-0"
 								disabled={restoring === secret.id}
@@ -798,7 +798,7 @@
 					</div>
 					{#if canWrite && historyTarget && version.version !== historyTarget.version}
 						<Button
-							variant="outline"
+							variant="secondary"
 							icon={icons.refresh}
 							class="shrink-0"
 							disabled={rollingBack !== null}

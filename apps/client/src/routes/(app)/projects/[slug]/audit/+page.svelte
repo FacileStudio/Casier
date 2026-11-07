@@ -81,7 +81,7 @@
 		bare
 	>
 		{#snippet actions()}
-			<Button variant="outline" icon={icons.refresh} disabled={loading} onclick={loadLogs}>
+			<Button variant="secondary" icon={icons.refresh} disabled={loading} onclick={loadLogs}>
 				{t('common.refresh')}
 			</Button>
 		{/snippet}

@@ -22,6 +22,6 @@
 	></iconify-icon>
 	<p class="mx-auto max-w-sm text-fc-sm text-fc-fg-muted">{message ?? t('common.genericError')}</p>
 	{#if onretry}
-		<Button variant="outline" onclick={onretry}>{t('common.tryAgain')}</Button>
+		<Button variant="secondary" onclick={onretry}>{t('common.tryAgain')}</Button>
 	{/if}
 </Card>

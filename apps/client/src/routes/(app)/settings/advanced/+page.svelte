@@ -49,7 +49,7 @@
 	<SettingsSection title={t('advanced.about.title')} description={t('advanced.about.description')}>
 		{#snippet actions()}
 			<Button
-				variant="outline"
+				variant="secondary"
 				href="https://facile.studio"
 				target="_blank"
 				rel="noopener"
@@ -63,7 +63,7 @@
 			label={t('advanced.about.what.label')}
 			description={t('advanced.about.what.description')}
 		>
-			<Button variant="outline" href="/projects" icon={icons.folder}>{t('advanced.about.open')}</Button>
+			<Button variant="secondary" href="/projects" icon={icons.folder}>{t('advanced.about.open')}</Button>
 		</SettingsRow>
 	</SettingsSection>
 </div>

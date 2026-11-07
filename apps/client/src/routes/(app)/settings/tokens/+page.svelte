@@ -46,11 +46,11 @@
 
 	<SettingsSection title={t('api.tokens.title')} description={t('api.tokens.description')}>
 		{#snippet actions()}
-			<Button variant="outline" href="/projects" icon={icons.folder}>{t('api.tokens.projects')}</Button>
+			<Button variant="secondary" href="/projects" icon={icons.folder}>{t('api.tokens.projects')}</Button>
 		{/snippet}
 
 		<SettingsRow label={t('api.tokens.where.label')} description={t('api.tokens.where.description')}>
-			<Button variant="outline" href="/projects" icon={icons.key}>{t('api.tokens.issue')}</Button>
+			<Button variant="secondary" href="/projects" icon={icons.key}>{t('api.tokens.issue')}</Button>
 		</SettingsRow>
 
 		<SettingsRow label={t('api.tokens.cli.label')} description={t('api.tokens.cli.description')}>
