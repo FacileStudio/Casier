@@ -2,51 +2,21 @@ import type { Row } from '../row';
 
 /** The account settings pages: profile, appearance, API and advanced. */
 export const settings = {
-	'settings.title': ['Settings', 'Paramètres', 'Ajustes', 'Einstellungen'],
 	'settings.subtitle': [
 		'Your account, this browser, and how machines reach this instance.',
 		'Votre compte, ce navigateur et la façon dont les machines accèdent à cette instance.',
 		'Tu cuenta, este navegador y cómo acceden las máquinas a esta instancia.',
 		'Dein Konto, dieser Browser und der Zugriff von Maschinen auf diese Instanz.'
 	],
-	'settings.sections': ['Settings sections', 'Sections des paramètres', 'Secciones de ajustes', 'Einstellungsbereiche'],
 	'settings.tab.profile': ['Profile', 'Profil', 'Perfil', 'Profil'],
-	'settings.tab.appearance': ['Appearance', 'Apparence', 'Apariencia', 'Darstellung'],
-	'settings.tab.api': ['API', 'API', 'API', 'API'],
+	'settings.tab.preferences': ['Preferences', 'Préférences', 'Preferencias', 'Präferenzen'],
+	'settings.tab.tokens': ['API tokens', 'Jetons d’API', 'Tokens de API', 'API-Tokens'],
 	'settings.tab.advanced': ['Advanced', 'Avancé', 'Avanzado', 'Erweitert'],
 	'settings.head.profile': ['Settings — Casier', 'Paramètres — Casier', 'Ajustes — Casier', 'Einstellungen — Casier'],
-	'settings.head.appearance': ['Appearance — Casier', 'Apparence — Casier', 'Apariencia — Casier', 'Darstellung — Casier'],
-	'settings.head.api': ['API — Casier', 'API — Casier', 'API — Casier', 'API — Casier'],
+	'settings.head.preferences': ['Preferences — Casier', 'Préférences — Casier', 'Preferencias — Casier', 'Präferenzen — Casier'],
+	'settings.head.tokens': ['API tokens — Casier', 'Jetons d’API — Casier', 'Tokens de API — Casier', 'API-Tokens — Casier'],
 	'settings.head.advanced': ['Advanced — Casier', 'Avancé — Casier', 'Avanzado — Casier', 'Erweitert — Casier'],
-
-	'profile.signedInWith': ['Signed in with', 'Connecté avec', 'Sesión iniciada con', 'Angemeldet mit'],
 	'profile.interface': ['Interface', 'Interface', 'Interfaz', 'Oberfläche'],
-	'profile.account.title': ['Account', 'Compte', 'Cuenta', 'Konto'],
-	'profile.account.description': [
-		'An account in Casier is an email address. Your name and picture come from your Facile account.',
-		'Un compte Casier est une adresse e-mail. Votre nom et votre photo viennent de votre compte Facile.',
-		'Una cuenta de Casier es una dirección de correo. Tu nombre y tu imagen proceden de tu cuenta de Facile.',
-		'Ein Casier-Konto ist eine E-Mail-Adresse. Name und Bild stammen aus deinem Facile-Konto.'
-	],
-	'profile.email.description': [
-		'Your identity across every project you belong to. Members are invited by this address.',
-		'Votre identité dans tous les projets dont vous faites partie. Les membres sont invités avec cette adresse.',
-		'Tu identidad en todos los proyectos a los que perteneces. Los miembros se invitan con esta dirección.',
-		'Deine Identität in allen Projekten, denen du angehörst. Mitglieder werden über diese Adresse eingeladen.'
-	],
-	'profile.picture.label': ['Name and picture', 'Nom et photo', 'Nombre e imagen', 'Name und Bild'],
-	'profile.picture.description': [
-		'Set them in your Facile account. A change shows here on the next page load.',
-		'Définissez-les dans votre compte Facile. Une modification apparaît ici au prochain chargement de la page.',
-		'Defínelos en tu cuenta de Facile. Un cambio se ve aquí en la próxima carga de la página.',
-		'Lege sie in deinem Facile-Konto fest. Eine Änderung erscheint hier beim nächsten Laden der Seite.'
-	],
-	'profile.picture.edit': [
-		'Edit in Facile account',
-		'Modifier dans le compte Facile',
-		'Editar en la cuenta de Facile',
-		'Im Facile-Konto bearbeiten'
-	],
 	'profile.auth.title': ['Authentication', 'Authentification', 'Autenticación', 'Authentifizierung'],
 	'profile.auth.description': [
 		'How you get into Casier. It is set by the server, not by you.',
@@ -62,53 +32,12 @@ export const settings = {
 		'Casier hat kein eigenes Passwort. Dein Facile-Konto verwaltet deine Zugangsdaten — ändere sie dort.'
 	],
 	'profile.auth.badge': ['Managed by Facile', 'Géré par Facile', 'Gestionado por Facile', 'Von Facile verwaltet'],
-	'profile.session.title': ['Session', 'Session', 'Sesión', 'Sitzung'],
-	'profile.session.description': [
-		'Sessions are per browser. Signing out here leaves your other devices alone.',
-		'Les sessions sont propres à chaque navigateur. Se déconnecter ici n’affecte pas vos autres appareils.',
-		'Las sesiones son por navegador. Cerrar sesión aquí no afecta a tus otros dispositivos.',
-		'Sitzungen gelten pro Browser. Die Abmeldung hier lässt deine anderen Geräte unberührt.'
-	],
-	'profile.logout.label': ['Log out', 'Se déconnecter', 'Cerrar sesión', 'Abmelden'],
-	'profile.logout.description': [
-		'Ends this session and returns you to the sign-in page. API tokens keep working — revoke those from the project that owns them.',
-		'Termine cette session et vous ramène à la page de connexion. Les jetons d’API continuent de fonctionner : révoquez-les depuis le projet qui les détient.',
-		'Termina esta sesión y te lleva a la página de inicio de sesión. Los tokens de API siguen funcionando: revócalos desde el proyecto al que pertenecen.',
-		'Beendet diese Sitzung und führt dich zur Anmeldeseite. API-Tokens funktionieren weiter — widerrufe sie im Projekt, dem sie gehören.'
-	],
-	'profile.logout.busy': ['Signing out…', 'Déconnexion…', 'Cerrando sesión…', 'Abmeldung…'],
 	'profile.logout.warning': [
 		'The server did not confirm the sign-out, ending the session locally anyway.',
 		'Le serveur n’a pas confirmé la déconnexion, la session est quand même terminée localement.',
 		'El servidor no confirmó el cierre de sesión; se termina la sesión localmente de todos modos.',
 		'Der Server hat die Abmeldung nicht bestätigt; die Sitzung wird trotzdem lokal beendet.'
 	],
-
-	'appearance.theme.title': ['Theme', 'Thème', 'Tema', 'Design'],
-	'appearance.theme.description': [
-		'Stored in this browser. Every device you sign in from keeps its own choice.',
-		'Enregistré dans ce navigateur. Chaque appareil depuis lequel vous vous connectez garde son propre choix.',
-		'Se guarda en este navegador. Cada dispositivo desde el que inicias sesión conserva su propia elección.',
-		'In diesem Browser gespeichert. Jedes Gerät, mit dem du dich anmeldest, behält seine eigene Wahl.'
-	],
-	'appearance.scheme.label': ['Colour scheme', 'Thème de couleur', 'Esquema de color', 'Farbschema'],
-	'appearance.scheme.description': [
-		'System follows your operating system and keeps following it while the app is open.',
-		'« Système » suit votre système d’exploitation et continue de le suivre tant que l’application est ouverte.',
-		'«Sistema» sigue tu sistema operativo y lo sigue mientras la aplicación está abierta.',
-		'„System“ folgt deinem Betriebssystem und folgt ihm weiter, solange die App geöffnet ist.'
-	],
-	'appearance.mode.system': ['System', 'Système', 'Sistema', 'System'],
-	'appearance.mode.light': ['Light', 'Clair', 'Claro', 'Hell'],
-	'appearance.mode.dark': ['Dark', 'Sombre', 'Oscuro', 'Dunkel'],
-	'appearance.now.label': ['Showing now', 'Affiché actuellement', 'Mostrando ahora', 'Aktuell angezeigt'],
-	'appearance.now.description': [
-		'What the two-token palette resolves to right now — chroma-zero either way.',
-		'Ce que la palette à deux jetons donne en ce moment, sans chroma dans les deux cas.',
-		'A qué resuelve ahora la paleta de dos tokens, sin croma en ambos casos.',
-		'Was die Zwei-Token-Palette gerade ergibt — in beiden Fällen ohne Buntheit.'
-	],
-
 	'api.endpoint.title': ['Endpoint', 'Point d’accès', 'Endpoint', 'Endpunkt'],
 	'api.endpoint.description': [
 		'Point the CLI or any HTTP client here. The URL is not a secret — the token is.',
@@ -174,7 +103,6 @@ export const settings = {
 		'Los llamadores no interactivos lo envían como CASIER_TOKEN. Los tokens caducan (90 días por defecto, 730 como máximo) y se revocan en lugar de borrarse, para que el registro de auditoría los siga nombrando.',
 		'Nicht interaktive Aufrufer senden es als CASIER_TOKEN. Tokens laufen ab — standardmäßig nach 90 Tagen, höchstens nach 730 — und werden widerrufen statt gelöscht, damit das Audit-Log sie weiter nennt.'
 	],
-
 	'advanced.instance.title': ['Instance', 'Instance', 'Instancia', 'Instanz'],
 	'advanced.instance.description': [
 		'Worth quoting when you file a bug against a self-hosted install.',
@@ -225,18 +153,5 @@ export const settings = {
 		'Agrupa los secretos en entornos dentro de un proyecto, cifra cada valor en reposo, versiona cada cambio y escribe una fila de auditoría. La CLI lee los mismos secretos en un shell, un script o CI.',
 		'Gruppiert Secrets in Umgebungen innerhalb eines Projekts, verschlüsselt jeden Wert, versioniert jede Änderung und schreibt dazu einen Audit-Eintrag. Die CLI liest dieselben Secrets in eine Shell, ein Skript oder die CI.'
 	],
-	'advanced.about.open': ['Open projects', 'Ouvrir les projets', 'Abrir proyectos', 'Projekte öffnen'],
-	'advanced.danger.title': ['Danger zone', 'Zone dangereuse', 'Zona de peligro', 'Gefahrenbereich'],
-	'advanced.danger.description': [
-		'Irreversible actions live at the bottom of this tab — never in the tab strip.',
-		'Les actions irréversibles se trouvent en bas de cet onglet, jamais dans la barre d’onglets.',
-		'Las acciones irreversibles están al final de esta pestaña, nunca en la barra de pestañas.',
-		'Unumkehrbare Aktionen stehen am Ende dieses Tabs — nie in der Tab-Leiste.'
-	],
-	'advanced.danger.note': [
-		'Casier has nothing destructive at the account level: an account is only an email, and it owns no data of its own. What is destructive belongs to a project — deleting an environment, purging a secret, deleting the project itself — and lives in that project’s settings, gated on owner or admin.',
-		'Casier n’a rien de destructeur au niveau du compte : un compte n’est qu’une adresse e-mail et ne possède aucune donnée propre. Ce qui est destructeur appartient à un projet (supprimer un environnement, purger un secret, supprimer le projet) et se trouve dans les paramètres du projet, réservé au propriétaire ou à l’administrateur.',
-		'Casier no tiene nada destructivo a nivel de cuenta: una cuenta es solo un correo y no posee datos propios. Lo destructivo pertenece a un proyecto (borrar un entorno, purgar un secreto, borrar el proyecto) y está en los ajustes del proyecto, reservado al propietario o administrador.',
-		'Casier hat auf Kontoebene nichts Destruktives: Ein Konto ist nur eine E-Mail-Adresse und besitzt keine eigenen Daten. Destruktives gehört zu einem Projekt — Umgebung löschen, Secret endgültig entfernen, Projekt löschen — und liegt in den Projekteinstellungen, nur für Eigentümer oder Admins.'
-	]
+	'advanced.about.open': ['Open projects', 'Ouvrir les projets', 'Abrir proyectos', 'Projekte öffnen']
 } as const satisfies Record<string, Row>;

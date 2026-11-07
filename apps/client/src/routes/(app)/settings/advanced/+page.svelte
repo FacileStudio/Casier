@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { Alert, Button, SettingsRow, SettingsSection, StatusDot, icons } from '@facile/muse';
+	import { Button, SettingsRow, SettingsSection, StatusDot, icons } from '@facile/muse';
 	import { api, type AuthConfig } from '$lib/backend';
 	import { t } from '$lib/i18n/index.svelte';
 
@@ -65,9 +65,5 @@
 		>
 			<Button variant="outline" href="/projects" icon={icons.folder}>{t('advanced.about.open')}</Button>
 		</SettingsRow>
-	</SettingsSection>
-
-	<SettingsSection title={t('advanced.danger.title')} description={t('advanced.danger.description')}>
-		<Alert tone="info">{t('advanced.danger.note')}</Alert>
 	</SettingsSection>
 </div>
