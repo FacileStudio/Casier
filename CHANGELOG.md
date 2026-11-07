@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-07
+
 ### Changed
 
 - build(client): bump muse to v0.14.2 (the user menu no longer overflows the viewport edge).
