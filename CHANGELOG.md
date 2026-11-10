@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- fix(api): erasure also anonymises an audit row that names the erased person as its subject (`member.removed`, resource `user:<id>`). The erasure test now runs the directory receiver's own two callbacks and checks every column that can name a person. Personal projects are still deleted and shared projects still kept, re-owned and anonymised.
+
 ### Changed
 
 - build(deps): tronc v0.21.0, porte v0.18.0 (`directory` v0.4.0) and muse v0.18.0. Every entry between the old and new pins is additive.

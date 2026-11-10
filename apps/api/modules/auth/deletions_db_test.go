@@ -111,27 +111,24 @@ func assertErased(t *testing.T, db *gorm.DB, f erasureFixture) {
 	}
 }
 
-// TestErasePersonDeletesThePersonalVaultAndKeepsTheSpace is the GDPR contract:
-// the person's own data goes, shared space secrets stay with the space, and a
-// second notice for the same person changes nothing.
+// TestErasePersonDeletesThePersonalVaultAndKeepsTheSpace is the GDPR contract,
+// driven through the two callbacks the directory receiver runs for a notice,
+// in its order: the person's own data goes, a project other members use stays
+// with them under a successor owner with the person's authorship anonymised,
+// no row names the person afterwards, and a replayed notice changes nothing.
+// The first notice spells the issuer with a trailing slash, which Casier's
+// lookup ignores.
 func TestErasePersonDeletesThePersonalVaultAndKeepsTheSpace(t *testing.T) {
 	db := resetTestDB(t)
 	f := seedErasure(t, db)
-	ctx := context.Background()
+	seedReferences(t, db, f)
 
-	if err := ErasePerson(ctx, db, deleteIssuer+"/", deletedID); err != nil {
-		t.Fatalf("ErasePerson: %v", err)
+	for _, issuer := range []string{deleteIssuer + "/", deleteIssuer} {
+		eraseThroughDirectory(t, db, issuer, deletedID)
+		assertErased(t, db, f)
+		assertUnreferenced(t, db, f)
 	}
-	assertErased(t, db, f)
-
-	if err := ErasePerson(ctx, db, deleteIssuer, deletedID); err != nil {
-		t.Fatalf("a second ErasePerson must be a no-op, got: %v", err)
-	}
-	assertErased(t, db, f)
-
-	if err := ErasePerson(ctx, db, deleteIssuer, "never-signed-in"); err != nil {
-		t.Fatalf("an unknown subject must be a no-op, got: %v", err)
-	}
+	eraseThroughDirectory(t, db, deleteIssuer, "never-signed-in")
 }
 
 func TestDeletionStateRoundTrips(t *testing.T) {

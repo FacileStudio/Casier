@@ -33,6 +33,7 @@ func eraseSteps() []string {
 		`DELETE FROM invites WHERE created_by = @id`,
 		`UPDATE webhooks SET created_by = 0 WHERE created_by = @id`,
 		`UPDATE audit_logs SET user_id = '', user_email = @name, client_ip = '' WHERE user_id = @text_id`,
+		`UPDATE audit_logs SET resource = 'user:' WHERE resource = 'user:' || @text_id`,
 		`UPDATE secret_versions SET changed_by = '' WHERE changed_by = @text_id`,
 		`UPDATE secrets SET deleted_by = '' WHERE deleted_by = @text_id`,
 		`DELETE FROM users WHERE id = @id`,
@@ -45,7 +46,8 @@ func eraseSteps() []string {
 // with its environments, secrets, versions, tokens and audit rows. A project
 // with other members belongs to them. It keeps its secrets, the person's
 // membership, grants, invites and API tokens are removed, authorship on its
-// audit rows and secret history is anonymised, and when the person was its last
+// audit rows and secret history is anonymised, so is an audit row that names
+// them as its subject (a member removal), and when the person was its last
 // owner the longest-standing admin, or else the longest-standing member, becomes
 // owner. An account that is already gone is a no-op, so a replayed notice
 // changes nothing.
