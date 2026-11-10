@@ -9,7 +9,7 @@
 </svelte:head>
 
 <PreferencesSection
-	theme={theme.preference}
+	theme={theme.mode}
 	onThemeChange={(next: Theme) => theme.set(next)}
 	onLocaleChange={(next: Locale) => rememberLocale(next)}
 />

@@ -1,103 +1,28 @@
+import { ApiError, createApi, redirectToLogin, type CallOptions } from '@facile/client';
+
+export { ApiError };
+
 export const API_BASE = '/api';
 
 export const COOKIE_SESSION = 'cookie';
 
-type FetchOptions = {
-	method?: string;
-	body?: unknown;
-	token?: string | null;
-};
+const apiFetch = createApi({ base: API_BASE, onUnauthorized: redirectToLogin });
 
-export class ApiError extends Error {
-	status: number;
-	code: string;
-
-	constructor(message: string, status: number, code = '') {
-		super(message);
-		this.name = 'ApiError';
-		this.status = status;
-		this.code = code;
-	}
-}
-
-function readString(source: Record<string, unknown>, key: string): string {
-	const value = source[key];
-	return typeof value === 'string' ? value : '';
-}
-
-function parseError(body: string, status: number): ApiError {
-	let message = '';
-	let code = '';
-
-	try {
-		const parsed: unknown = JSON.parse(body);
-		if (parsed && typeof parsed === 'object') {
-			const payload = parsed as Record<string, unknown>;
-			const nested = payload.error;
-			if (nested && typeof nested === 'object') {
-				const inner = nested as Record<string, unknown>;
-				message = readString(inner, 'message');
-				code = readString(inner, 'code');
-			} else if (typeof nested === 'string') {
-				message = nested;
-			}
-			if (!message) message = readString(payload, 'message');
-			if (!code) code = readString(payload, 'code');
-		}
-	} catch {
-		message = '';
-	}
-
-	return new ApiError(message || `HTTP ${status}`, status, code);
-}
-
-const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-
-async function request<T>(path: string, options: FetchOptions = {}): Promise<T> {
-	const method = (options.method ?? 'GET').toUpperCase();
+function request<T>(method: string, path: string, body?: unknown, token?: string | null, options?: CallOptions): Promise<T> {
 	const headers: Record<string, string> = {};
-
-	if (options.body) {
-		headers['Content-Type'] = 'application/json';
-	}
-
-	if (!SAFE_METHODS.has(method)) {
-		headers['X-Facile-CSRF'] = '1';
-	}
-
-	if (options.token && options.token !== COOKIE_SESSION) {
-		headers['Authorization'] = `Bearer ${options.token}`;
-	}
-
-	const response = await fetch(`${API_BASE}${path}`, {
-		method,
-		headers,
-		credentials: 'include',
-		body: options.body ? JSON.stringify(options.body) : undefined,
-	});
-
-	if (!response.ok) {
-		const body = await response.text().catch(() => '');
-		throw parseError(body, response.status);
-	}
-
-	if (response.status === 204) return undefined as T;
-
-	const body = await response.text().catch(() => '');
-	if (!body) return undefined as T;
-
-	try {
-		return JSON.parse(body) as T;
-	} catch {
-		throw new ApiError('Unexpected response from server', response.status, 'invalid_response');
-	}
+	if (token && token !== COOKIE_SESSION) headers['Authorization'] = `Bearer ${token}`;
+	return apiFetch<T>(path, { method, headers, body: body ? JSON.stringify(body) : undefined }, options);
 }
 
+/**
+ * The API, always relative to /api. A 401 sends the browser to the login page,
+ * except on a call made with `{ quiet: true }`, such as the session probe.
+ */
 export const api = {
-	get: <T>(path: string, token?: string | null) => request<T>(path, { token }),
-	post: <T>(path: string, body: unknown, token?: string | null) => request<T>(path, { method: 'POST', body, token }),
-	put: <T>(path: string, body: unknown, token?: string | null) => request<T>(path, { method: 'PUT', body, token }),
-	del: <T>(path: string, token?: string | null) => request<T>(path, { method: 'DELETE', token }),
+	get: <T>(path: string, token?: string | null, options?: CallOptions) => request<T>('GET', path, undefined, token, options),
+	post: <T>(path: string, body: unknown, token?: string | null) => request<T>('POST', path, body, token),
+	put: <T>(path: string, body: unknown, token?: string | null) => request<T>('PUT', path, body, token),
+	del: <T>(path: string, token?: string | null) => request<T>('DELETE', path, undefined, token),
 };
 
 /** GET /me/invitations: Registre's pending space invitations for the user menu. */

@@ -19,7 +19,7 @@ class AuthState {
 		if (this.checkPromise) return this.checkPromise;
 		this.checkPromise = (async () => {
 			try {
-				const me = await api.get<Me>('/auth/me');
+				const me = await api.get<Me>('/auth/me', null, { quiet: true });
 				this.userId = me.id;
 				this.email = me.email;
 				this.name = me.name ?? '';

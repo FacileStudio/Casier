@@ -28,10 +28,7 @@
 			projects = result.projects ?? [];
 		} catch (err) {
 			projects = [];
-			if (err instanceof ApiError && err.status === 401) {
-				auth.logout();
-				goto('/login');
-			}
+			if (err instanceof ApiError && err.status === 401) auth.logout();
 		}
 	}
 
@@ -112,7 +109,7 @@
 		onSignOut: signOut,
 		locale: locale(),
 		onLocaleChange: (next: Locale) => rememberLocale(next),
-		theme: theme.preference,
+		theme: theme.mode,
 		onThemeChange: (next: Theme) => theme.set(next),
 		invitations,
 	});

@@ -34,9 +34,9 @@ apps/
           projects/     Project index, and per-project secrets/members/tokens/audit/settings
           settings/     Account, appearance, about
       lib/
-        backend.ts      API client and domain types
+        backend.ts      API client (the `@facile/client` fetch kernel) and domain types
         auth.svelte.ts  Auth state (Svelte 5 runes)
-        theme.svelte.ts Light/dark/system preference
+        theme.svelte.ts Light/dark/system preference (`@facile/client/theme`, key `casier.theme`)
         components/     App components (shell chrome + project sections)
     static/fonts/       Goga typeface
 docs/                   Reference docs: api, architecture, configuration, deployment, development

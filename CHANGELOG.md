@@ -15,6 +15,7 @@
 - build(deps): tronc v0.21.0, porte v0.18.0 (`directory` v0.4.0) and muse v0.18.0. Every entry between the old and new pins is additive.
 - refactor(api): the session middleware, the route mount, the profile read and the picture backfill come from `porte/kit`. Routes and their unauthenticated status codes are unchanged across the bare, OIDC and OIDC with CLI configurations (170 lines walked, identical). A session whose account is gone still answers 401, now with the JSON error envelope instead of an empty body.
 - The stored email is rewritten at sign-in only when Registre marks it verified, the suite rule `porte/kit` applies. Casier rewrote it on every sign-in.
+- refactor(client): the fetch kernel, the 401 redirect and the theme store come from `@facile/client` v0.1.0. The `api` methods keep their signatures; a 401 now sends the browser to `/login?next=...` from any page, except the session probe, which is quiet. The theme keeps its `casier.theme` key, so stored choices survive. The client never stored a bearer token in `localStorage`; it stays on the cookie session.
 - Kept in Casier, not the kit: the sign-in write and its linking rule (Casier ignores a trailing slash on the provider, the kit does not), the API-token path before the session, the string user id and token scope on the request identity, `GET /auth/config` without OIDC, and the erasure.
 - Licence: Casier is now licensed under `AGPL-3.0-only` (see `LICENSE`); before this, the repository carried no licence.
 
