@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-10
+
 ### Added
 
 - feat: pending Registre space invitations in the user menu. `GET /api/me/invitations` is mounted through `porte/kit` when OIDC is configured, behind a user session only (an API token gets 401), and the sidebar and mobile nav show the count through muse.
