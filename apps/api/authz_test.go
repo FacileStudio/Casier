@@ -31,6 +31,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
 	"github.com/FacileStudio/porte/directory"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
@@ -201,6 +202,10 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+// testDirectory is a Registre nobody answers for. No seeded account has an
+// identity under it, so the invitations route never reaches the network.
+var testDirectory = directory.Client{Issuer: "https://sso.casier.test", ClientID: "casier", ClientSecret: "test-secret"}
+
 // buildTestRouter assembles the router exactly as main.go's run() does, so
 // every request in the matrix travels the middleware chain that ships. Testing
 // the service layer directly is precisely how a route-level gap survives.
@@ -223,7 +228,7 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	}
 	var oidcKit *oidc.Kit
 	authService := auth.NewService(db, keyring, logger, sessions, auth.NewUserStore(db, sqlDB))
-	deletions := auth.NewDeletions(db, directory.Client{Issuer: "https://sso.casier.test"}, nil, logger)
+	deletions := auth.NewDeletions(db, testDirectory, nil, logger)
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
 	projectsService := projects.NewService(db, keyring, auditLogger)
@@ -235,7 +240,10 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
-		if err := auth.RegisterRoutes(r, sessions, oidcKit, authService, deletions.Handler()); err != nil {
+		if err := auth.RegisterRoutes(r, auth.Routes{
+			Sessions: sessions, OIDC: oidcKit, Service: authService, Deletions: deletions.Handler(),
+			Invitations: &kit.InvitationsConfig{Directory: testDirectory, Identities: store.Identities(), Logger: logger},
+		}); err != nil {
 			panic(fmt.Sprintf("auth.RegisterRoutes: %v", err))
 		}
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
@@ -570,6 +578,14 @@ func routeCases(f fixture) []routeCase {
 			outcomes: []outcome{
 				ok(200, cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
 				ok(200, liveTokens...),
+				unauth(rejectedAtTheDoor...),
+			},
+		},
+		{
+			name: "invitations", method: "GET", pattern: "/api/me/invitations", path: "/api/me/invitations",
+			outcomes: []outcome{
+				ok(200, cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				unauth(liveTokens...),
 				unauth(rejectedAtTheDoor...),
 			},
 		},

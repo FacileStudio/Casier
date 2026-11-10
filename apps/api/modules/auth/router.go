@@ -15,41 +15,44 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Routes is what RegisterRoutes mounts. OIDC, Deletions and Invitations are
+// nil when no issuer is configured.
+//
+// Deletions is Registre's signed user.deleted push, mounted at
+// /api/registre/deletions, which is directory.DeletionsPath, outside the
+// session middleware: the handler verifies the notice's signature itself.
+// Invitations is porte/kit's user-menu count, behind a user session only.
+type Routes struct {
+	Sessions    *session.Manager
+	OIDC        *oidc.Kit
+	Service     *Service
+	Deletions   http.Handler
+	Invitations *kit.InvitationsConfig
+}
+
 // RegisterRoutes mounts the auth endpoints. Sign-in is Registre's OIDC flow
 // only; the API-token path lives in middleware.RequireAuthOrToken and needs no
 // route here. porte/kit mounts the session and OIDC routes. Without an OIDC
 // kit, Casier answers GET /auth/config itself, because the CLI reads it to
 // learn that SSO is off.
-//
-// deletions is Registre's signed user.deleted push, nil when OIDC is not
-// configured. It is mounted at /api/registre/deletions, which is
-// directory.DeletionsPath, outside the session middleware: the handler
-// verifies the notice's signature itself.
-func RegisterRoutes(router chi.Router, sessions *session.Manager, oidcKit *oidc.Kit, service *Service, deletions http.Handler) error {
-	if err := kit.Mount(router, kit.Config{Sessions: sessions, OIDC: oidcKit}); err != nil {
+func RegisterRoutes(router chi.Router, routes Routes) error {
+	if err := kit.Mount(router, kit.Config{Sessions: routes.Sessions, OIDC: routes.OIDC}); err != nil {
 		return err
 	}
-	if oidcKit == nil {
+	if routes.OIDC == nil {
 		router.Get("/auth/config", func(w http.ResponseWriter, r *http.Request) {
-			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
-				"sso_only":     true,
-				"oidc_enabled": false,
-			})
+			httpjson.WriteJSON(w, http.StatusOK, map[string]any{"sso_only": true, "oidc_enabled": false})
 		})
 	}
-
-	if deletions != nil {
-		router.Method(http.MethodPost, "/registre/deletions", deletions)
+	if routes.Deletions != nil {
+		router.Method(http.MethodPost, "/registre/deletions", routes.Deletions)
 	}
-
-	router.With(middleware.RequireAuthOrToken(service)).Get("/auth/me", func(w http.ResponseWriter, r *http.Request) {
-		resp, err := service.controller.me(r.Context())
-		if err != nil {
-			httpjson.WriteError(w, err)
-			return
+	if routes.Invitations != nil {
+		if err := kit.MountInvitations(router.With(routes.Service.RequireAuth), *routes.Invitations); err != nil {
+			return err
 		}
-		httpjson.WriteJSON(w, http.StatusOK, resp)
-	})
+	}
+	router.With(middleware.RequireAuthOrToken(routes.Service)).Get("/auth/me", routes.Service.controller.handleMe)
 	return nil
 }
 

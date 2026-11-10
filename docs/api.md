@@ -46,6 +46,7 @@ the 2026-08-04 rename.
 | GET | `/api/auth/config` | public |
 | POST | `/api/auth/logout` | session |
 | GET | `/api/auth/me` | session |
+| GET | `/api/me/invitations` | session only, no API token |
 | GET | `/api/auth/oidc` | public |
 | GET | `/api/auth/oidc/callback` | public |
 | POST | `/api/auth/cli` | public |
@@ -62,6 +63,11 @@ and `/api/auth/reset-password` answer `404`. People sign in through Registre
 `POST /api/registre/deletions` is Registre's signed `user.deleted` push. It sits outside the
 session middleware and the handler verifies the notice itself. Casier also polls Registre for
 deletions with its own OIDC client credentials, so a missed push is harmless.
+
+`GET /api/me/invitations` is porte/kit's user-menu count of the person's pending Registre space
+invitations: `{"count": n, "href": url}`, or `{"count": 0}` without `href` when Registre cannot be
+read. It is mounted only when OIDC is configured, never fails a page, and is cached per person for
+60 seconds. A `casier_` API token gets `401`.
 
 Logout clears the `casier_session` cookie and answers `204`.
 

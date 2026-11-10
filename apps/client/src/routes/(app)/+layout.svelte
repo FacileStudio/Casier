@@ -10,6 +10,7 @@
 	import {
 		api,
 		ApiError,
+		type Invitations,
 		type Me,
 		type Project,
 		type ProjectsResponse,
@@ -19,6 +20,7 @@
 
 	let projects = $state<Project[]>([]);
 	let collapsed = $state(false);
+	let invitations = $state<{ count: number; href: string } | null>(null);
 
 	async function refreshProjects() {
 		try {
@@ -38,6 +40,24 @@
 			return projects;
 		},
 		refreshProjects,
+	});
+
+	/**
+	 * The Registre invitations count for the user menu. The route never fails,
+	 * and an answer without href means the count could not be read, which muse
+	 * draws as no row at all.
+	 */
+	async function refreshInvitations() {
+		try {
+			const answer = await api.get<Invitations>('/me/invitations');
+			invitations = answer?.href ? { count: answer.count, href: answer.href } : null;
+		} catch {
+			invitations = null;
+		}
+	}
+
+	$effect(() => {
+		if (auth.isAuthenticated) refreshInvitations();
 	});
 
 	$effect(() => {
@@ -94,6 +114,7 @@
 		onLocaleChange: (next: Locale) => rememberLocale(next),
 		theme: theme.preference,
 		onThemeChange: (next: Theme) => theme.set(next),
+		invitations,
 	});
 
 	const spaces = $derived(projects.map((project) => ({ id: project.slug, name: project.name })));

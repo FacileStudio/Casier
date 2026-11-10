@@ -1,6 +1,18 @@
 package auth
 
-import documentation "github.com/FacileStudio/Casier/apps/api/internal/documentation"
+import (
+	documentation "github.com/FacileStudio/Casier/apps/api/internal/documentation"
+	"github.com/FacileStudio/porte/kit"
+)
+
+// invitationsRoute is porte/kit's documentation of GET /me/invitations, with
+// its response schema.
+func invitationsRoute() documentation.Route {
+	route := kit.InvitationsRoute()
+	route.Auth = "session cookie or bearer session token; API tokens are refused"
+	route.ResponseBody = kit.InvitationsResponse{}
+	return route
+}
 
 var Documentation = documentation.Module{
 	Name:        "auth",
@@ -47,5 +59,6 @@ var Documentation = documentation.Module{
 				{Status: 401, Code: "unauthenticated", Description: "Authorization header is missing or invalid."},
 			},
 		},
+		invitationsRoute(),
 	},
 }

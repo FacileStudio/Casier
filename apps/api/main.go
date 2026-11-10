@@ -27,6 +27,7 @@ import (
 
 	"github.com/FacileStudio/Journal/sdk/journal"
 	"github.com/FacileStudio/porte/directory"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
 	portepg "github.com/FacileStudio/porte/pg"
 	"github.com/FacileStudio/porte/session"
@@ -67,36 +68,36 @@ func refConfig() apiref.Config {
 	}
 }
 
-func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, appEnv env.Config, appLogger *slog.Logger) (*session.Manager, *oidc.Kit, error) {
+// buildAuth wires porte: the session manager always, and with an issuer the
+// OIDC kit and the user-menu invitations, both over the sealed porte store.
+func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
 	store, err := newPorteStore(sqlDB)
 	if err != nil {
-		return nil, nil, err
+		return auth.Routes{}, err
 	}
 	resealInBackground(ctx, store, appLogger)
 	cfg := appEnv.Porte()
 
 	sessions, err := session.New(cfg, session.Deps{Sessions: store.Sessions(), Logger: appLogger})
-	if err != nil {
-		return nil, nil, err
+	if err != nil || cfg.Issuer == "" {
+		return auth.Routes{Sessions: sessions}, err
 	}
-	if cfg.Issuer == "" {
-		return sessions, nil, nil
-	}
-
 	if _, err := users.BackfillPictures(ctx, cfg.Issuer); err != nil {
-		return nil, nil, err
+		return auth.Routes{}, err
 	}
-	kit, err := oidc.New(ctx, cfg, oidc.Deps{
+	oidcKit, err := oidc.New(ctx, cfg, oidc.Deps{
 		Users:      users,
 		Identities: store.Identities(),
 		Sessions:   sessions,
 		Codes:      store.LoginCodes(),
 		Logger:     appLogger,
 	})
-	if err != nil {
-		return nil, nil, err
+	invitations := &kit.InvitationsConfig{
+		Directory:  directory.Client{Issuer: cfg.Issuer, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret},
+		Identities: store.Identities(),
+		Logger:     appLogger,
 	}
-	return sessions, kit, nil
+	return auth.Routes{Sessions: sessions, OIDC: oidcKit, Invitations: invitations}, err
 }
 
 // startDeletions follows Registre's GDPR deletions when OIDC is configured,
@@ -192,13 +193,13 @@ func run() int {
 	defer cancelCleanup()
 
 	users := auth.NewUserStore(db, sqlDB)
-	sessions, oidcKit, err := buildAuth(shutdownCtx, sqlDB, users, appEnv, appLogger)
+	authRoutes, err := buildAuth(shutdownCtx, sqlDB, users, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to initialise porte", slog.Any("error", err))
 		return 1
 	}
 
-	authService := auth.NewService(db, keyring, appLogger, sessions, users)
+	authService := auth.NewService(db, keyring, appLogger, authRoutes.Sessions, users)
 	authService.StartSessionCleanup(shutdownCtx)
 
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
@@ -233,7 +234,8 @@ func run() int {
 
 	var mountErr error
 	router.Route("/api", func(r chi.Router) {
-		mountErr = auth.RegisterRoutes(r, sessions, oidcKit, authService, deletionsHandler(deletions))
+		authRoutes.Service, authRoutes.Deletions = authService, deletionsHandler(deletions)
+		mountErr = auth.RegisterRoutes(r, authRoutes)
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)

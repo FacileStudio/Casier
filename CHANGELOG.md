@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- feat: pending Registre space invitations in the user menu. `GET /api/me/invitations` is mounted through `porte/kit` when OIDC is configured, behind a user session only (an API token gets 401), and the sidebar and mobile nav show the count through muse.
+
 ### Fixed
 
 - fix(api): erasure also anonymises an audit row that names the erased person as its subject (`member.removed`, resource `user:<id>`). The erasure test now runs the directory receiver's own two callbacks and checks every column that can name a person. Personal projects are still deleted and shared projects still kept, re-owned and anonymised.

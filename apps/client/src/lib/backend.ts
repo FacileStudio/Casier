@@ -100,6 +100,12 @@ export const api = {
 	del: <T>(path: string, token?: string | null) => request<T>(path, { method: 'DELETE', token }),
 };
 
+/** GET /me/invitations: Registre's pending space invitations for the user menu. */
+export type Invitations = {
+	count: number;
+	href?: string;
+};
+
 export type AuthConfig = {
 	sso_only: boolean;
 	oidc_enabled: boolean;
