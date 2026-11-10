@@ -74,7 +74,8 @@ bun run check
     sh scripts/check.sh            gofmt -l, go vet, go test, then the client type-check
     sh scripts/check.sh --go-only  skip the client
     sh scripts/check.sh --format   rewrite Go sources in place (the only writing mode)
-    mise install                   wire the git hooks; lefthook runs the gate before every push
+    filet gate .                   filet check, then douane scan -fail critical -scope prod
+    mise install                   wire the git hooks; lefthook runs check.sh and filet gate before every push
 
 It is deliberately not run through `mise`: `mise run` resolves every tool in the merged config
 before running a task body, so an unrelated broken tool in a global config would take the gate
