@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/middleware"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
 	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/httpjson"
@@ -16,18 +17,19 @@ import (
 
 // RegisterRoutes mounts the auth endpoints. Sign-in is Registre's OIDC flow
 // only; the API-token path lives in middleware.RequireAuthOrToken and needs no
-// route here.
+// route here. porte/kit mounts the session and OIDC routes. Without an OIDC
+// kit, Casier answers GET /auth/config itself, because the CLI reads it to
+// learn that SSO is off.
 //
 // deletions is Registre's signed user.deleted push, nil when OIDC is not
 // configured. It is mounted at /api/registre/deletions, which is
 // directory.DeletionsPath, outside the session middleware: the handler
 // verifies the notice's signature itself.
-func RegisterRoutes(router chi.Router, sessions *session.Manager, kit *oidc.Kit, service *Service, deletions http.Handler) {
-	sessions.Mount(router)
-
-	if kit != nil {
-		kit.Mount(router)
-	} else {
+func RegisterRoutes(router chi.Router, sessions *session.Manager, oidcKit *oidc.Kit, service *Service, deletions http.Handler) error {
+	if err := kit.Mount(router, kit.Config{Sessions: sessions, OIDC: oidcKit}); err != nil {
+		return err
+	}
+	if oidcKit == nil {
 		router.Get("/auth/config", func(w http.ResponseWriter, r *http.Request) {
 			httpjson.WriteJSON(w, http.StatusOK, map[string]any{
 				"sso_only":     true,
@@ -48,6 +50,7 @@ func RegisterRoutes(router chi.Router, sessions *session.Manager, kit *oidc.Kit,
 		}
 		httpjson.WriteJSON(w, http.StatusOK, resp)
 	})
+	return nil
 }
 
 func sweepLoop(ctx context.Context, sessions *session.Manager, logger *slog.Logger) {

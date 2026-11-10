@@ -221,8 +221,8 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	if err != nil {
 		panic(fmt.Sprintf("session.New: %v", err))
 	}
-	var kit *oidc.Kit
-	authService := auth.NewService(db, keyring, logger, sessions, store.Identities())
+	var oidcKit *oidc.Kit
+	authService := auth.NewService(db, keyring, logger, sessions, auth.NewUserStore(db, sqlDB))
 	deletions := auth.NewDeletions(db, directory.Client{Issuer: "https://sso.casier.test"}, nil, logger)
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
@@ -235,7 +235,9 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	apiref.Mount(router, refConfig())
 
 	router.Route("/api", func(r chi.Router) {
-		auth.RegisterRoutes(r, sessions, kit, authService, deletions.Handler())
+		if err := auth.RegisterRoutes(r, sessions, oidcKit, authService, deletions.Handler()); err != nil {
+			panic(fmt.Sprintf("auth.RegisterRoutes: %v", err))
+		}
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)

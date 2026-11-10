@@ -24,3 +24,12 @@ func resetTestDB(t *testing.T) *gorm.DB {
 	}
 	return db
 }
+
+func newTestUserStore(t *testing.T, db *gorm.DB) *UserStore {
+	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB: %v", err)
+	}
+	return NewUserStore(db, sqlDB)
+}

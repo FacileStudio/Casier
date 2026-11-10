@@ -54,12 +54,12 @@ func seedAvatarUsers(t *testing.T, db *gorm.DB, store *UserStore) (int64, int64,
 // without touching a URL a sign-in already wrote.
 func TestAvatarURLFollowsTheProvider(t *testing.T) {
 	db := resetTestDB(t)
-	store := NewUserStore(db)
+	store := newTestUserStore(t, db)
 	signedIn, placeholder, stale := seedAvatarUsers(t, db, store)
 
 	for range 2 {
-		if err := store.BackfillAvatars(context.Background(), testIssuer+"/"); err != nil {
-			t.Fatalf("BackfillAvatars: %v", err)
+		if _, err := store.BackfillPictures(context.Background(), testIssuer+"/"); err != nil {
+			t.Fatalf("BackfillPictures: %v", err)
 		}
 	}
 

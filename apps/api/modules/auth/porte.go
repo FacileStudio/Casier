@@ -2,11 +2,13 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	stderrors "errors"
 	"strings"
 
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/tronc/errors"
 
 	"gorm.io/gorm"
@@ -14,13 +16,35 @@ import (
 
 // UserStore is the porte.UserStore adapter that resolves a user table lookup
 // into the identity porte hands back.
+//
+// The sign-in write stays here rather than in porte/kit's Store: Casier's
+// linking rule compares the provider with any trailing slash ignored, so an
+// account holding a subject of the issuer is never handed to a second subject
+// of the same issuer spelled with or without the slash. kit.Store compares the
+// provider exactly. Reading the profile and the picture backfill are the kit's.
 type UserStore struct {
-	orm *gorm.DB
+	orm      *gorm.DB
+	profiles *kit.Store
 }
 
-// NewUserStore wires a UserStore onto the database.
-func NewUserStore(orm *gorm.DB) *UserStore {
-	return &UserStore{orm: orm}
+// NewUserStore wires a UserStore onto the database. sqlDB is orm's own handle.
+func NewUserStore(orm *gorm.DB, sqlDB *sql.DB) *UserStore {
+	return &UserStore{orm: orm, profiles: &kit.Store{DB: sqlDB}}
+}
+
+// Identity reads the profile behind a user id porte authenticated, and
+// answers Unauthorized when the account is gone. It is the kit.Resolver
+// RequireAuth hydrates the request with.
+func (s *UserStore) Identity(ctx context.Context, userID int64) (kit.Identity, error) {
+	return s.profiles.Identity(ctx, userID)
+}
+
+// BackfillPictures gives users who signed in before Casier stored the picture
+// claim the URL their next sign-in would write, <issuer>/avatars/<subject>. It
+// fills empty rows only, ignores a trailing slash on either side, and returns
+// how many rows it filled.
+func (s *UserStore) BackfillPictures(ctx context.Context, issuer string) (int64, error) {
+	return s.profiles.BackfillPictures(ctx, issuer)
 }
 
 // UpsertFromOIDC matches on (provider, subject) first, falls back to a verified
@@ -33,8 +57,9 @@ func NewUserStore(orm *gorm.DB) *UserStore {
 // subject of the same issuer, so a recycled address never hands one person's
 // vault to someone else.
 //
-// The picture claim is written on every sign-in, so the stored URL follows the
-// provider. Registre sends the same stable URL for everyone whether or not they
+// The stored email is rewritten only when the provider marks it verified, the
+// suite rule porte/kit applies. The picture claim is written on every
+// sign-in, so the stored URL follows the provider. Registre sends the same stable URL for everyone whether or not they
 // set a picture, and the client falls back to initials when it answers 404.
 // The locale claim is stored the same way and is what the client renders in.
 func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (int64, error) {
@@ -48,7 +73,10 @@ func (s *UserStore) UpsertFromOIDC(ctx context.Context, claims porte.Claims) (in
 		return 0, err
 	}
 
-	updates := map[string]any{"email": email, "avatar_url": pictureURL(claims.Picture)}
+	updates := map[string]any{"avatar_url": kit.PictureURL(claims.Picture)}
+	if claims.EmailVerified {
+		updates["email"] = email
+	}
 	if displayName := claims.DisplayName(); displayName != "" {
 		updates["name"] = displayName
 	}
@@ -108,29 +136,4 @@ func (s *UserStore) checkLink(ctx context.Context, userID int64, claims porte.Cl
 		return errors.Conflict("an account with this email is already linked to another identity")
 	}
 	return nil
-}
-
-// pictureURL keeps the picture claim only when it is an https URL. Anything
-// else, such as a data: URI of generated initials, is no picture at all: the
-// client draws initials itself, and a stored data URI would bloat every row.
-func pictureURL(claim string) string {
-	if strings.HasPrefix(strings.ToLower(claim), "https://") {
-		return claim
-	}
-	return ""
-}
-
-// BackfillAvatars gives users who signed in before Casier stored the picture
-// claim the URL they would get on their next sign-in, derived from their
-// identity row for issuer. It only fills empty rows, so it is idempotent and
-// never overwrites a URL a sign-in wrote. A trailing slash on either the
-// configured issuer or the stored provider is ignored.
-func (s *UserStore) BackfillAvatars(ctx context.Context, issuer string) error {
-	base := strings.TrimRight(issuer, "/")
-	return s.orm.WithContext(ctx).Exec(
-		`UPDATE users u SET avatar_url = ? || i.subject
-		 FROM porte_identities i
-		 WHERE i.user_id = u.id AND rtrim(i.provider, '/') = ? AND u.avatar_url = ''`,
-		base+"/avatars/", base,
-	).Error
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -66,11 +67,7 @@ func refConfig() apiref.Config {
 	}
 }
 
-func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *slog.Logger) (*session.Manager, *oidc.Kit, error) {
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, nil, err
-	}
+func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, appEnv env.Config, appLogger *slog.Logger) (*session.Manager, *oidc.Kit, error) {
 	store, err := newPorteStore(sqlDB)
 	if err != nil {
 		return nil, nil, err
@@ -86,8 +83,7 @@ func buildAuth(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *s
 		return sessions, nil, nil
 	}
 
-	users := auth.NewUserStore(db)
-	if err := users.BackfillAvatars(ctx, cfg.Issuer); err != nil {
+	if _, err := users.BackfillPictures(ctx, cfg.Issuer); err != nil {
 		return nil, nil, err
 	}
 	kit, err := oidc.New(ctx, cfg, oidc.Deps{
@@ -195,18 +191,14 @@ func run() int {
 	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
 	defer cancelCleanup()
 
-	sessions, kit, err := buildAuth(shutdownCtx, db, appEnv, appLogger)
+	users := auth.NewUserStore(db, sqlDB)
+	sessions, oidcKit, err := buildAuth(shutdownCtx, sqlDB, users, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to initialise porte", slog.Any("error", err))
 		return 1
 	}
 
-	store, err := newPorteStore(sqlDB)
-	if err != nil {
-		appLogger.Error("failed to open the porte store", slog.Any("error", err))
-		return 1
-	}
-	authService := auth.NewService(db, keyring, appLogger, sessions, store.Identities())
+	authService := auth.NewService(db, keyring, appLogger, sessions, users)
 	authService.StartSessionCleanup(shutdownCtx)
 
 	webhookDispatcher := webhook.NewDispatcher(db, appLogger)
@@ -239,12 +231,18 @@ func run() int {
 	router.Get("/version", versionHandler)
 	apiref.Mount(router, refConfig())
 
+	var mountErr error
 	router.Route("/api", func(r chi.Router) {
-		auth.RegisterRoutes(r, sessions, kit, authService, deletionsHandler(deletions))
+		mountErr = auth.RegisterRoutes(r, sessions, oidcKit, authService, deletionsHandler(deletions))
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
 	})
+
+	if mountErr != nil {
+		appLogger.Error("failed to mount the auth routes", slog.Any("error", mountErr))
+		return 1
+	}
 
 	router.Get("/spaces", redirectToProjects)
 	router.Get("/spaces/*", redirectToProjects)

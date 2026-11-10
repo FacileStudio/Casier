@@ -9,12 +9,10 @@ import (
 	"github.com/FacileStudio/tronc/httpjson"
 )
 
-// Authenticator lets the middleware authenticate either a session, an API
-// token, or a user identity — the one seam the porte kit and the token store
-// both satisfy.
+// Authenticator lets the middleware authenticate either a session or an API
+// token, the one seam the porte session path and the token store both satisfy.
 type Authenticator interface {
 	RequireAuth(next http.Handler) http.Handler
-	IdentityForUser(ctx context.Context, userID int64) (string, error)
 	AuthenticateAPI(ctx context.Context, authorization string) (string, *authcontext.TokenScope, error)
 }
 

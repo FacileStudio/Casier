@@ -18,7 +18,7 @@ import (
 // died on the unique index.
 func TestUpsertFromOIDCLinksAVerifiedAddress(t *testing.T) {
 	db := resetTestDB(t)
-	store := NewUserStore(db)
+	store := newTestUserStore(t, db)
 
 	existing := schemas.User{Email: "camille@facile.studio", Name: "Camille"}
 	if err := db.Create(&existing).Error; err != nil {
@@ -52,7 +52,7 @@ func TestUpsertFromOIDCLinksAVerifiedAddress(t *testing.T) {
 // primitive, so it must stay refused.
 func TestUpsertFromOIDCRefusesAnUnverifiedAddress(t *testing.T) {
 	db := resetTestDB(t)
-	store := NewUserStore(db)
+	store := newTestUserStore(t, db)
 
 	existing := schemas.User{Email: "noah@facile.studio", Name: "Noah"}
 	if err := db.Create(&existing).Error; err != nil {
@@ -74,7 +74,7 @@ func TestUpsertFromOIDCRefusesAnUnverifiedAddress(t *testing.T) {
 // second subject just because it presents the same verified address.
 func TestUpsertFromOIDCRefusesARecycledAddress(t *testing.T) {
 	db := resetTestDB(t)
-	store := NewUserStore(db)
+	store := newTestUserStore(t, db)
 	ctx := context.Background()
 
 	owner, err := store.UpsertFromOIDC(ctx, porte.Claims{
@@ -107,7 +107,7 @@ func TestUpsertFromOIDCRefusesARecycledAddress(t *testing.T) {
 // that a sign-in without one keeps what is stored.
 func TestUpsertFromOIDCStoresTheLocale(t *testing.T) {
 	db := resetTestDB(t)
-	store := NewUserStore(db)
+	store := newTestUserStore(t, db)
 	ctx := context.Background()
 
 	id, err := store.UpsertFromOIDC(ctx, porte.Claims{
@@ -127,5 +127,37 @@ func TestUpsertFromOIDCStoresTheLocale(t *testing.T) {
 	}
 	if user.Locale != "de" {
 		t.Errorf("locale = %q, want de", user.Locale)
+	}
+}
+
+// TestUpsertFromOIDCRewritesTheEmailOnlyWhenVerified pins the suite rule
+// porte/kit applies: an address the provider did not verify never replaces
+// the stored one, because CASIER_ADMIN_EMAILS and invitations read it.
+func TestUpsertFromOIDCRewritesTheEmailOnlyWhenVerified(t *testing.T) {
+	db := resetTestDB(t)
+	store := newTestUserStore(t, db)
+	ctx := context.Background()
+	claims := porte.Claims{Provider: testIssuer, Subject: "mover", Email: "old@facile.studio", EmailVerified: true}
+
+	id, err := store.UpsertFromOIDC(ctx, claims)
+	if err != nil {
+		t.Fatalf("first sign-in: %v", err)
+	}
+	exec(t, db, `INSERT INTO porte_identities (user_id, provider, subject) VALUES (?, ?, 'mover')`, id, testIssuer)
+	for _, step := range []struct {
+		email, want string
+		verified    bool
+	}{{"unverified@facile.studio", "old@facile.studio", false}, {"new@facile.studio", "new@facile.studio", true}} {
+		claims.Email, claims.EmailVerified = step.email, step.verified
+		if _, err := store.UpsertFromOIDC(ctx, claims); err != nil {
+			t.Fatalf("sign-in with %s: %v", step.email, err)
+		}
+		var user schemas.User
+		if err := db.First(&user, id).Error; err != nil {
+			t.Fatalf("reading the user: %v", err)
+		}
+		if user.Email != step.want {
+			t.Errorf("after a sign-in with %s (verified %v), email = %q, want %q", step.email, step.verified, user.Email, step.want)
+		}
 	}
 }

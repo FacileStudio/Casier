@@ -13,8 +13,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/people"
-	"github.com/FacileStudio/Casier/apps/api/schemas"
-	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/session"
 	"github.com/FacileStudio/tronc/errors"
 
@@ -28,58 +27,38 @@ type Service struct {
 	keyring    *crypto.Keyring
 	logger     *slog.Logger
 	sessions   *session.Manager
-	identities porte.IdentityStore
+	users      kit.Resolver
 	controller *Controller
 }
 
-// NewService wires an auth service onto the database and the porte session manager.
-func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, sessions *session.Manager, identities porte.IdentityStore) *Service {
+// NewService wires an auth service onto the database and the porte session
+// manager. users resolves the account behind a session: the UserStore.
+func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, sessions *session.Manager, users kit.Resolver) *Service {
 	service := &Service{
-		orm:        orm,
-		keyring:    keyring,
-		logger:     logger,
-		sessions:   sessions,
-		identities: identities,
+		orm:      orm,
+		keyring:  keyring,
+		logger:   logger,
+		sessions: sessions,
+		users:    users,
 	}
 	service.controller = newController(service)
 	return service
 }
 
+// RequireAuth accepts a user session only, through porte/kit: porte checks
+// the cookie or bearer session and the CSRF rule, and the kit reads the
+// account. A session whose account is gone answers 401. The identity is then
+// carried as Casier's own, whose user id is a string and whose scope is nil.
 func (service *Service) RequireAuth(next http.Handler) http.Handler {
-	return service.sessions.RequireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		identity, ok := porte.From(r.Context())
-		if !ok {
-			http.Error(w, "", http.StatusUnauthorized)
-			return
-		}
-
-		userID := strconv.FormatInt(identity.UserID, 10)
-		email, err := service.IdentityForUser(r.Context(), identity.UserID)
-		if err != nil {
-			http.Error(w, "", http.StatusUnauthorized)
-			return
-		}
-
+	return kit.RequireAuth(service.sessions, service.users)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		identity, _ := kit.FromContext(r.Context())
 		ctx := authcontext.WithIdentity(r.Context(), authcontext.Identity{
-			UserID:   userID,
-			Email:    email,
+			UserID:   strconv.FormatInt(identity.UserID, 10),
+			Email:    identity.Email,
 			ClientIP: authcontext.ClientIP(r),
 		})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}))
-}
-
-func (service *Service) IdentityForUser(ctx context.Context, userID int64) (string, error) {
-	var out struct{ Email string }
-	err := service.orm.WithContext(ctx).
-		Model(&schemas.User{}).
-		Select("email").
-		Where("id = ?", userID).
-		Scan(&out).Error
-	if err != nil {
-		return "", err
-	}
-	return out.Email, nil
 }
 
 // profile loads the signed-in user as the client renders them. A session whose
