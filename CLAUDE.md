@@ -6,7 +6,7 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 
 | Layer    | Stack                                                        |
 | -------- | ------------------------------------------------------------ |
-| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.17.1, porte v0.12.0 |
+| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.21.0, porte v0.18.0 |
 | Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/muse`) |
 | Build    | `go build`, Bun                                              |
 | Deploy   | Docker Compose, single distroless container serving API + client |
@@ -259,8 +259,8 @@ databases in place on startup and is a no-op afterwards.
 
 ## Design system
 
-**muse (`@facile/muse`) is the design system, and it owns the palette.** As of 2026-08-08
-Casier pins `github:FacileStudio/muse#v0.12.1` and `app.css` is 71 lines: import Tailwind,
+**muse (`@facile/muse`) is the design system, and it owns the palette.** As of 2026-11-10
+Casier pins `github:FacileStudio/muse#v0.18.0` and `app.css` is 71 lines: import Tailwind,
 import `@facile/muse/styles`, `@source` the package so v4 scans it, and one `@theme inline`
 block aliasing the suite's semantic names (`--color-background`, `--color-muted-foreground`, …)
 **onto** muse's `fc-*` tokens. The aliases point that way round on purpose — muse is the source
