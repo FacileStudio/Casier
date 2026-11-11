@@ -51,12 +51,6 @@ export const shell = {
 		'No se pudo completar el inicio de sesión. Inténtalo de nuevo.',
 		'Die Anmeldung wurde nicht abgeschlossen. Versuche es erneut.'
 	],
-	'landing.title': [
-		'Casier — Self-hosted secrets manager',
-		'Casier — Gestionnaire de secrets auto-hébergé',
-		'Casier — Gestor de secretos autoalojado',
-		'Casier — Selbst gehosteter Secrets-Manager'
-	],
 	'landing.description': [
 		'Casier is a self-hosted secrets and environment manager for teams. Encrypted at rest, versioned, audited — and one command away from your app.',
 		'Casier est un gestionnaire de secrets et d’environnements auto-hébergé pour les équipes. Chiffré au repos, versionné, audité, et à une commande de votre application.',

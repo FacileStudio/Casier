@@ -34,11 +34,6 @@
 	});
 </script>
 
-<svelte:head>
-	<title>{t('landing.title')}</title>
-	<meta name="description" content={t('landing.description')} />
-</svelte:head>
-
 {#if ready}
 	<div class="flex min-h-dvh flex-col bg-background text-foreground">
 		<LandingHeader appName="Casier" icon="solar:key-minimalistic-square-bold-duotone" skipHref="#main">
