@@ -22,6 +22,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/migrations"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
+	"github.com/FacileStudio/Casier/apps/api/modules/mcp"
 	"github.com/FacileStudio/Casier/apps/api/modules/projects"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 
@@ -55,6 +56,7 @@ func registry() documentation.Response {
 			projects.Documentation,
 			environments.Documentation,
 			secrets.Documentation,
+			mcp.Documentation,
 		},
 	}
 }
@@ -209,6 +211,14 @@ func run() int {
 	secretsService := secrets.NewService(db, appLogger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
 	secretsService.StartTrashPurge(shutdownCtx)
 
+	mcpService, err := newMCP(shutdownCtx, appEnv, authRoutes.OIDC, mcp.Deps{
+		Projects: projectsService, Environments: environmentsService, Secrets: secretsService, Accounts: users, Actions: sqlDB,
+	}, appLogger)
+	if err != nil {
+		appLogger.Error("failed to start the MCP server", slog.Any("error", err))
+		return 1
+	}
+
 	clientDir := spa.DirFromEnv()
 	deletions, err := startDeletions(shutdownCtx, db, appEnv, appLogger)
 	if err != nil {
@@ -231,6 +241,9 @@ func run() int {
 	health.Mount(router, health.DB(sqlDB))
 	router.Get("/version", versionHandler)
 	apiref.Mount(router, refConfig())
+	if mcpService != nil {
+		mcp.RegisterRoutes(router, mcpService)
+	}
 
 	var mountErr error
 	router.Route("/api", func(r chi.Router) {

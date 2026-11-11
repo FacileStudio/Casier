@@ -183,6 +183,22 @@ index on `(environment_id, key)` ignores `deleted_at`, so the key stays reserved
 in the trash — recreating it under the same name would otherwise leave two rows a restore
 could not tell apart.
 
+## MCP
+
+`POST /mcp`, outside `/api`, is Casier's remote MCP server for any MCP client holding a
+Registre access token for `https://casier.facile.studio/mcp`
+(`/.well-known/oauth-protected-resource/mcp` says how to get one). Scopes are `casier.read`
+and `casier.write`. Fourteen tools: list projects, list secrets, get a secret, compare two
+environments, list the trash, list audit events, create a project or an environment, set,
+tag, roll back and restore a secret, reveal secret values and delete a secret. Only the reveal
+returns values, and only after the person confirms; the delete moves a secret to the trash
+after confirmation.
+
+`/api/mcp/pending` is the confirm page's API, for the person's own session:
+`GET /api/mcp/pending`, `POST /api/mcp/pending/{id}/confirm` and
+`POST /api/mcp/pending/{id}/dismiss`. Confirming a reveal never returns a value: it lets
+the client that asked collect the values once within 15 minutes.
+
 ## Errors and rate limits
 
 Errors come from `tronc/errors` and are written by `tronc/httpjson`, so every failure is

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
@@ -26,6 +27,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
+	"github.com/FacileStudio/Casier/apps/api/modules/mcp"
 	"github.com/FacileStudio/Casier/apps/api/modules/projects"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
@@ -38,7 +40,9 @@ import (
 	"github.com/FacileStudio/tronc/apiref"
 	"github.com/FacileStudio/tronc/health"
 	"github.com/FacileStudio/tronc/httpx"
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"github.com/go-chi/chi/v5"
+	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 	"gorm.io/gorm"
 )
 
@@ -249,12 +253,33 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
+		mcp.RegisterPendingRoutes(r, testMCP(db, sqlDB, projectsService, environmentsService, secretsService), authService)
 	})
 
 	router.Get("/spaces", redirectToProjects)
 	router.Get("/spaces/*", redirectToProjects)
 
 	return router
+}
+
+// testMCP is the MCP service behind the confirm page routes. Its verifier refuses every
+// token: the matrix drives the page, which authenticates the person's own session and
+// never an MCP token.
+func testMCP(db *gorm.DB, sqlDB *sql.DB, projectsService *projects.Service, environmentsService *environments.Service, secretsService *secrets.Service) *mcp.Service {
+	service, err := mcp.NewService(mcp.Deps{
+		Projects: projectsService, Environments: environmentsService, Secrets: secretsService,
+		Accounts: auth.NewUserStore(db, sqlDB), Actions: sqlDB,
+	}, mcp.Config{
+		Resource: "https://casier.test/mcp", Issuer: "https://sso.casier.test", StateKey: []byte("state-key"),
+		Verifier: func(context.Context, string, *http.Request) (*sdkauth.TokenInfo, error) {
+			return nil, sdkauth.ErrInvalidToken
+		},
+		Pending: mcpkit.PostgresPending{DB: sqlDB},
+	})
+	if err != nil {
+		panic(fmt.Sprintf("mcp.NewService: %v", err))
+	}
+	return service
 }
 
 func hashToken(token string) string {
@@ -585,6 +610,31 @@ func routeCases(f fixture) []routeCase {
 			name: "invitations", method: "GET", pattern: "/api/me/invitations", path: "/api/me/invitations",
 			outcomes: []outcome{
 				ok(200, cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				unauth(liveTokens...),
+				unauth(rejectedAtTheDoor...),
+			},
+		},
+
+		{
+			name: "mcp pending list", method: "GET", pattern: "/api/mcp/pending/", path: "/api/mcp/pending",
+			outcomes: []outcome{
+				ok(200, cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				unauth(liveTokens...),
+				unauth(rejectedAtTheDoor...),
+			},
+		},
+		{
+			name: "mcp pending confirm", method: "POST", pattern: "/api/mcp/pending/{id}/confirm", path: "/api/mcp/pending/no-such-action/confirm",
+			outcomes: []outcome{
+				missing(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				unauth(liveTokens...),
+				unauth(rejectedAtTheDoor...),
+			},
+		},
+		{
+			name: "mcp pending dismiss", method: "POST", pattern: "/api/mcp/pending/{id}/dismiss", path: "/api/mcp/pending/no-such-action/dismiss",
+			outcomes: []outcome{
+				missing(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
 				unauth(liveTokens...),
 				unauth(rejectedAtTheDoor...),
 			},

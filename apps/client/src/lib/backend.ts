@@ -188,3 +188,33 @@ export type AuditLogEntry = {
 export type AuditLogsResponse = {
 	logs: AuditLogEntry[] | null;
 };
+
+/** One secret a pending MCP action names, as it is now. Never a value. */
+export type PendingSecret = {
+	key: string;
+	version: number;
+	updated_at: string;
+};
+
+/** GET /mcp/pending: an action an AI client asked for, waiting for the person. */
+export type PendingAction = {
+	id: string;
+	kind: 'reveal_secrets' | 'delete_secret';
+	client_id: string;
+	summary: string;
+	created_at: string;
+	expires_at: string;
+	state: 'ready' | 'changed' | 'missing';
+	project?: string;
+	environment?: string;
+	secrets?: PendingSecret[];
+};
+
+export type PendingList = {
+	actions: PendingAction[];
+};
+
+/** The confirm page's answer: approved for a reveal, trashed for a delete, or dismissed. */
+export type PendingResult = {
+	status: 'approved' | 'trashed' | 'dismissed';
+};

@@ -110,6 +110,7 @@ docker compose up --build
 | OIDC_CLIENT_SECRET     | If OIDC  | OIDC client secret                               |
 | OIDC_REDIRECT_URL      | If OIDC  | Callback URL for OIDC flow                       |
 | OIDC_SUCCESS_URL       | No       | Redirect after OIDC login (default: first CORS origin) |
+| MCP_RESOURCE           | No       | Canonical URI of the remote MCP server (`https://casier.facile.studio/mcp`). Mounts `/mcp` only while OIDC is on |
 | CASIER_ADMIN_EMAILS    | No       | Comma-separated emails allowed to call `POST /admin/rotate-key`. Empty means nobody — the endpoint fails closed. |
 | TEST_DATABASE_URL      | No       | Test-only. Postgres for the HTTP authorization matrix; unset makes it skip loudly |
 
@@ -214,6 +215,25 @@ helpfully "fixed" away. A companion meta-test walks the mounted routes with `chi
 fails if any route has no case, so a new endpoint cannot ship unguarded. It needs
 `TEST_DATABASE_URL`; `scripts/check.sh` provisions one when `pg_ctl` is on PATH, and the tests
 skip *loudly* when it cannot.
+
+## Remote MCP server
+
+`apps/api/modules/mcp` serves `POST /mcp` on tronc/mcp, behind Registre tokens bound to
+`MCP_RESOURCE` with scopes `casier.read` and `casier.write`. The first MCP call creates the
+account through the OIDC kit, Casier's own sign-in write path. Every tool calls the REST
+controller through `Calls()` on the projects, environments and secrets services, as the
+person with a nil token scope, so roles, ACLs and protected environments hold as in the web
+app; the audit trail records `mcp:<client_id>` as the client address.
+
+**No tool but `casier_reveal_secrets` ever returns a value**, and the diff drops both sides'
+values. A reveal is confirmed like a delete: MRTR when the client elicits, otherwise a pending
+action on `/pending`. A reveal confirmed on that page runs nothing and shows no value; the
+client that asked collects the values once, within 15 minutes, by calling again with
+`confirmation_id` (`modules/mcp/grants.go` marks the `mcp_actions` row `outcome = 'revealed'`).
+The collection re-checks the fingerprint, the person and the OAuth client. Deleting a secret
+moves it to the trash after confirmation; purging, ACLs, members, tokens, webhooks and key
+rotation are not exposed. `/api/mcp/pending` takes a session only, never a `casier_` token.
+Erasing a person deletes their `mcp_actions` rows.
 
 ## Secret lifecycle
 
