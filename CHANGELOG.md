@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-11-11
+
+### Fixed
+
+- fix(brand): favicons, touch and manifest icons, the link preview image and `site.webmanifest` come from muse v0.19.0's brand generator, and `app.html` carries its head block: the catalog title "Casier · A secrets vault for your team", its description, theme colours and Open Graph and Twitter tags. The landing page no longer overrides the title and description, so every locale shows the catalog's.
+
 ## [0.7.1] - 2026-11-11
 
 ### Fixed
