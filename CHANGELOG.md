@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-11
+
 ### Added
 
 - feat(api): a remote MCP server at `POST /mcp` on tronc/mcp v0.22.1 and porte/mcpauth v0.2.1, behind Registre tokens bound to `https://casier.facile.studio/mcp` (scopes `casier.read`, `casier.write`). Fourteen tools: `casier_list_projects`, `casier_list_secrets`, `casier_get_secret`, `casier_diff_environments`, `casier_list_trash`, `casier_list_audit_events`, `casier_create_project`, `casier_create_environment`, `casier_set_secret`, `casier_tag_secret`, `casier_rollback_secret`, `casier_restore_secret`, `casier_reveal_secrets` and `casier_delete_secret`. Each one runs the REST controller as the person, so roles, ACLs, protected environments and the audit trail apply. The first MCP call creates the account. MCP is free on every plan.
