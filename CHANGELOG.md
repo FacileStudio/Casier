@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- feat(api): a remote MCP server at `POST /mcp` on tronc/mcp v0.22.1 and porte/mcpauth v0.2.1, behind Registre tokens bound to `https://casier.facile.studio/mcp` (scopes `casier.read`, `casier.write`). Fourteen tools: `casier_list_projects`, `casier_list_secrets`, `casier_get_secret`, `casier_diff_environments`, `casier_list_trash`, `casier_list_audit_events`, `casier_create_project`, `casier_create_environment`, `casier_set_secret`, `casier_tag_secret`, `casier_rollback_secret`, `casier_restore_secret`, `casier_reveal_secrets` and `casier_delete_secret`. Each one runs the REST controller as the person, so roles, ACLs, protected environments and the audit trail apply. The first MCP call creates the account. MCP is free on every plan.
+- Only `casier_reveal_secrets` returns values, and only after the person confirms reading those keys: in the client through MRTR when it can ask, otherwise on the new `/pending` page, after which the client that asked collects the values once within 15 minutes with `confirmation_id`. The page never shows a value. `casier_delete_secret` moves a secret to the trash after the same confirmation. Listings, the diff and every write answer metadata only.
+- feat(client): the `/pending` page (muse, fr/en/es/de) lists what MCP clients asked for, with the keys and versions involved, to confirm or dismiss.
+- Migration `00004_mcp_actions.sql` (additive) creates tronc/mcp's `mcp_actions` table. Erasing a person deletes their rows.
+
+### Changed
+
+- build(deps): tronc v0.22.1, porte v0.18.4, porte/mcpauth v0.2.1 and go-sdk v1.8.0; the Docker builder is `golang:1.26.11-alpine`.
+
 ## [0.6.0] - 2026-11-10
 
 ### Added

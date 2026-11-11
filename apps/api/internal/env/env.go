@@ -1,6 +1,7 @@
 package env
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/FacileStudio/porte"
@@ -23,6 +24,19 @@ type OIDCConfig struct {
 	// Casier, and it is deliberately not the machine audience either, which
 	// names this app and arms a different path.
 	CLIAudience string
+
+	// MCPResource is the canonical URI of the remote MCP server,
+	// https://casier.facile.studio/mcp in production, and the RFC 8707
+	// resource Registre binds its tokens to, from MCP_RESOURCE. Empty leaves
+	// /mcp unmounted.
+	MCPResource string
+}
+
+// MCPStateKey derives the key that signs MCP confirmation state from the client
+// secret, so it is stable across restarts without a setting of its own.
+func (o OIDCConfig) MCPStateKey() []byte {
+	sum := sha256.Sum256([]byte("casier-mcp-state:" + o.ClientSecret))
+	return sum[:]
 }
 
 // Config is the process configuration: the tronc core plus Casier's OIDC and
@@ -103,5 +117,6 @@ func loadOIDC(issuer string, corsOrigins []string) (*OIDCConfig, error) {
 		RedirectURL:  redirectURL,
 		SuccessURL:   successURL,
 		CLIAudience:  troncenv.String("OIDC_CLI_AUDIENCE", ""),
+		MCPResource:  troncenv.String("MCP_RESOURCE", ""),
 	}, nil
 }

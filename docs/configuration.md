@@ -57,6 +57,7 @@ that everybody can.
 | `OIDC_CLIENT_SECRET` | with issuer | — | Client secret |
 | `OIDC_REDIRECT_URL` | with issuer | — | Callback URL, e.g. `https://casier.facile.studio/api/auth/oidc/callback` |
 | `OIDC_SUCCESS_URL` | no | first CORS origin | Where to send the browser after login |
+| `MCP_RESOURCE` | no | `https://casier.facile.studio/mcp` in compose | Canonical URI of the remote MCP server, the RFC 8707 resource Registre binds its tokens to. Mounts `POST /mcp` only while OIDC is on; empty leaves it off |
 
 Setting `OIDC_ISSUER` while leaving client id, secret, or redirect empty exits 1 with an
 explicit message. `OIDC_SUCCESS_URL` falls back to the first CORS origin.

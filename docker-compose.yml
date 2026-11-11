@@ -65,6 +65,9 @@ services:
       # sign in here too. Unset, the route is absent and the CLI falls back to
       # its browser flow, so this is additive and safe to leave empty.
       OIDC_CLI_AUDIENCE: ${OIDC_CLI_AUDIENCE:-}
+      # The remote MCP server's canonical URI, the resource Registre binds its
+      # access tokens to. It mounts POST /mcp only while OIDC is on.
+      MCP_RESOURCE: ${MCP_RESOURCE:-https://casier.facile.studio/mcp}
       JOURNAL_URL: ${JOURNAL_URL:-}
       JOURNAL_TOKEN: ${JOURNAL_TOKEN:-}
     depends_on:

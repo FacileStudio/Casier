@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"gorm.io/gorm"
 )
 
@@ -50,7 +51,8 @@ func eraseSteps() []string {
 // them as its subject (a member removal), and when the person was its last
 // owner the longest-standing admin, or else the longest-standing member, becomes
 // owner. An account that is already gone is a no-op, so a replayed notice
-// changes nothing.
+// changes nothing. The MCP actions the person asked for or was asked about go
+// too, resolved or not.
 func ErasePerson(ctx context.Context, orm *gorm.DB, provider, subject string) error {
 	var account struct{ ID int64 }
 	err := orm.WithContext(ctx).Raw(
@@ -67,6 +69,6 @@ func ErasePerson(ctx context.Context, orm *gorm.DB, provider, subject string) er
 				return err
 			}
 		}
-		return nil
+		return mcpkit.ErasePending(ctx, tx.Statement.ConnPool, intToStr(account.ID))
 	})
 }
