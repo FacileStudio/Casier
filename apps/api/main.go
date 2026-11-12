@@ -72,7 +72,8 @@ func refConfig() apiref.Config {
 
 // buildAuth wires porte: the session manager always, and with an issuer the
 // OIDC kit and the user-menu invitations, both over the sealed porte store.
-func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
+// The kit refuses an account to any subject the deletion receiver erased.
+func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, deletions *auth.Deletions, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
 	store, err := newPorteStore(sqlDB)
 	if err != nil {
 		return auth.Routes{}, err
@@ -87,13 +88,17 @@ func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, appEnv
 	if _, err := users.BackfillPictures(ctx, cfg.Issuer); err != nil {
 		return auth.Routes{}, err
 	}
-	oidcKit, err := oidc.New(ctx, cfg, oidc.Deps{
+	deps := oidc.Deps{
 		Users:      users,
 		Identities: store.Identities(),
 		Sessions:   sessions,
 		Codes:      store.LoginCodes(),
 		Logger:     appLogger,
-	})
+	}
+	if deletions != nil {
+		deps.Erased = deletions
+	}
+	oidcKit, err := oidc.New(ctx, cfg, deps)
 	invitations := &kit.InvitationsConfig{
 		Directory:  directory.Client{Issuer: cfg.Issuer, ClientID: cfg.ClientID, ClientSecret: cfg.ClientSecret},
 		Identities: store.Identities(),
@@ -120,7 +125,8 @@ func startDeletions(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogg
 		ClientID:     appEnv.OIDC.ClientID,
 		ClientSecret: appEnv.OIDC.ClientSecret,
 	}
-	deletions := auth.NewDeletions(db, client, portepg.New(sqlDB).EraseIdentity, appLogger)
+	store := portepg.New(sqlDB)
+	deletions := auth.NewDeletions(db, client, store.EraseIdentity, store.HoldsIdentity, appLogger)
 	go deletions.Run(ctx)
 	return deletions, nil
 }
@@ -194,8 +200,14 @@ func run() int {
 	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
 	defer cancelCleanup()
 
+	deletions, err := startDeletions(shutdownCtx, db, appEnv, appLogger)
+	if err != nil {
+		appLogger.Error("failed to start the deletion receiver", slog.Any("error", err))
+		return 1
+	}
+
 	users := auth.NewUserStore(db, sqlDB)
-	authRoutes, err := buildAuth(shutdownCtx, sqlDB, users, appEnv, appLogger)
+	authRoutes, err := buildAuth(shutdownCtx, sqlDB, users, deletions, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to initialise porte", slog.Any("error", err))
 		return 1
@@ -220,11 +232,6 @@ func run() int {
 	}
 
 	clientDir := spa.DirFromEnv()
-	deletions, err := startDeletions(shutdownCtx, db, appEnv, appLogger)
-	if err != nil {
-		appLogger.Error("failed to start the deletion receiver", slog.Any("error", err))
-		return 1
-	}
 
 	router := httpx.NewRouter(httpx.Config{
 		TrustedProxies: appEnv.TrustedProxies,

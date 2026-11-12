@@ -232,7 +232,7 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	}
 	var oidcKit *oidc.Kit
 	authService := auth.NewService(db, keyring, logger, sessions, auth.NewUserStore(db, sqlDB))
-	deletions := auth.NewDeletions(db, testDirectory, nil, logger)
+	deletions := auth.NewDeletions(db, testDirectory, nil, nil, logger)
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
 	projectsService := projects.NewService(db, keyring, auditLogger)

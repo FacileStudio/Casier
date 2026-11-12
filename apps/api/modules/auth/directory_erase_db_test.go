@@ -33,7 +33,7 @@ func eraseThroughDirectory(t *testing.T, db *gorm.DB, issuer, subject string) {
 		t.Fatalf("db.DB: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	receiver := NewDeletions(db, directory.Client{Issuer: issuer}, portepg.New(sqlDB).EraseIdentity, logger).receiver
+	receiver := NewDeletions(db, directory.Client{Issuer: issuer}, portepg.New(sqlDB).EraseIdentity, portepg.New(sqlDB).HoldsIdentity, logger).receiver
 	ctx := context.Background()
 	if err := receiver.OnPersonDeleted(ctx, receiver.Client.Issuer, subject); err != nil {
 		t.Fatalf("OnPersonDeleted(%s, %s): %v", issuer, subject, err)
