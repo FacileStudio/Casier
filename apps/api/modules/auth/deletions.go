@@ -18,17 +18,28 @@ type Deletions struct {
 }
 
 // NewDeletions builds the receiver over Casier's tables. erase is porte's own
-// rows eraser, pg.Store.EraseIdentity.
-func NewDeletions(orm *gorm.DB, client directory.Client, erase func(context.Context, string, string) error, logger *slog.Logger) *Deletions {
+// rows eraser, pg.Store.EraseIdentity; holds is pg.Store.HoldsIdentity, so a
+// handled subject that an account holds again is erased again on the next push
+// or poll.
+func NewDeletions(orm *gorm.DB, client directory.Client, erase func(context.Context, string, string) error,
+	holds func(context.Context, string, string) (bool, error), logger *slog.Logger) *Deletions {
 	return &Deletions{receiver: &directory.Deletions{
 		Client: client,
 		OnPersonDeleted: func(ctx context.Context, provider, subject string) error {
 			return ErasePerson(ctx, orm, provider, subject)
 		},
 		Erase:  erase,
+		Holds:  holds,
 		State:  deletionState{orm: orm},
 		Logger: logger,
 	}}
+}
+
+// Erased reports whether Registre erased (provider, subject) and Casier
+// handled it, reading the saved state on every call: the OIDC kit's
+// Deps.Erased, which refuses that identity an account again.
+func (d *Deletions) Erased(ctx context.Context, provider, subject string) (bool, error) {
+	return d.receiver.Erased(ctx, provider, subject)
 }
 
 // Run polls until ctx ends. Start it in exactly one replica.
