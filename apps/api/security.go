@@ -9,14 +9,16 @@ import (
 
 const iconifyScript = "https://cdn.jsdelivr.net/npm/iconify-icon@2.2.0/dist/iconify-icon.min.js"
 
+const analyticsOrigin = "https://vision.facile.studio"
+
 // securityConfig extends tronc's default security headers with what the built
 // client needs: the inline scripts adapter-static writes into its pages, the
-// iconify-icon bundle app.html loads from jsDelivr at one exact URL, and the
-// two APIs the client calls (Ardoise's plan catalog and the icon API). A client
-// directory that cannot be hashed is logged and leaves the default script
-// policy, which only reports.
+// iconify-icon bundle app.html loads from jsDelivr at one exact URL, the Vision
+// analytics script app.html loads, and the two APIs the client calls
+// (Ardoise's plan catalog and the icon API). A client directory that cannot be
+// hashed is logged and leaves the default script policy, which only reports.
 func securityConfig(clientDir string, appLogger *slog.Logger) troncmiddleware.SecurityConfig {
-	scripts := []string{iconifyScript}
+	scripts := []string{iconifyScript, analyticsOrigin}
 	if spa.Available(clientDir) {
 		hashes, err := spa.InlineScriptHashes(clientDir)
 		if err != nil {
