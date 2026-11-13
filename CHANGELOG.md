@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-13
+
+### Changed
+
+- build(client): muse v0.21.2.
+
+### Fixed
+
+- Icon-only controls show a muse tooltip; native `title` tooltips moved to muse `Tooltip` or the `IconButton` `tooltip` prop.
+
 ## [0.7.5] - 2026-11-13
 
 ### Changed
