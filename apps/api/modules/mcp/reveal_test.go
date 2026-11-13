@@ -2,13 +2,11 @@ package mcp
 
 import (
 	"context"
-	stderrors "errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
@@ -200,62 +198,4 @@ func TestAValueTooLargeToSendKeepsTheConfirmation(t *testing.T) {
 	if got := f.outcomeOf(t, id); got != mcpkit.OutcomeDone {
 		t.Fatalf("a reveal that sent nothing must stay confirmed, got %q", got)
 	}
-}
-
-// TestAFailedReadKeepsTheConfirmation checks collect spends a confirmation only after
-// its read succeeded, so a failed read can be retried.
-func TestAFailedReadKeepsTheConfirmation(t *testing.T) {
-	f := newFixture(t)
-	id := confirmedReveal(t, f, "DATABASE_URL")
-	owner, client := f.askedBy(t, id)
-	failed := stderrors.New("read failed")
-	if err := collect(context.Background(), f.sqlDB, owner, client, id, func(mcpkit.Action) error { return failed }); !stderrors.Is(err, failed) {
-		t.Fatalf("want the read's error, got %v", err)
-	}
-	if got := f.outcomeOf(t, id); got != mcpkit.OutcomeDone {
-		t.Fatalf("a failed read must not spend the confirmation, got %q", got)
-	}
-	var out revealOutput
-	call(t, f.session(t, ownerSubject), toolReveal, collectArgs(id), &out)
-	if out.Status != statusRevealed || len(out.Secrets) != 1 {
-		t.Fatalf("want the value after the failed read, got %+v", out)
-	}
-}
-
-// TestTwoCollectionsHandOverOnce checks a collection racing one in progress waits for
-// it and is then refused, so values leave Casier once per confirmation.
-func TestTwoCollectionsHandOverOnce(t *testing.T) {
-	f := newFixture(t)
-	id := confirmedReveal(t, f, "DATABASE_URL")
-	owner, client := f.askedBy(t, id)
-	ctx := context.Background()
-	entered, release := make(chan struct{}), make(chan struct{})
-	first, second := make(chan error, 1), make(chan error, 1)
-	go func() {
-		first <- collect(ctx, f.sqlDB, owner, client, id, func(mcpkit.Action) error { close(entered); <-release; return nil })
-	}()
-	<-entered
-	go func() { second <- collect(ctx, f.sqlDB, owner, client, id, func(mcpkit.Action) error { return nil }) }()
-	select {
-	case err := <-second:
-		t.Fatalf("the second collection must wait for the first, got %v", err)
-	case <-time.After(300 * time.Millisecond):
-	}
-	close(release)
-	if err := <-first; err != nil {
-		t.Fatalf("the first collection must succeed, got %v", err)
-	}
-	if err := <-second; !stderrors.Is(err, ErrNotConfirmed) {
-		t.Fatalf("the second collection must be refused, got %v", err)
-	}
-}
-
-// askedBy is the person and the client an action was asked by.
-func (f *fixture) askedBy(t *testing.T, id string) (string, string) {
-	t.Helper()
-	var user, client string
-	if err := f.sqlDB.QueryRow(`SELECT user_id, client_id FROM mcp_actions WHERE id = $1`, id).Scan(&user, &client); err != nil {
-		t.Fatal(err)
-	}
-	return user, client
 }

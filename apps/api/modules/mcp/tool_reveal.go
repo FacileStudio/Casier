@@ -75,7 +75,7 @@ func (t *toolset) resumeReveal(ctx context.Context, req *sdk.CallToolRequest) (*
 // The confirmation is spent only once the values were read.
 func (t *toolset) handOver(ctx context.Context, c caller, id string) (*sdk.CallToolResult, revealOutput, error) {
 	var out revealOutput
-	err := collect(ctx, t.Actions, c.who.UserID, c.who.ClientID, id, func(action mcpkit.Action) error {
+	err := collect(ctx, t.Actions, c.who, id, func(action mcpkit.Action) error {
 		var err error
 		out, err = t.readConfirmed(ctx, c, action)
 		return err
