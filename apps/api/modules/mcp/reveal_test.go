@@ -2,15 +2,18 @@ package mcp
 
 import (
 	"context"
+	stderrors "errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/porte"
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"github.com/FacileStudio/tronc/mcp/mcptest"
 	"github.com/go-chi/chi/v5"
 )
@@ -98,6 +101,9 @@ func TestAValueWrittenAfterTheQuestionIsNotHandedOver(t *testing.T) {
 	if text := refused(t, f.session(t, ownerSubject), toolReveal, collectArgs(asked.ConfirmationID)); strings.Contains(text, "plaintext") {
 		t.Fatalf("a refusal must not carry a value: %s", text)
 	}
+	if got := f.outcomeOf(t, asked.ConfirmationID); got != mcpkit.OutcomeDone {
+		t.Fatalf("a refused collection must not spend the confirmation, got %q", got)
+	}
 }
 
 // TestADeleteConfirmedOnThePageTrashes checks the delete link path keeps the secret
@@ -132,4 +138,124 @@ func TestErasureDropsPendingActions(t *testing.T) {
 	if n := f.count(t, `SELECT count(*) FROM mcp_actions WHERE user_id = $1`, owner); n != 0 {
 		t.Fatalf("want no action left for the erased person, got %d", n)
 	}
+}
+
+// confirmedReveal asks to reveal keys from a client that cannot confirm, confirms it on
+// the page, and returns the confirmation id.
+func confirmedReveal(t *testing.T, f *fixture, keys ...string) string {
+	t.Helper()
+	var asked revealOutput
+	call(t, f.session(t, ownerSubject), toolReveal, prod(map[string]any{"keys": keys}), &asked)
+	if got := onPage(f, http.MethodPost, "/"+asked.ConfirmationID+"/confirm", f.owner, ""); got.Code != http.StatusOK {
+		t.Fatalf("confirm: %d %s", got.Code, got.Body)
+	}
+	return asked.ConfirmationID
+}
+
+// outcomeOf is the stored outcome of one action.
+func (f *fixture) outcomeOf(t *testing.T, id string) string {
+	t.Helper()
+	var outcome string
+	if err := f.sqlDB.QueryRow(`SELECT outcome FROM mcp_actions WHERE id = $1`, id).Scan(&outcome); err != nil {
+		t.Fatal(err)
+	}
+	return outcome
+}
+
+// TestARevealStopsAtTheResultBudget checks values that do not fit in one answer are
+// named as omitted, not sent, and the confirmation is spent on what was sent.
+func TestARevealStopsAtTheResultBudget(t *testing.T) {
+	f := newFixture(t)
+	big := strings.Repeat("v", 30_000)
+	for _, key := range []string{"BIG_A", "BIG_B", "BIG_C"} {
+		f.secret(t, key, big)
+	}
+	id := confirmedReveal(t, f, "BIG_A", "BIG_B", "BIG_C")
+	session := f.session(t, ownerSubject)
+	result := mcptest.Call(t, session, toolReveal, collectArgs(id))
+	var out revealOutput
+	mcptest.Decode(t, result, &out)
+	if out.Status != statusRevealed || len(out.Secrets) != 2 || out.Secrets[1].Key != "BIG_B" || len(out.Omitted) != 1 || out.Omitted[0] != "BIG_C" {
+		t.Fatalf("want BIG_A and BIG_B sent and BIG_C omitted, got %d secrets, omitted %v", len(out.Secrets), out.Omitted)
+	}
+	if size := mcpkit.EncodedSize(out); size > mcpkit.ResultBudget {
+		t.Fatalf("the answer is %d bytes, over the %d budget", size, mcpkit.ResultBudget)
+	}
+	if f.outcomeOf(t, id) != outcomeRevealed {
+		t.Fatal("a reveal that sent values must spend its confirmation")
+	}
+	refused(t, session, toolReveal, collectArgs(id))
+}
+
+// TestAValueTooLargeToSendKeepsTheConfirmation checks a reveal whose first value alone
+// overflows the budget sends nothing and leaves the confirmation unspent.
+func TestAValueTooLargeToSendKeepsTheConfirmation(t *testing.T) {
+	f := newFixture(t)
+	f.secret(t, "QUOTED", strings.Repeat(`"`, 40_000))
+	id := confirmedReveal(t, f, "QUOTED", "DATABASE_URL")
+	text := refused(t, f.session(t, ownerSubject), toolReveal, collectArgs(id))
+	if !strings.Contains(text, "too large") || strings.Contains(text, "plaintext") || strings.Contains(text, `""`) {
+		t.Fatalf("want a size refusal without values, got %s", text)
+	}
+	if got := f.outcomeOf(t, id); got != mcpkit.OutcomeDone {
+		t.Fatalf("a reveal that sent nothing must stay confirmed, got %q", got)
+	}
+}
+
+// TestAFailedReadKeepsTheConfirmation checks collect spends a confirmation only after
+// its read succeeded, so a failed read can be retried.
+func TestAFailedReadKeepsTheConfirmation(t *testing.T) {
+	f := newFixture(t)
+	id := confirmedReveal(t, f, "DATABASE_URL")
+	owner, client := f.askedBy(t, id)
+	failed := stderrors.New("read failed")
+	if err := collect(context.Background(), f.sqlDB, owner, client, id, func(mcpkit.Action) error { return failed }); !stderrors.Is(err, failed) {
+		t.Fatalf("want the read's error, got %v", err)
+	}
+	if got := f.outcomeOf(t, id); got != mcpkit.OutcomeDone {
+		t.Fatalf("a failed read must not spend the confirmation, got %q", got)
+	}
+	var out revealOutput
+	call(t, f.session(t, ownerSubject), toolReveal, collectArgs(id), &out)
+	if out.Status != statusRevealed || len(out.Secrets) != 1 {
+		t.Fatalf("want the value after the failed read, got %+v", out)
+	}
+}
+
+// TestTwoCollectionsHandOverOnce checks a collection racing one in progress waits for
+// it and is then refused, so values leave Casier once per confirmation.
+func TestTwoCollectionsHandOverOnce(t *testing.T) {
+	f := newFixture(t)
+	id := confirmedReveal(t, f, "DATABASE_URL")
+	owner, client := f.askedBy(t, id)
+	ctx := context.Background()
+	entered, release := make(chan struct{}), make(chan struct{})
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() {
+		first <- collect(ctx, f.sqlDB, owner, client, id, func(mcpkit.Action) error { close(entered); <-release; return nil })
+	}()
+	<-entered
+	go func() { second <- collect(ctx, f.sqlDB, owner, client, id, func(mcpkit.Action) error { return nil }) }()
+	select {
+	case err := <-second:
+		t.Fatalf("the second collection must wait for the first, got %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatalf("the first collection must succeed, got %v", err)
+	}
+	if err := <-second; !stderrors.Is(err, ErrNotConfirmed) {
+		t.Fatalf("the second collection must be refused, got %v", err)
+	}
+}
+
+// askedBy is the person and the client an action was asked by.
+func (f *fixture) askedBy(t *testing.T, id string) (string, string) {
+	t.Helper()
+	var user, client string
+	if err := f.sqlDB.QueryRow(`SELECT user_id, client_id FROM mcp_actions WHERE id = $1`, id).Scan(&user, &client); err != nil {
+		t.Fatal(err)
+	}
+	return user, client
 }

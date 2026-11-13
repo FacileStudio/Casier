@@ -199,6 +199,7 @@ type revealOutput struct {
 	Project        string        `json:"project,omitempty"`
 	Environment    string        `json:"environment,omitempty"`
 	Secrets        []revealedOut `json:"secrets,omitempty"`
+	Omitted        []string      `json:"omitted,omitempty"`
 	ConfirmURL     string        `json:"confirm_url,omitempty"`
 	ConfirmationID string        `json:"confirmation_id,omitempty"`
 	Message        string        `json:"message,omitempty"`
