@@ -229,7 +229,11 @@ values. A reveal is confirmed like a delete: MRTR when the client elicits, other
 action on `/pending`. A reveal confirmed on that page runs nothing and shows no value; the
 client that asked collects the values once, within 15 minutes, by calling again with
 `confirmation_id` (`modules/mcp/grants.go` marks the `mcp_actions` row `outcome = 'revealed'`).
-The collection re-checks the fingerprint, the person and the OAuth client. Deleting a secret
+The collection re-checks the fingerprint, the person and the OAuth client. `collect` locks the row,
+reads the values and marks it `revealed` in one transaction, so a failed read leaves the
+confirmation unspent. One answer stays within tronc's `ResultBudget`: keys that do not fit come
+back in `omitted` for a new request. Project and environment deletes are left out on purpose
+(hard deletes, no trash); `docs/mcp.md` lists every tool, its hints, and what is not exposed. Deleting a secret
 moves it to the trash after confirmation; purging, ACLs, members, tokens, webhooks and key
 rotation are not exposed. `/api/mcp/pending` takes a session only, never a `casier_` token.
 Erasing a person deletes their `mcp_actions` rows.
