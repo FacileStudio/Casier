@@ -230,8 +230,12 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	if err != nil {
 		panic(fmt.Sprintf("session.New: %v", err))
 	}
+	users, err := auth.NewUserStore(context.Background(), sqlDB, logger)
+	if err != nil {
+		panic(fmt.Sprintf("auth.NewUserStore: %v", err))
+	}
 	var oidcKit *oidc.Kit
-	authService := auth.NewService(db, keyring, logger, sessions, auth.NewUserStore(db, sqlDB))
+	authService := auth.NewService(db, keyring, logger, sessions, users)
 	deletions := auth.NewDeletions(db, testDirectory, nil, nil, logger)
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
@@ -253,7 +257,7 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
-		mcp.RegisterPendingRoutes(r, testMCP(db, sqlDB, projectsService, environmentsService, secretsService), authService)
+		mcp.RegisterPendingRoutes(r, testMCP(users, sqlDB, projectsService, environmentsService, secretsService), authService)
 	})
 
 	router.Get("/spaces", redirectToProjects)
@@ -265,10 +269,10 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 // testMCP is the MCP service behind the confirm page routes. Its verifier refuses every
 // token: the matrix drives the page, which authenticates the person's own session and
 // never an MCP token.
-func testMCP(db *gorm.DB, sqlDB *sql.DB, projectsService *projects.Service, environmentsService *environments.Service, secretsService *secrets.Service) *mcp.Service {
+func testMCP(users mcp.Accounts, sqlDB *sql.DB, projectsService *projects.Service, environmentsService *environments.Service, secretsService *secrets.Service) *mcp.Service {
 	service, err := mcp.NewService(mcp.Deps{
 		Projects: projectsService, Environments: environmentsService, Secrets: secretsService,
-		Accounts: auth.NewUserStore(db, sqlDB), Actions: sqlDB,
+		Accounts: users, Actions: sqlDB,
 	}, mcp.Config{
 		Resource: "https://casier.test/mcp", Issuer: "https://sso.casier.test", StateKey: []byte("state-key"),
 		Verifier: func(context.Context, string, *http.Request) (*sdkauth.TokenInfo, error) {

@@ -1,12 +1,59 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/porte"
 )
+
+// TestNewUserStoreFillsEveryColumnOfANewAccount pins the kit store against the
+// users table the migrations build, where created_at and updated_at have no
+// default. Unwritten must stay empty: every account in production has every
+// column filled, so none may be NULL on an account the kit creates. A sign-in
+// with the fewest claims Registre can send is the account most likely to
+// leave one NULL. The store must also never log porte's warning about a Store
+// built as a literal, which is what production logged before.
+func TestNewUserStoreFillsEveryColumnOfANewAccount(t *testing.T) {
+	db := resetTestDB(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("db.DB: %v", err)
+	}
+	var logs bytes.Buffer
+	ctx := context.Background()
+	store, err := NewUserStore(ctx, sqlDB, slog.New(slog.NewTextHandler(&logs, nil)))
+	if err != nil {
+		t.Fatalf("NewUserStore: %v", err)
+	}
+	if unwritten := store.Unwritten(); len(unwritten) != 0 {
+		t.Fatalf("Unwritten() = %v, want none: fill these in OnCreate", unwritten)
+	}
+
+	id, err := store.UpsertFromOIDC(ctx, porte.Claims{
+		Provider: testIssuer, Subject: "bare", Email: "bare@facile.studio", EmailVerified: true,
+	})
+	if err != nil {
+		t.Fatalf("UpsertFromOIDC: %v", err)
+	}
+	if _, err := store.BackfillPictures(ctx, testIssuer); err != nil {
+		t.Fatalf("BackfillPictures: %v", err)
+	}
+	var nulls []string
+	if err := db.Raw(`SELECT key FROM users u, json_each(row_to_json(u))
+		WHERE u.id = ? AND json_typeof(value) = 'null' ORDER BY key`, id).Scan(&nulls).Error; err != nil {
+		t.Fatalf("reading the new account: %v", err)
+	}
+	if len(nulls) != 0 {
+		t.Errorf("a new account holds NULL in %v, which no older account does", nulls)
+	}
+	if logs.Len() != 0 {
+		t.Errorf("the store logged %q, want nothing", logs.String())
+	}
+}
 
 // TestUpsertFromOIDCLinksAVerifiedAddress covers the registre cutover: both
 // halves of the (provider, subject) key change, so every existing user arrives

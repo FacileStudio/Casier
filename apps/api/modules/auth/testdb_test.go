@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"context"
 	"testing"
 
 	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
+	"github.com/FacileStudio/porte/kit"
 
 	"gorm.io/gorm"
 )
@@ -25,11 +27,15 @@ func resetTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func newTestUserStore(t *testing.T, db *gorm.DB) *UserStore {
+func newTestUserStore(t *testing.T, db *gorm.DB) *kit.Store {
 	t.Helper()
 	sqlDB, err := db.DB()
 	if err != nil {
 		t.Fatalf("db.DB: %v", err)
 	}
-	return NewUserStore(db, sqlDB)
+	store, err := NewUserStore(context.Background(), sqlDB, nil)
+	if err != nil {
+		t.Fatalf("NewUserStore: %v", err)
+	}
+	return store
 }

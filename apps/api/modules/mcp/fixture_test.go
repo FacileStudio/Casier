@@ -83,7 +83,7 @@ func newFixtureOn(t *testing.T, listener net.Listener, front func(*fixture, http
 	t.Helper()
 	f := &fixture{issuer: mcptest.NewIssuer(t)}
 	f.db, f.sqlDB = openDB(t)
-	f.deps = newDeps(f.db, f.sqlDB)
+	f.deps = newDeps(t, f.db, f.sqlDB)
 	f.seed(t)
 	var handler http.Handler
 	f.srv = httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { handler.ServeHTTP(w, r) }))
@@ -127,16 +127,21 @@ func openDB(t *testing.T) (*gorm.DB, *sql.DB) {
 }
 
 // newDeps wires Casier's services as main does.
-func newDeps(db *gorm.DB, sqlDB *sql.DB) Deps {
+func newDeps(t *testing.T, db *gorm.DB, sqlDB *sql.DB) Deps {
+	t.Helper()
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 	key := make([]byte, 32)
 	auditLog := audit.NewLogger(db, quiet)
 	projectsService := projects.NewService(db, crypto.NewKeyring(key), auditLog)
 	environmentsService := environments.NewService(db, projectsService)
 	secretsService := secrets.NewService(db, quiet, projectsService, environmentsService, projectsService, webhook.NewDispatcher(db, quiet), auditLog)
+	users, err := auth.NewUserStore(context.Background(), sqlDB, quiet)
+	if err != nil {
+		t.Fatalf("auth.NewUserStore: %v", err)
+	}
 	return Deps{
 		Projects: projectsService, Environments: environmentsService, Secrets: secretsService,
-		Accounts: auth.NewUserStore(db, sqlDB), Actions: sqlDB,
+		Accounts: users, Actions: sqlDB,
 	}
 }
 

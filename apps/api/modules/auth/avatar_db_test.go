@@ -6,6 +6,7 @@ import (
 
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/kit"
 
 	"gorm.io/gorm"
 )
@@ -15,7 +16,7 @@ const testIssuer = "https://sso.facile.studio"
 // seedAvatarUsers creates one user per way of arriving: signed in with a real
 // picture, signed in through another provider with a data: placeholder, and
 // signed in before Casier stored the claim. It returns their ids in that order.
-func seedAvatarUsers(t *testing.T, db *gorm.DB, store *UserStore) (int64, int64, int64) {
+func seedAvatarUsers(t *testing.T, db *gorm.DB, store *kit.Store) (int64, int64, int64) {
 	t.Helper()
 	ctx := context.Background()
 	signedIn, err := store.UpsertFromOIDC(ctx, porte.Claims{

@@ -32,7 +32,7 @@ type Service struct {
 }
 
 // NewService wires an auth service onto the database and the porte session
-// manager. users resolves the account behind a session: the UserStore.
+// manager. users resolves the account behind a session: the kit store NewUserStore builds.
 func NewService(orm *gorm.DB, keyring *crypto.Keyring, logger *slog.Logger, sessions *session.Manager, users kit.Resolver) *Service {
 	service := &Service{
 		orm:      orm,

@@ -6,7 +6,7 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 
 | Layer    | Stack                                                        |
 | -------- | ------------------------------------------------------------ |
-| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.21.0, porte v0.18.0 |
+| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.22.1, porte v0.19.0 |
 | Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/muse`) |
 | Build    | `go build`, Bun                                              |
 | Deploy   | Docker Compose, single distroless container serving API + client |

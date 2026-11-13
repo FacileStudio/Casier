@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- refactor(auth): sign-in goes through porte/kit's user store, built with `kit.NewStore` instead of a `kit.Store` literal. The kit now owns the sign-in write Casier kept in GORM: the same linking rules (a verified address only, never an account that already holds a subject of the same issuer, a provider matching with or without one trailing slash, porte v0.18.1 and later) and the same profile refresh (the picture always, the email only when verified). `NewStore` fills `created_at` and `updated_at`, which have no database default, so a new account holds every column an older one does, and production stops logging "this Store was built as a literal" at boot. No schema change. A test pins `Unwritten()` as empty and checks a new account holds no NULL. `CASIER_ADMIN_EMAILS` still fails closed: the users table has no admin column, so signing in grants nothing.
+
 ## [0.7.3] - 2026-11-12
 
 ### Fixed

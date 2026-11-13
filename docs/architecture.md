@@ -71,7 +71,9 @@ but never outlives a week. A cleanup goroutine prunes expired rows.
 
 **There is no password sign-in.** An existing local account links to its Facile identity by
 verified email on the first sign-in, and only when it holds no other subject of the same
-issuer. API tokens (`casier_` prefix) authenticate on their own, with no session.
+issuer. API tokens (`casier_` prefix) authenticate on their own, with no session. The sign-in
+write is porte/kit's user store, built with `kit.NewStore` (`modules/auth/porte.go`), so a new
+account gets `created_at` and `updated_at` although the table gives them no default.
 
 **Deletions.** Registre tells Casier when a person is erased (a signed push plus a poll,
 state in `directory_deletion_state`). Their personal projects, tokens and account go; a

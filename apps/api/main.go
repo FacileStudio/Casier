@@ -73,7 +73,7 @@ func refConfig() apiref.Config {
 // buildAuth wires porte: the session manager always, and with an issuer the
 // OIDC kit and the user-menu invitations, both over the sealed porte store.
 // The kit refuses an account to any subject the deletion receiver erased.
-func buildAuth(ctx context.Context, sqlDB *sql.DB, users *auth.UserStore, deletions *auth.Deletions, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
+func buildAuth(ctx context.Context, sqlDB *sql.DB, users *kit.Store, deletions *auth.Deletions, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
 	store, err := newPorteStore(sqlDB)
 	if err != nil {
 		return auth.Routes{}, err
@@ -206,7 +206,11 @@ func run() int {
 		return 1
 	}
 
-	users := auth.NewUserStore(db, sqlDB)
+	users, err := auth.NewUserStore(shutdownCtx, sqlDB, appLogger)
+	if err != nil {
+		appLogger.Error("failed to build the user store", slog.Any("error", err))
+		return 1
+	}
 	authRoutes, err := buildAuth(shutdownCtx, sqlDB, users, deletions, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to initialise porte", slog.Any("error", err))
