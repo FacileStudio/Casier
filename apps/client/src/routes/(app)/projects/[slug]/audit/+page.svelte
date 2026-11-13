@@ -8,6 +8,7 @@
 		SettingsSection,
 		Skeleton,
 		Table,
+		Tooltip,
 		icons,
 	} from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
@@ -120,8 +121,10 @@
 							</td>
 							<td><Badge tone={actionTone(log.action)}>{log.action}</Badge></td>
 							<td class="font-fc-mono text-fc-xs text-fc-fg-muted">{log.resource || '—'}</td>
-							<td class="max-w-64 truncate text-fc-fg-muted" title={log.detail}>
-								{log.detail || '—'}
+							<td class="text-fc-fg-muted">
+								<Tooltip text={log.detail || ''} disabled={!log.detail} class="contents">
+									<span class="block max-w-64 truncate">{log.detail || '—'}</span>
+								</Tooltip>
 							</td>
 						</tr>
 					{/each}

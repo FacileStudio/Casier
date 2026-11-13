@@ -271,7 +271,7 @@
 								aria-label={env.protected
 									? t('psettings.env.unprotectAria', { name: env.name })
 									: t('psettings.env.protectAria', { name: env.name })}
-								title={env.protected
+								tooltip={env.protected
 									? t('psettings.env.unprotectTitle')
 									: t('psettings.env.protectTitle')}
 								disabled={togglingEnvSlug === env.slug}
@@ -288,7 +288,7 @@
 							<IconButton
 								variant="ghost-danger"
 								aria-label={t('psettings.env.deleteAria', { name: env.name })}
-								title={ctx.environments.length <= 1
+								tooltip={ctx.environments.length <= 1
 									? t('psettings.env.keepOne')
 									: t('psettings.env.deleteTitle', { name: env.name })}
 								disabled={ctx.environments.length <= 1}

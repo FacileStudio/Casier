@@ -28,6 +28,7 @@
 		Spinner,
 		Table,
 		Textarea,
+		Tooltip,
 		icons,
 		toast,
 	} from '@facile/muse';
@@ -411,7 +412,7 @@
 				<IconButton
 					variant="ghost"
 					aria-label={t('sec.copy.aria', { key: secret.key })}
-					title={t('sec.copy')}
+					tooltip={t('sec.copy')}
 					onclick={() => copyValue(secret)}
 				>
 					<iconify-icon icon={icons.copy} width="18" height="18" class="block"></iconify-icon>
@@ -423,7 +424,7 @@
 				aria-label={isRevealed
 					? t('sec.hide.aria', { key: secret.key })
 					: t('sec.reveal.aria', { key: secret.key })}
-				title={isRevealed ? t('sec.hide') : t('sec.reveal')}
+				tooltip={isRevealed ? t('sec.hide') : t('sec.reveal')}
 				aria-pressed={isRevealed}
 				onclick={() => toggleReveal(secret)}
 			>
@@ -443,28 +444,31 @@
 {/snippet}
 
 {#snippet secretActions(secret: Secret)}
-	<Button
-		variant="ghost"
-		icon={icons.history}
-		aria-label={t('sec.history.aria', { key: secret.key })}
-		title={t('sec.history')}
-		onclick={() => openHistory(secret)}
-	/>
-	{#if canWrite}
+	<Tooltip text={t('sec.history')} describe={false} class="contents">
 		<Button
 			variant="ghost"
-			icon={icons.edit}
-			aria-label={t('sec.edit.aria', { key: secret.key })}
-			title={t('sec.edit')}
-			onclick={() => openEdit(secret)}
+			icon={icons.history}
+			aria-label={t('sec.history.aria', { key: secret.key })}
+			onclick={() => openHistory(secret)}
 		/>
-		<Button
-			variant="ghost-danger"
-			icon={icons.remove}
-			aria-label={t('sec.delete.aria', { key: secret.key })}
-			title={t('sec.delete')}
-			onclick={() => openDelete(secret)}
-		/>
+	</Tooltip>
+	{#if canWrite}
+		<Tooltip text={t('sec.edit')} describe={false} class="contents">
+			<Button
+				variant="ghost"
+				icon={icons.edit}
+				aria-label={t('sec.edit.aria', { key: secret.key })}
+				onclick={() => openEdit(secret)}
+			/>
+		</Tooltip>
+		<Tooltip text={t('sec.delete')} describe={false} class="contents">
+			<Button
+				variant="ghost-danger"
+				icon={icons.remove}
+				aria-label={t('sec.delete.aria', { key: secret.key })}
+				onclick={() => openDelete(secret)}
+			/>
+		</Tooltip>
 	{/if}
 {/snippet}
 
