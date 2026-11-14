@@ -225,8 +225,9 @@ person with a nil token scope, so roles, ACLs and protected environments hold as
 app; the audit trail records `mcp:<client_id>` as the client address.
 
 **No tool but `casier_reveal_secrets` ever returns a value**, and the diff drops both sides'
-values. A reveal is confirmed like a delete: MRTR when the client elicits, otherwise a pending
-action on `/pending`. A reveal confirmed on that page runs nothing and shows no value; the
+values. A reveal is confirmed only on `/pending`, in the person's own browser session: a client
+that can elicit still gets the link, and an in-client (MRTR) answer is refused, because a client
+binary could forge it. A token with no `client_id` cannot reveal. A reveal confirmed on that page runs nothing and shows no value; the
 client that asked collects the values once, within 15 minutes, by calling again with
 `confirmation_id` (`modules/mcp/grants.go` marks the `mcp_actions` row `outcome = 'revealed'`).
 The collection re-checks the fingerprint, the person and the OAuth client. `collect` locks the row,

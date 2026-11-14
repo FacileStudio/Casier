@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-14
+
+### Security
+
+- fix(mcp): `casier_reveal_secrets` is confirmed only on the `/pending` page in the person's own browser. A client that can elicit gets the confirm link like any other, and an in-client (MRTR) `accept` is refused, since a client binary could forge it. `casier_delete_secret` keeps the in-client path.
+- fix(mcp): a reveal from a token with an empty `client_id` is refused (`permission_denied`), so two clients without an id never share a confirmation.
+- fix(auth): porte v0.20.1 and porte/mcpauth v0.3.1 mark browser logins with `b~`. Under v0.20.0's `b-` mark, about one plain session token in 4096 (CLI, device, older sessions) passed as a browser login on the confirm page. A browser login from v0.9.0 or v0.9.1 still signs in but must sign in once more before its next confirm.
+
+### Changed
+
+- build(api): tronc v0.23.1 (request dedupe matches the OAuth client).
+- test(api): the authz suite sends a real browser cookie (`porte.BrowserTokenPrefix`) to the confirm page routes: with `X-Facile-CSRF` they reach the handlers (404 on a missing action), without it they answer 403. A plain CLI token sent as the cookie answers 403.
+
 ## [0.9.1] - 2026-11-14
 
 ### Added

@@ -32,6 +32,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
+	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
 	"github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
@@ -171,6 +172,7 @@ var (
 	testDB      *gorm.DB
 	testRouter  chi.Router
 	testKeyring *crypto.Keyring
+	testSession *session.Manager
 	databaseOn  bool
 )
 
@@ -230,6 +232,7 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	if err != nil {
 		panic(fmt.Sprintf("session.New: %v", err))
 	}
+	testSession = sessions
 	users, err := auth.NewUserStore(context.Background(), sqlDB, logger)
 	if err != nil {
 		panic(fmt.Sprintf("auth.NewUserStore: %v", err))
@@ -1272,6 +1275,71 @@ func normalizeRoute(route string) string {
 		route = strings.TrimSuffix(route, "*")
 	}
 	return route
+}
+
+// cookieCells are the confirm page requests sent with a real browser cookie: a GET needs
+// no CSRF header, and a POST reaches its handler only with X-Facile-CSRF.
+var cookieCells = []struct {
+	method, path string
+	csrf         bool
+	want         int
+}{
+	{http.MethodGet, "/api/mcp/pending", false, http.StatusOK},
+	{http.MethodPost, "/api/mcp/pending/no-such-action/confirm", true, http.StatusNotFound},
+	{http.MethodPost, "/api/mcp/pending/no-such-action/dismiss", true, http.StatusNotFound},
+	{http.MethodPost, "/api/mcp/pending/no-such-action/confirm", false, http.StatusForbidden},
+	{http.MethodPost, "/api/mcp/pending/no-such-action/dismiss", false, http.StatusForbidden},
+}
+
+// TestTheConfirmPageTakesABrowserCookieWithCSRF covers what the bearer personas cannot:
+// a real browser cookie from a browser sign-in reaches the confirm page handlers, and a
+// cookie POST without X-Facile-CSRF is refused before them.
+func TestTheConfirmPageTakesABrowserCookieWithCSRF(t *testing.T) {
+	requireDatabase(t)
+	f, err := seed(testDB, testKeyring)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	issued := httptest.NewRecorder()
+	token, _, err := testSession.IssueCookieFor(context.Background(), issued, httptest.NewRequest(http.MethodGet, "/", nil), porte.Session{UserID: f.userIDs[memberEmail]})
+	if err != nil || !strings.HasPrefix(token, porte.BrowserTokenPrefix) {
+		t.Fatalf("want a browser token, got %v", err)
+	}
+	for _, cell := range cookieCells {
+		if got := onConfirmPage(cell.method, cell.path, token, cell.csrf); got.Code != cell.want {
+			t.Errorf("%s %s csrf=%v: want %d, got %d %s", cell.method, cell.path, cell.csrf, cell.want, got.Code, got.Body)
+		}
+	}
+}
+
+// TestAPlainTokenInTheCookieCannotConfirm checks a CLI session token sent as the cookie,
+// with the CSRF header, is not a browser session on the confirm page.
+func TestAPlainTokenInTheCookieCannotConfirm(t *testing.T) {
+	requireDatabase(t)
+	f, err := seed(testDB, testKeyring)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	token, _, err := testSession.IssueFor(context.Background(), porte.Session{UserID: f.userIDs[memberEmail]})
+	if err != nil || strings.HasPrefix(token, porte.BrowserTokenPrefix) {
+		t.Fatalf("want a plain token, got %v", err)
+	}
+	if got := onConfirmPage(http.MethodPost, "/api/mcp/pending/no-such-action/confirm", token, true); got.Code != http.StatusForbidden {
+		t.Fatalf("want 403 for a plain token in the cookie, got %d %s", got.Code, got.Body)
+	}
+}
+
+// onConfirmPage sends one request through the real router with token as the session
+// cookie, and the CSRF header when csrf is set.
+func onConfirmPage(method, path, token string, csrf bool) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(method, path, nil)
+	request.AddCookie(&http.Cookie{Name: porte.SessionCookieName, Value: token})
+	if csrf {
+		request.Header.Set("X-Facile-CSRF", "1")
+	}
+	recorder := httptest.NewRecorder()
+	testRouter.ServeHTTP(recorder, request)
+	return recorder
 }
 
 func requireDatabase(t *testing.T) {
