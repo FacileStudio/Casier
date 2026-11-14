@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-11-14
+
+### Changed
+
+- build(compose): `casier-api` no longer sets `container_name`, so Dokploy can roll it with the docker zdt plugin (zero-downtime deploys). Compose DNS still answers to the service name. The service now carries the label `journal.app: casier-api`, so its Journal app name is unchanged.
+
 ## [0.10.2] - 2026-11-14
 
 ### Fixed
