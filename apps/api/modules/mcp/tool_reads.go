@@ -13,11 +13,6 @@ import (
 // secretsPerPage caps one page of casier_list_secrets before the size budget applies.
 const secretsPerPage = 200
 
-// page is the position casier_list_secrets's cursor encodes.
-type page struct {
-	Offset int `json:"o"`
-}
-
 // listProjects is casier_list_projects: the caller's projects, each with its
 // environments, as the project list and its sidebar show them.
 func (t *toolset) listProjects(ctx context.Context, req *sdk.CallToolRequest, in projectsInput) (*sdk.CallToolResult, projectsOutput, error) {
@@ -59,8 +54,8 @@ func (t *toolset) listSecrets(ctx context.Context, req *sdk.CallToolRequest, in 
 	if err != nil {
 		return nil, secretsOutput{}, err
 	}
-	var at page
-	if err := mcpkit.DecodeCursor(in.Cursor, &at); err != nil {
+	offset, err := mcpkit.Offset(in.Cursor)
+	if err != nil {
 		return nil, secretsOutput{}, err
 	}
 	c, err := t.callerOf(ctx, req)
@@ -79,7 +74,7 @@ func (t *toolset) listSecrets(ctx context.Context, req *sdk.CallToolRequest, in 
 		}
 	}
 	out := secretsOutput{Project: in.Project, Environment: in.Environment, RotationDays: list.RotationDays, Total: len(kept)}
-	return nil, pageOf(out, kept, at.Offset), nil
+	return nil, pageOf(out, kept, offset), nil
 }
 
 // pageOf fills out with the page of kept starting at offset, as many as fit the size
@@ -92,8 +87,8 @@ func pageOf(out secretsOutput, kept []secretOut, offset int) secretsOutput {
 		return mcpkit.EncodedSize(out)
 	})
 	out.Secrets = rest[:n]
-	if next := offset + n; n > 0 && next < len(kept) {
-		out.NextCursor = mcpkit.EncodeCursor(page{Offset: next})
+	if n > 0 {
+		out.NextCursor = mcpkit.Cursor(offset+n, len(kept))
 	}
 	return out
 }

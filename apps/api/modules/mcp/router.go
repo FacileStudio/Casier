@@ -24,10 +24,7 @@ func RegisterRoutes(router chi.Router, service *Service) {
 // token-or-session one, so a machine token can never confirm a reveal. A nil service,
 // as in the docs test, still mounts the routes.
 func RegisterPendingRoutes(router chi.Router, service *Service, sessions SessionGuard) {
-	router.Route("/mcp/pending", func(r chi.Router) {
-		r.Use(sessions.RequireAuth)
-		service.pending().Routes(r)
-	})
+	service.pending().Mount(router, sessions.RequireAuth)
 }
 
 // pending is the confirm page, nil on a nil service.

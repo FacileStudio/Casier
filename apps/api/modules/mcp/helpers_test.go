@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"net/http"
 	"testing"
 
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"github.com/FacileStudio/tronc/mcp/mcptest"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -40,4 +42,36 @@ func prod(extra map[string]any) map[string]any {
 		args[k] = v
 	}
 	return args
+}
+
+// confirmedReveal asks to reveal keys from a client that cannot confirm, confirms it on
+// the page, and returns the confirmation id.
+func confirmedReveal(t *testing.T, f *fixture, keys ...string) string {
+	t.Helper()
+	var asked revealOutput
+	call(t, f.session(t, ownerSubject), toolReveal, prod(map[string]any{"keys": keys}), &asked)
+	if got := onPage(f, http.MethodPost, "/"+asked.ConfirmationID+"/confirm", f.owner, ""); got.Code != http.StatusOK {
+		t.Fatalf("confirm: %d %s", got.Code, got.Body)
+	}
+	return asked.ConfirmationID
+}
+
+// outcomeOf is the stored outcome of one action.
+func (f *fixture) outcomeOf(t *testing.T, id string) string {
+	t.Helper()
+	var outcome string
+	if err := f.sqlDB.QueryRow(`SELECT outcome FROM mcp_actions WHERE id = $1`, id).Scan(&outcome); err != nil {
+		t.Fatal(err)
+	}
+	return outcome
+}
+
+// askedBy is the person and the client an action was asked by.
+func (f *fixture) askedBy(t *testing.T, id string) mcpkit.Caller {
+	t.Helper()
+	var who mcpkit.Caller
+	if err := f.sqlDB.QueryRow(`SELECT user_id, client_id FROM mcp_actions WHERE id = $1`, id).Scan(&who.UserID, &who.ClientID); err != nil {
+		t.Fatal(err)
+	}
+	return who
 }

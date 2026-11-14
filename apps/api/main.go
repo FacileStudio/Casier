@@ -263,6 +263,9 @@ func run() int {
 		projects.RegisterRoutes(r, projectsService, authService, appEnv)
 		environments.RegisterRoutes(r, environmentsService, authService)
 		secrets.RegisterRoutes(r, secretsService, authService)
+		if mcpService != nil {
+			mcp.RegisterPendingRoutes(r, mcpService, authService)
+		}
 	})
 
 	if mountErr != nil {

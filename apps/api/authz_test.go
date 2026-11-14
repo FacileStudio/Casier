@@ -622,7 +622,7 @@ func routeCases(f fixture) []routeCase {
 		{
 			name: "mcp pending list", method: "GET", pattern: "/api/mcp/pending/", path: "/api/mcp/pending",
 			outcomes: []outcome{
-				ok(200, cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				denied(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
 				unauth(liveTokens...),
 				unauth(rejectedAtTheDoor...),
 			},
@@ -630,7 +630,7 @@ func routeCases(f fixture) []routeCase {
 		{
 			name: "mcp pending confirm", method: "POST", pattern: "/api/mcp/pending/{id}/confirm", path: "/api/mcp/pending/no-such-action/confirm",
 			outcomes: []outcome{
-				missing(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				denied(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
 				unauth(liveTokens...),
 				unauth(rejectedAtTheDoor...),
 			},
@@ -638,7 +638,7 @@ func routeCases(f fixture) []routeCase {
 		{
 			name: "mcp pending dismiss", method: "POST", pattern: "/api/mcp/pending/{id}/dismiss", path: "/api/mcp/pending/no-such-action/dismiss",
 			outcomes: []outcome{
-				missing(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
+				denied(cOwner, cAdmin, cMember, cViewer, cOutsider, cRotator),
 				unauth(liveTokens...),
 				unauth(rejectedAtTheDoor...),
 			},

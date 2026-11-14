@@ -109,3 +109,33 @@ func TestListProjectsNamesEnvironments(t *testing.T) {
 		t.Fatalf("want the web project with its three environments, got %+v", out.Projects)
 	}
 }
+
+// hints are a tool's destructive and idempotent hints.
+type hints struct{ destructive, idempotent bool }
+
+// TestEveryToolStatesTheSuiteHints checks the suite's annotations rule on every tool: a
+// tool that overwrites or removes data is destructive, and only a tool whose repeat call
+// has no extra effect is idempotent. A new tool fails here until it is listed.
+func TestEveryToolStatesTheSuiteHints(t *testing.T) {
+	f := newFixture(t)
+	want := map[string]hints{
+		toolProjects: {false, true}, toolSecrets: {false, true}, toolSecret: {false, true}, toolDiff: {false, true},
+		toolTrash: {false, true}, toolAudit: {false, true}, toolNewProject: {false, false}, toolNewEnv: {false, false},
+		toolSet: {true, false}, toolTag: {true, true}, toolRollback: {true, false}, toolRestore: {false, true},
+		toolReveal: {false, false}, toolDelete: {true, false},
+	}
+	listed, err := f.session(t, ownerSubject).ListTools(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed.Tools) != len(want) {
+		t.Fatalf("want %d tools, got %d", len(want), len(listed.Tools))
+	}
+	for _, tool := range listed.Tools {
+		a := tool.Annotations
+		got := hints{a.DestructiveHint != nil && *a.DestructiveHint, a.IdempotentHint}
+		if expected, ok := want[tool.Name]; !ok || got != expected {
+			t.Errorf("%s: want %+v, got %+v", tool.Name, expected, got)
+		}
+	}
+}

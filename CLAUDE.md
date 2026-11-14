@@ -6,7 +6,7 @@ Self-hosted secrets and environment variable manager for teams. Go API + SvelteK
 
 | Layer    | Stack                                                        |
 | -------- | ------------------------------------------------------------ |
-| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.22.1, porte v0.19.0 |
+| API      | Go 1.26, Chi router, GORM, PostgreSQL 16, tronc v0.23.0, porte v0.20.0 |
 | Client   | SvelteKit 5 (Svelte 5 runes), Tailwind CSS 4, muse (`@facile/muse`) |
 | Build    | `go build`, Bun                                              |
 | Deploy   | Docker Compose, single distroless container serving API + client |
@@ -40,7 +40,7 @@ apps/
         components/     App components (shell chrome + project sections)
 docs/                   Reference docs: api, architecture, configuration, deployment, development
 scripts/                check.sh (the quality gate) and the repo-local Postgres helpers
-Dockerfile              Multi-stage: bun build -> golang:1.25-alpine -> distroless
+Dockerfile              Multi-stage: bun build -> golang:1.26.11-alpine -> distroless
 docker-compose.yml      Full stack: db + app
 
 The CLI is **not** here — it lives in its own repo, see below.
@@ -229,9 +229,14 @@ values. A reveal is confirmed like a delete: MRTR when the client elicits, other
 action on `/pending`. A reveal confirmed on that page runs nothing and shows no value; the
 client that asked collects the values once, within 15 minutes, by calling again with
 `confirmation_id` (`modules/mcp/grants.go` marks the `mcp_actions` row `outcome = 'revealed'`).
-The collection re-checks the fingerprint, the person and the OAuth client. Deleting a secret
+The collection re-checks the fingerprint, the person and the OAuth client. `collect` locks the row,
+reads the values and marks it `revealed` in one transaction, so a failed read leaves the
+confirmation unspent. One answer stays within tronc's `ResultBudget`: keys that do not fit come
+back in `omitted` for a new request. Project and environment deletes are left out on purpose
+(hard deletes, no trash); `docs/mcp.md` lists every tool, its hints, and what is not exposed. Deleting a secret
 moves it to the trash after confirmation; purging, ACLs, members, tokens, webhooks and key
-rotation are not exposed. `/api/mcp/pending` takes a session only, never a `casier_` token.
+rotation are not exposed. `/api/mcp/pending` takes only a browser sign-in's session cookie
+(`mcpauth.RequireOwnSession`): bearers, CLI sessions and `casier_` tokens answer 403.
 Erasing a person deletes their `mcp_actions` rows.
 
 ## Secret lifecycle

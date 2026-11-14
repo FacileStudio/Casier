@@ -8,9 +8,6 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const waitingDelete = "Nothing happened yet: your client cannot ask the user to confirm. Give the user confirm_url and " +
-	"ask them to confirm there. Do not call this tool again for the same secret; the request stays open for 7 days."
-
 // deleteSecret is casier_delete_secret: the secret moves to the trash once the user
 // confirms.
 func (t *toolset) deleteSecret(ctx context.Context, req *sdk.CallToolRequest, in secretRef) (*sdk.CallToolResult, deleteOutput, error) {
@@ -28,7 +25,7 @@ func (t *toolset) deleteSecret(ctx context.Context, req *sdk.CallToolRequest, in
 	if result != nil {
 		return result, deleteOutput{}, nil
 	}
-	return nil, deleteOutput{Status: outcome.Status, Key: in.Key, ConfirmURL: outcome.ConfirmURL, Message: waitingDelete}, nil
+	return nil, deleteOutput{Status: outcome.Status, Key: in.Key, ConfirmURL: outcome.ConfirmURL, Message: outcome.Message}, nil
 }
 
 // resumeDelete handles the retry that carries the person's answer.
@@ -41,7 +38,7 @@ func (t *toolset) resumeDelete(ctx context.Context, req *sdk.CallToolRequest) (*
 		return nil, deleteOutput{}, mcpkit.Failure(err, "Call casier_delete_secret again to ask the user afresh.")
 	}
 	if outcome.Status == mcpkit.StatusDeclined {
-		return nil, deleteOutput{Status: mcpkit.StatusDeclined, Message: "The user declined. Nothing happened, and the secret is kept."}, nil
+		return nil, deleteOutput{Status: mcpkit.StatusDeclined, Message: outcome.Message}, nil
 	}
 	g, _ := targetOf(outcome.Action)
 	key := ""

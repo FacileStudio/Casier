@@ -11,6 +11,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/porte"
+	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"github.com/FacileStudio/tronc/mcp/mcptest"
 	"github.com/go-chi/chi/v5"
 )
@@ -27,16 +28,52 @@ func askReveal(t *testing.T, f *fixture) revealOutput {
 	return out
 }
 
-// onPage calls a confirm page route as userID's web session, or as a delegated token
-// when actor is set.
+// onPage calls a confirm page route as userID's browser session, or as a delegated
+// token when actor is set.
 func onPage(f *fixture, method, path string, userID int64, actor string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	return asPerson(f, req, porte.Identity{UserID: userID, SessionID: 1, Actor: actor, BrowserSession: true})
+}
+
+// asPerson serves req on the confirm page routes as identity.
+func asPerson(f *fixture, req *http.Request, identity porte.Identity) *httptest.ResponseRecorder {
 	router := chi.NewRouter()
 	f.service.page.Routes(router)
-	req := httptest.NewRequest(method, path, nil)
-	ctx := porte.WithIdentity(req.Context(), porte.Identity{UserID: userID, SessionID: 1, Actor: actor})
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, req.WithContext(ctx))
+	router.ServeHTTP(recorder, req.WithContext(porte.WithIdentity(req.Context(), identity)))
 	return recorder
+}
+
+// TestOnlyABrowserSessionConfirms checks a CLI session, or a browser session sent with
+// a bearer header, cannot confirm a reveal, and the action stays open.
+func TestOnlyABrowserSessionConfirms(t *testing.T) {
+	f := newFixture(t)
+	asked := askReveal(t, f)
+	path := "/" + asked.ConfirmationID + "/confirm"
+	cli := asPerson(f, httptest.NewRequest(http.MethodPost, path, nil), porte.Identity{UserID: f.owner, SessionID: 1})
+	withBearer := httptest.NewRequest(http.MethodPost, path, nil)
+	withBearer.Header.Set("Authorization", "Bearer x")
+	bearer := asPerson(f, withBearer, porte.Identity{UserID: f.owner, SessionID: 1, BrowserSession: true})
+	if cli.Code != http.StatusForbidden || bearer.Code != http.StatusForbidden {
+		t.Fatalf("want 403 for a CLI session and a bearer header, got %d and %d", cli.Code, bearer.Code)
+	}
+	if got := f.outcomeOf(t, asked.ConfirmationID); got != "" {
+		t.Fatalf("a refused confirmation must leave the action open, got %q", got)
+	}
+}
+
+// TestTwoClientsAskingTheSameKeysGetTheirOwnReveal checks the request dedupe never
+// hands one client an action only another client can collect.
+func TestTwoClientsAskingTheSameKeysGetTheirOwnReveal(t *testing.T) {
+	f := newFixture(t)
+	first := askReveal(t, f)
+	again := askReveal(t, f)
+	other := f.issuer.Mint(t, map[string]any{"aud": []string{f.resource}, "sub": ownerSubject, "scope": "casier.read casier.write", "client_id": "https://other.example/client"})
+	var theirs revealOutput
+	call(t, mcptest.Connect(t, f.resource, other, mcptest.ClientOptions{}), toolReveal, prod(map[string]any{"keys": []string{"DATABASE_URL"}}), &theirs)
+	if again.ConfirmationID != first.ConfirmationID || theirs.ConfirmationID == "" || theirs.ConfirmationID == first.ConfirmationID {
+		t.Fatalf("want one action per client, got %q, %q and %q", first.ConfirmationID, again.ConfirmationID, theirs.ConfirmationID)
+	}
 }
 
 // collectArgs is the second call of a link confirmation.
@@ -98,6 +135,9 @@ func TestAValueWrittenAfterTheQuestionIsNotHandedOver(t *testing.T) {
 	if text := refused(t, f.session(t, ownerSubject), toolReveal, collectArgs(asked.ConfirmationID)); strings.Contains(text, "plaintext") {
 		t.Fatalf("a refusal must not carry a value: %s", text)
 	}
+	if got := f.outcomeOf(t, asked.ConfirmationID); got != mcpkit.OutcomeDone {
+		t.Fatalf("a refused collection must not spend the confirmation, got %q", got)
+	}
 }
 
 // TestADeleteConfirmedOnThePageTrashes checks the delete link path keeps the secret
@@ -131,5 +171,45 @@ func TestErasureDropsPendingActions(t *testing.T) {
 	}
 	if n := f.count(t, `SELECT count(*) FROM mcp_actions WHERE user_id = $1`, owner); n != 0 {
 		t.Fatalf("want no action left for the erased person, got %d", n)
+	}
+}
+
+// TestARevealStopsAtTheResultBudget checks values that do not fit in one answer are
+// named as omitted, not sent, and the confirmation is spent on what was sent.
+func TestARevealStopsAtTheResultBudget(t *testing.T) {
+	f := newFixture(t)
+	big := strings.Repeat("v", 30_000)
+	for _, key := range []string{"BIG_A", "BIG_B", "BIG_C"} {
+		f.secret(t, key, big)
+	}
+	id := confirmedReveal(t, f, "BIG_A", "BIG_B", "BIG_C")
+	session := f.session(t, ownerSubject)
+	result := mcptest.Call(t, session, toolReveal, collectArgs(id))
+	var out revealOutput
+	mcptest.Decode(t, result, &out)
+	if out.Status != statusRevealed || len(out.Secrets) != 2 || out.Secrets[1].Key != "BIG_B" || len(out.Omitted) != 1 || out.Omitted[0] != "BIG_C" {
+		t.Fatalf("want BIG_A and BIG_B sent and BIG_C omitted, got %d secrets, omitted %v", len(out.Secrets), out.Omitted)
+	}
+	if size := mcpkit.EncodedSize(out); size > mcpkit.ResultBudget {
+		t.Fatalf("the answer is %d bytes, over the %d budget", size, mcpkit.ResultBudget)
+	}
+	if f.outcomeOf(t, id) != outcomeRevealed {
+		t.Fatal("a reveal that sent values must spend its confirmation")
+	}
+	refused(t, session, toolReveal, collectArgs(id))
+}
+
+// TestAValueTooLargeToSendKeepsTheConfirmation checks a reveal whose first value alone
+// overflows the budget sends nothing and leaves the confirmation unspent.
+func TestAValueTooLargeToSendKeepsTheConfirmation(t *testing.T) {
+	f := newFixture(t)
+	f.secret(t, "QUOTED", strings.Repeat(`"`, 40_000))
+	id := confirmedReveal(t, f, "QUOTED", "DATABASE_URL")
+	text := refused(t, f.session(t, ownerSubject), toolReveal, collectArgs(id))
+	if !strings.Contains(text, "too large") || strings.Contains(text, "plaintext") || strings.Contains(text, `""`) {
+		t.Fatalf("want a size refusal without values, got %s", text)
+	}
+	if got := f.outcomeOf(t, id); got != mcpkit.OutcomeDone {
+		t.Fatalf("a reveal that sent nothing must stay confirmed, got %q", got)
 	}
 }
