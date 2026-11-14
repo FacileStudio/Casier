@@ -20,7 +20,6 @@ services:
       start_interval: 1s
 
   casier-api:
-    container_name: casier-api
     restart: unless-stopped
     build:
       context: .
@@ -31,6 +30,7 @@ services:
       - default
       - dokploy-network
     labels:
+      journal.app: casier-api
       traefik.enable: "true"
       traefik.docker.network: dokploy-network
       traefik.http.routers.casier-web.rule: "Host(`casier.facile.studio`)"
