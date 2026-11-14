@@ -233,9 +233,12 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 		panic(fmt.Sprintf("session.New: %v", err))
 	}
 	testSession = sessions
-	users, err := auth.NewUserStore(context.Background(), sqlDB, logger)
-	if err != nil {
-		panic(fmt.Sprintf("auth.NewUserStore: %v", err))
+	users := &kit.Store{Logger: logger}
+	if sqlDB != nil {
+		users, err = auth.NewUserStore(context.Background(), sqlDB, logger)
+		if err != nil {
+			panic(fmt.Sprintf("auth.NewUserStore: %v", err))
+		}
 	}
 	var oidcKit *oidc.Kit
 	authService := auth.NewService(db, keyring, logger, sessions, users)
