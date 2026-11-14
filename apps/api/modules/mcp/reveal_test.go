@@ -28,16 +28,52 @@ func askReveal(t *testing.T, f *fixture) revealOutput {
 	return out
 }
 
-// onPage calls a confirm page route as userID's web session, or as a delegated token
-// when actor is set.
+// onPage calls a confirm page route as userID's browser session, or as a delegated
+// token when actor is set.
 func onPage(f *fixture, method, path string, userID int64, actor string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, path, nil)
+	return asPerson(f, req, porte.Identity{UserID: userID, SessionID: 1, Actor: actor, BrowserSession: true})
+}
+
+// asPerson serves req on the confirm page routes as identity.
+func asPerson(f *fixture, req *http.Request, identity porte.Identity) *httptest.ResponseRecorder {
 	router := chi.NewRouter()
 	f.service.page.Routes(router)
-	req := httptest.NewRequest(method, path, nil)
-	ctx := porte.WithIdentity(req.Context(), porte.Identity{UserID: userID, SessionID: 1, Actor: actor})
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, req.WithContext(ctx))
+	router.ServeHTTP(recorder, req.WithContext(porte.WithIdentity(req.Context(), identity)))
 	return recorder
+}
+
+// TestOnlyABrowserSessionConfirms checks a CLI session, or a browser session sent with
+// a bearer header, cannot confirm a reveal, and the action stays open.
+func TestOnlyABrowserSessionConfirms(t *testing.T) {
+	f := newFixture(t)
+	asked := askReveal(t, f)
+	path := "/" + asked.ConfirmationID + "/confirm"
+	cli := asPerson(f, httptest.NewRequest(http.MethodPost, path, nil), porte.Identity{UserID: f.owner, SessionID: 1})
+	withBearer := httptest.NewRequest(http.MethodPost, path, nil)
+	withBearer.Header.Set("Authorization", "Bearer x")
+	bearer := asPerson(f, withBearer, porte.Identity{UserID: f.owner, SessionID: 1, BrowserSession: true})
+	if cli.Code != http.StatusForbidden || bearer.Code != http.StatusForbidden {
+		t.Fatalf("want 403 for a CLI session and a bearer header, got %d and %d", cli.Code, bearer.Code)
+	}
+	if got := f.outcomeOf(t, asked.ConfirmationID); got != "" {
+		t.Fatalf("a refused confirmation must leave the action open, got %q", got)
+	}
+}
+
+// TestTwoClientsAskingTheSameKeysGetTheirOwnReveal checks the request dedupe never
+// hands one client an action only another client can collect.
+func TestTwoClientsAskingTheSameKeysGetTheirOwnReveal(t *testing.T) {
+	f := newFixture(t)
+	first := askReveal(t, f)
+	again := askReveal(t, f)
+	other := f.issuer.Mint(t, map[string]any{"aud": []string{f.resource}, "sub": ownerSubject, "scope": "casier.read casier.write", "client_id": "https://other.example/client"})
+	var theirs revealOutput
+	call(t, mcptest.Connect(t, f.resource, other, mcptest.ClientOptions{}), toolReveal, prod(map[string]any{"keys": []string{"DATABASE_URL"}}), &theirs)
+	if again.ConfirmationID != first.ConfirmationID || theirs.ConfirmationID == "" || theirs.ConfirmationID == first.ConfirmationID {
+		t.Fatalf("want one action per client, got %q, %q and %q", first.ConfirmationID, again.ConfirmationID, theirs.ConfirmationID)
+	}
 }
 
 // collectArgs is the second call of a link confirmation.
@@ -136,28 +172,6 @@ func TestErasureDropsPendingActions(t *testing.T) {
 	if n := f.count(t, `SELECT count(*) FROM mcp_actions WHERE user_id = $1`, owner); n != 0 {
 		t.Fatalf("want no action left for the erased person, got %d", n)
 	}
-}
-
-// confirmedReveal asks to reveal keys from a client that cannot confirm, confirms it on
-// the page, and returns the confirmation id.
-func confirmedReveal(t *testing.T, f *fixture, keys ...string) string {
-	t.Helper()
-	var asked revealOutput
-	call(t, f.session(t, ownerSubject), toolReveal, prod(map[string]any{"keys": keys}), &asked)
-	if got := onPage(f, http.MethodPost, "/"+asked.ConfirmationID+"/confirm", f.owner, ""); got.Code != http.StatusOK {
-		t.Fatalf("confirm: %d %s", got.Code, got.Body)
-	}
-	return asked.ConfirmationID
-}
-
-// outcomeOf is the stored outcome of one action.
-func (f *fixture) outcomeOf(t *testing.T, id string) string {
-	t.Helper()
-	var outcome string
-	if err := f.sqlDB.QueryRow(`SELECT outcome FROM mcp_actions WHERE id = $1`, id).Scan(&outcome); err != nil {
-		t.Fatal(err)
-	}
-	return outcome
 }
 
 // TestARevealStopsAtTheResultBudget checks values that do not fit in one answer are

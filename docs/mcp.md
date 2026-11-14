@@ -29,7 +29,8 @@ Bulle has no Casier access and gets none: secret values never reach the suite as
 
 The hints follow the suite rule: a tool that overwrites or removes data is destructive, and only
 a tool whose repeat call has no extra effect is idempotent. The reveal and the delete are not
-idempotent because each call that names keys opens another confirmation.
+idempotent: a tool that asks the person to confirm never is, even though a repeat call from the
+same client reuses the open confirmation instead of opening another.
 `TestEveryToolStatesTheSuiteHints` pins this table.
 
 ## Reveal
@@ -42,7 +43,7 @@ gets the values once.
 - **Result budget.** One answer stays within tronc's `ResultBudget` (75,000 bytes). Casier reads
   the keys in the order asked and stops before the first value that would overflow it. The keys
   not sent are listed in `omitted`; the client asks for them again, and the person confirms
-  again. That one value is read, so the audit trail shows a `secret.reveal` for it, but it is
+  again. That one value is read, so the audit trail shows a `secrets.reveal` for it, but it is
   not sent.
 - **One value too large.** When the first value alone overflows the budget, nothing is sent and
   the confirmation stays open. Read that value with the CLI or the web app.
@@ -50,6 +51,10 @@ gets the values once.
   and marks the action `revealed` in the same transaction. A failed read, a changed secret or an
   oversized value leaves it unspent. A second collection waits for the first and is then
   refused.
+- **A retry audits again.** Casier audits each value as it reads it, before it knows whether
+  the answer will be sent. When a read fails after some keys were read, or the first value is
+  too large, the confirmation stays open and each retry adds another `secrets.reveal` row for
+  the same keys. The trail over-reports; it never hides a read.
 
 ## Not exposed, on purpose
 
@@ -62,12 +67,23 @@ Casier is a secrets manager, so the MCP surface stays minimal.
 - **Updating a project or an environment.** The environment update carries the protection
   flag, and unprotecting an environment is the step before an unprotected write to it. The
   project update carries the rotation policy, which `0` turns off.
-- **Purging a secret, ACLs, members, invites, API tokens, webhooks and key rotation.** These are
-  administration. REST accepts them only from a person's browser session
-  (`middleware.RequireUserSession`), and MCP keeps that line.
+- **Purging a secret.** A purge is a hard delete of every version, with no restore, like the
+  project and environment deletes. REST lets an owner or admin purge with a write-scoped API
+  token; MCP leaves it out so an agent can only trash a secret, which
+  `casier_restore_secret` undoes.
+- **ACLs, members, invites, API tokens, webhooks and key rotation.** These are administration.
+  REST accepts them only from a person's browser session (`middleware.RequireUserSession`), and
+  MCP keeps that line.
 
 ## Confirm page API
 
-`/api/mcp/pending` serves the confirm page, for the person's own session only, never a
-`casier_` token: `GET /api/mcp/pending`, `POST /api/mcp/pending/{id}/confirm` and
-`POST /api/mcp/pending/{id}/dismiss`. Erasing a person deletes their `mcp_actions` rows.
+`/api/mcp/pending` serves the confirm page: `GET /api/mcp/pending`,
+`POST /api/mcp/pending/{id}/confirm` and `POST /api/mcp/pending/{id}/dismiss`. Only the session
+cookie a browser sign-in minted passes (`mcpauth.RequireOwnSession`). A bearer, a CLI session, a
+`casier_` token, a delegated token or any request with an `Authorization` header answers 403,
+and the page then asks the person to sign in again in the browser. A cookie from before porte
+v0.20.0 carries no browser mark, so each person signs in once more before their first confirm.
+
+A reveal names the client that asked, so two clients asking for the same keys each get their
+own confirmation. Resolved and expired actions are pruned 30 days later, hourly. Erasing a
+person deletes their `mcp_actions` rows.

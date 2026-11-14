@@ -52,13 +52,3 @@ func TestTwoCollectionsHandOverOnce(t *testing.T) {
 		t.Fatalf("want the first collection to succeed and the second refused, got %v and %v", err1, err2)
 	}
 }
-
-// askedBy is the person and the client an action was asked by.
-func (f *fixture) askedBy(t *testing.T, id string) mcpkit.Caller {
-	t.Helper()
-	var who mcpkit.Caller
-	if err := f.sqlDB.QueryRow(`SELECT user_id, client_id FROM mcp_actions WHERE id = $1`, id).Scan(&who.UserID, &who.ClientID); err != nil {
-		t.Fatal(err)
-	}
-	return who
-}
