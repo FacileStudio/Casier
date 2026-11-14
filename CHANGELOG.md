@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-14
+
+### Security
+
+- fix(mcp): the confirm page accepts only the session cookie a browser sign-in minted (`mcpauth.RequireOwnSession`, porte v0.20.0). A bearer, a CLI session, a `casier_` token, a delegated token or any request with an `Authorization` header answers 403. Each person signs in once more in the browser before their first confirm; the page says so and links to sign-in, in all four locales.
+- fix(mcp): a reveal names the client that asked, so tronc v0.23.0's request dedupe never lets one client collect values the person confirmed for another.
+- fix(mcp): `casier_reveal_secrets` stays within tronc's `ResultBudget` and lists the keys it did not send in `omitted`. A confirmation is spent only after a successful read, in one locked transaction, so a failed read can be retried and a second collection is refused.
+
+### Fixed
+
+- fix(mcp): `/api/mcp/pending` is mounted in production (`PendingPage.Mount`). It was only mounted in tests, so the confirm page could not load or confirm.
+- fix(mcp): `casier_reveal_secrets` and `casier_delete_secret` are `Idempotent: false`: a tool that asks the person to confirm never is.
+
+### Changed
+
+- build(api): tronc v0.23.0, tronc/migrate v0.1.1, porte v0.20.0, porte/mcpauth v0.3.0, porte/forfait v0.1.3. Go 1.26.11 pinned in mise.
+- refactor(mcp): `mcpkit.StateKey` (byte-identical), `KeepPruned` (actions resolved or expired more than 30 days ago, hourly), `outcome.Message`, `mcpauth.AccountExists` and the kit offset pager replace Casier's copies.
+- docs(mcp): `docs/mcp.md` lists every tool and its hints, the reveal flow, the retry re-audit case and what is left out on purpose.
+
 ## [0.8.0] - 2026-11-14
 
 ### Added
