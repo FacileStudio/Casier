@@ -1,7 +1,6 @@
 package env
 
 import (
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/FacileStudio/porte"
@@ -30,13 +29,6 @@ type OIDCConfig struct {
 	// resource Registre binds its tokens to, from MCP_RESOURCE. Empty leaves
 	// /mcp unmounted.
 	MCPResource string
-}
-
-// MCPStateKey derives the key that signs MCP confirmation state from the client
-// secret, so it is stable across restarts without a setting of its own.
-func (o OIDCConfig) MCPStateKey() []byte {
-	sum := sha256.Sum256([]byte("casier-mcp-state:" + o.ClientSecret))
-	return sum[:]
 }
 
 // Config is the process configuration: the tronc core plus Casier's OIDC and

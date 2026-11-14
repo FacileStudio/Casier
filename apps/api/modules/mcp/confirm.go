@@ -21,11 +21,14 @@ const (
 
 var errTarget = errors.NotFound("this action names no secret")
 
-// target is what a pending action names: keys of one environment of one project.
+// target is what a pending action names: keys of one environment of one project. A
+// reveal also names the client that asked, so another client asking for the same keys
+// gets its own action instead of one only the first client can collect.
 type target struct {
 	Project     string   `json:"p"`
 	Environment string   `json:"e"`
 	Keys        []string `json:"k"`
+	Client      string   `json:"c,omitempty"`
 }
 
 // kinds are the sensitive actions. The fingerprint covers the secrets as they were

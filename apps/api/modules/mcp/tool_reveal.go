@@ -11,9 +11,8 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-const waitingReveal = "Nothing was revealed: your client cannot ask the user to confirm. Give the user confirm_url " +
-	"and ask them to confirm there. Once they have, call casier_reveal_secrets with confirmation_id within 15 " +
-	"minutes to read the values, once. Do not ask again for the same keys; the request stays open for 7 days."
+const collectAfterConfirm = " Once they have confirmed, call casier_reveal_secrets with only confirmation_id, within " +
+	"15 minutes, to read the values once."
 
 const revealedMessage = "The user confirmed. Use these values only for what they asked; do not repeat them in chat, files or logs."
 
@@ -39,7 +38,7 @@ func (t *toolset) reveal(ctx context.Context, req *sdk.CallToolRequest, in revea
 	if err != nil {
 		return nil, revealOutput{}, err
 	}
-	g := target{Project: in.Project, Environment: in.Environment, Keys: keys}
+	g := target{Project: in.Project, Environment: in.Environment, Keys: keys, Client: c.who.ClientID}
 	result, outcome, err := t.confirm.Request(ctx, req, kindReveal, g.encode(), revealQuestion(g))
 	if err != nil {
 		return nil, revealOutput{}, mcpkit.Failure(err, hintSecret)
@@ -49,7 +48,7 @@ func (t *toolset) reveal(ctx context.Context, req *sdk.CallToolRequest, in revea
 	}
 	return nil, revealOutput{
 		Status: outcome.Status, Project: g.Project, Environment: g.Environment, ConfirmURL: outcome.ConfirmURL,
-		ConfirmationID: outcome.Action.ID, Message: waitingReveal,
+		ConfirmationID: outcome.Action.ID, Message: outcome.Message + collectAfterConfirm,
 	}, nil
 }
 
@@ -64,7 +63,7 @@ func (t *toolset) resumeReveal(ctx context.Context, req *sdk.CallToolRequest) (*
 		return nil, revealOutput{}, mcpkit.Failure(err, "Call casier_reveal_secrets again to ask the user afresh.")
 	}
 	if outcome.Status == mcpkit.StatusDeclined {
-		return nil, revealOutput{Status: mcpkit.StatusDeclined, Message: "The user declined. Nothing was revealed."}, nil
+		return nil, revealOutput{Status: mcpkit.StatusDeclined, Message: outcome.Message}, nil
 	}
 	return t.handOver(ctx, c, outcome.Action.ID)
 }

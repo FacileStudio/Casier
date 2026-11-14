@@ -63,14 +63,11 @@ func (t *toolset) callerOf(ctx context.Context, req *sdk.CallToolRequest) (calle
 	if err != nil {
 		return caller{}, errNoCaller
 	}
-	if _, ok := mcpauth.Identity(req.Extra.TokenInfo); !ok {
+	account, err := mcpauth.AccountExists(ctx, req.Extra.TokenInfo, t.Accounts.Identity)
+	if err != nil {
 		return caller{}, errNoCaller
 	}
-	personCtx, err := t.as(ctx, who.UserID, who.ClientID)
-	if err != nil {
-		return caller{}, err
-	}
-	return caller{ctx: personCtx, who: who}, nil
+	return caller{ctx: person(ctx, who.UserID, who.ClientID, account.Email), who: who}, nil
 }
 
 // as is ctx carrying the person userID as a user session, the identity the REST
@@ -85,7 +82,10 @@ func (t *toolset) as(ctx context.Context, userID, clientID string) (context.Cont
 	if err != nil {
 		return nil, errNoCaller
 	}
-	return authcontext.WithIdentity(ctx, authcontext.Identity{
-		UserID: userID, Email: account.Email, ClientIP: clientIPPrefix + clientID,
-	}), nil
+	return person(ctx, userID, clientID, account.Email), nil
+}
+
+// person is ctx carrying userID as a user session from the MCP client clientID.
+func person(ctx context.Context, userID, clientID, email string) context.Context {
+	return authcontext.WithIdentity(ctx, authcontext.Identity{UserID: userID, Email: email, ClientIP: clientIPPrefix + clientID})
 }
