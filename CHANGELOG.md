@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-14
+
+### Changed
+
+- feat(client): the landing page sells hosted Casier first. The hero reads "Fini les .env qui traînent." with the suite subtitle, in fr, en, es and de, and "Créer un compte gratuit" is the main button with sign-in beside it. Three demo tiles show the audit log, one environment per deploy and Bulle's approval card (Pro plan). A row shows the Bulle and Boîte connections, the pricing block gives Casier's own plan note with a link to the suite pricing, and the CLI, API, MCP, source and self-hosting links sit in one developer block at the bottom.
+- feat(client): the sign-in and footer tagline no longer say "self-hosted", and the page title and meta description come from the suite copy.
+- build(client): muse v0.24.0 and mise-en-scene v0.2.2; the landing icons are bundled instead of fetched.
+
 ## [0.9.3] - 2026-11-14
 
 ### Fixed
