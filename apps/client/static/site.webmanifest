@@ -1,7 +1,7 @@
 {
   "name": "Casier",
   "short_name": "Casier",
-  "description": "AES-256-GCM encryption, secrets injected into your shell, a version history and an audit log.",
+  "description": "Your team's secrets, encrypted in one place and injected into your apps at launch. Every read is logged. Free to start.",
   "icons": [
     {
       "src": "/icon-192.png",

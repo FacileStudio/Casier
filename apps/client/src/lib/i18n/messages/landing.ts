@@ -187,6 +187,12 @@ export const landing = {
 		'Código abierto: tus datos siguen siendo tuyos.',
 		'Offener Code: Ihre Daten bleiben Ihre.'
 	],
+	'landing.dev.selfHostHref': [
+		'https://suite.facile.studio/en/auto-hebergement',
+		'https://suite.facile.studio/auto-hebergement',
+		'https://suite.facile.studio/es/auto-hebergement',
+		'https://suite.facile.studio/de/auto-hebergement'
+	],
 	'landing.ctaTitle': [
 		'Put your secrets away today',
 		'Rangez vos secrets dès aujourd’hui',
