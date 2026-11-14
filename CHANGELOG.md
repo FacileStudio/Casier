@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-14
+
+### Fixed
+
+- fix(client): the "Self-host" button in the developer block opens the Suite self-hosting page (https://suite.facile.studio/auto-hebergement, or its en, es and de version) instead of docs/deployment.md on GitHub.
+
+### Changed
+
+- New link preview image and web manifest description from muse v0.25.1 ("Your team's secrets, encrypted in one place and injected into your apps at launch. Every read is logged. Free to start."); the old manifest still named AES-256-GCM.
+- build(client): muse v0.25.1.
+
 ## [0.10.0] - 2026-11-14
 
 ### Changed
