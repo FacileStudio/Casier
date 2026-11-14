@@ -38,7 +38,6 @@ apps/
         auth.svelte.ts  Auth state (Svelte 5 runes)
         theme.svelte.ts Light/dark/system preference (`@facile/client/theme`, key `casier.theme`)
         components/     App components (shell chrome + project sections)
-    static/fonts/       Goga typeface
 docs/                   Reference docs: api, architecture, configuration, deployment, development
 scripts/                check.sh (the quality gate) and the repo-local Postgres helpers
 Dockerfile              Multi-stage: bun build -> golang:1.25-alpine -> distroless

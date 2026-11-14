@@ -52,10 +52,10 @@ export const shell = {
 		'Die Anmeldung wurde nicht abgeschlossen. Versuche es erneut.'
 	],
 	'landing.description': [
-		'Casier is a self-hosted secrets and environment manager for teams. Encrypted at rest, versioned, audited — and one command away from your app.',
-		'Casier est un gestionnaire de secrets et d’environnements auto-hébergé pour les équipes. Chiffré au repos, versionné, audité, et à une commande de votre application.',
-		'Casier es un gestor de secretos y entornos autoalojado para equipos. Cifrado en reposo, versionado, auditado y a un comando de tu aplicación.',
-		'Casier ist ein selbst gehosteter Manager für Secrets und Umgebungen für Teams. Verschlüsselt gespeichert, versioniert, protokolliert und nur einen Befehl von deiner App entfernt.'
+		'Encrypted secrets for your team, injected straight into your app.',
+		'Des secrets chiffrés pour votre équipe, injectés directement dans votre application.',
+		'Secretos cifrados para tu equipo, inyectados directamente en tu aplicación.',
+		'Verschlüsselte Secrets für dein Team, direkt an deine App übergeben.'
 	],
 	'landing.heroTitle': [
 		'Your secrets.|Your server.',
@@ -63,6 +63,15 @@ export const shell = {
 		'Tus secretos.|Tu servidor.',
 		'Deine Secrets.|Dein Server.'
 	],
+	'landing.demo.label': [
+		'A secret is added to the prod environment, then casier run starts an app with it. Every value stays masked.',
+		'Un secret est ajouté à l’environnement prod, puis casier run lance une application avec. Chaque valeur reste masquée.',
+		'Se añade un secreto al entorno prod y casier run arranca una aplicación con él. Todos los valores siguen ocultos.',
+		'Ein Secret kommt in die Umgebung prod, dann startet casier run eine App damit. Jeder Wert bleibt maskiert.'
+	],
+	'landing.nav.features': ['Features', 'Fonctionnalités', 'Funciones', 'Funktionen'],
+	'landing.nav.download': ['CLI', 'CLI', 'CLI', 'CLI'],
+	'landing.nav.pricing': ['Pricing', 'Tarifs', 'Precios', 'Preise'],
 	'landing.feature.encrypted.title': [
 		'Encrypted at rest',
 		'Chiffré au repos',
@@ -70,10 +79,10 @@ export const shell = {
 		'Verschlüsselt gespeichert'
 	],
 	'landing.feature.encrypted.body': [
-		'Every project gets its own AES-256-GCM data key. Values are encrypted before they ever reach the database.',
-		'Chaque projet a sa propre clé de données AES-256-GCM. Les valeurs sont chiffrées avant d’atteindre la base de données.',
-		'Cada proyecto tiene su propia clave de datos AES-256-GCM. Los valores se cifran antes de llegar a la base de datos.',
-		'Jedes Projekt hat einen eigenen AES-256-GCM-Datenschlüssel. Werte werden verschlüsselt, bevor sie die Datenbank erreichen.'
+		'Each project has its own AES-256-GCM key.',
+		'Chaque projet a sa propre clé AES-256-GCM.',
+		'Cada proyecto tiene su propia clave AES-256-GCM.',
+		'Jedes Projekt hat einen eigenen AES-256-GCM-Schlüssel.'
 	],
 	'landing.feature.environments.title': [
 		'An environment per deploy',
@@ -82,36 +91,53 @@ export const shell = {
 		'Eine Umgebung pro Deployment'
 	],
 	'landing.feature.environments.body': [
-		'dev, staging and prod out of the box. Diff them, import a .env, roll any secret back to an earlier version.',
-		'dev, staging et prod dès le départ. Comparez-les, importez un .env, restaurez n’importe quel secret à une version antérieure.',
-		'dev, staging y prod de serie. Compáralos, importa un .env y devuelve cualquier secreto a una versión anterior.',
-		'dev, staging und prod von Anfang an. Vergleiche sie, importiere eine .env und setze jedes Secret auf eine frühere Version zurück.'
+		'dev, staging and prod, and every secret keeps its history.',
+		'dev, staging et prod, et chaque secret garde son historique.',
+		'dev, staging y prod, y cada secreto guarda su historial.',
+		'dev, staging und prod, und jedes Secret behält seinen Verlauf.'
 	],
 	'landing.feature.ci.title': ['Made for CI', 'Pensé pour la CI', 'Pensado para CI', 'Für CI gemacht'],
 	'landing.feature.ci.body': [
-		'casier run injects secrets as env vars. Scoped API tokens for machines, a full audit log for humans.',
-		'casier run injecte les secrets comme variables d’environnement. Des jetons d’API limités pour les machines, un journal d’audit complet pour les humains.',
-		'casier run inyecta los secretos como variables de entorno. Tokens de API acotados para máquinas y un registro de auditoría completo para personas.',
-		'casier run übergibt Secrets als Umgebungsvariablen. Eingeschränkte API-Tokens für Maschinen, ein vollständiges Audit-Log für Menschen.'
+		'Scoped API tokens give a machine only what it needs.',
+		'Des jetons d’API limités donnent à une machine le strict nécessaire.',
+		'Los tokens de API acotados dan a una máquina solo lo que necesita.',
+		'Eingeschränkte API-Tokens geben einer Maschine nur, was sie braucht.'
 	],
-	'landing.commandsTitle': [
-		'Three commands and you’re done.',
-		'Trois commandes et c’est terminé.',
-		'Tres comandos y listo.',
-		'Drei Befehle und fertig.'
+	'landing.feature.audit.title': [
+		'Every reveal is logged',
+		'Chaque lecture est tracée',
+		'Cada lectura queda registrada',
+		'Jedes Aufdecken wird protokolliert'
 	],
-	'landing.commandsNote': [
-		'Secrets never touch your shell history or a .env file on disk.',
-		'Les secrets ne passent jamais par l’historique du shell ni par un fichier .env sur le disque.',
-		'Los secretos nunca pasan por el historial del shell ni por un archivo .env en disco.',
-		'Secrets landen weder in der Shell-Historie noch in einer .env-Datei auf der Festplatte.'
+	'landing.feature.audit.body': [
+		'The audit log shows who read which secrets, and when.',
+		'Le journal d’audit montre qui a lu quels secrets, et quand.',
+		'El registro de auditoría muestra quién leyó qué secretos y cuándo.',
+		'Das Audit-Log zeigt, wer welche Secrets wann gelesen hat.'
 	],
+	'downloads.title': [
+		'Install the Casier CLI',
+		'Installer la CLI Casier',
+		'Instalar la CLI de Casier',
+		'Die Casier-CLI installieren'
+	],
+	'downloads.heading': ['Install the CLI', 'Installer la CLI', 'Instala la CLI', 'Die CLI installieren'],
+	'downloads.intro': [
+		'casier run puts secrets in your app’s environment, not in a .env file.',
+		'casier run place les secrets dans l’environnement de votre application, pas dans un fichier .env.',
+		'casier run pone los secretos en el entorno de tu aplicación, no en un archivo .env.',
+		'casier run legt Secrets in die Umgebung deiner App, nicht in eine .env-Datei.'
+	],
+	'downloads.cta': ['Install the CLI', 'Installer la CLI', 'Instalar la CLI', 'CLI installieren'],
+	'downloads.install.script': ['Install script', 'Script d’installation', 'Script de instalación', 'Installationsskript'],
+	'downloads.install.facile': ['With facile', 'Avec facile', 'Con facile', 'Mit facile'],
+	'downloads.install.brew': ['Homebrew', 'Homebrew', 'Homebrew', 'Homebrew'],
 	'landing.ctaTitle': ['Ready to sign in?', 'Prêt à vous connecter ?', '¿Listo para iniciar sesión?', 'Bereit zur Anmeldung?'],
 	'landing.ctaText': [
-		'Use your Facile account to access Casier.',
-		'Utilisez votre compte Facile pour accéder à Casier.',
-		'Usa tu cuenta de Facile para acceder a Casier.',
-		'Melde dich mit deinem Facile-Konto bei Casier an.'
+		'Use your Facile account.',
+		'Utilisez votre compte Facile.',
+		'Usa tu cuenta de Facile.',
+		'Melde dich mit deinem Facile-Konto an.'
 	],
 	'landing.pricing': ['Pricing', 'Tarifs', 'Precios', 'Preise']
 } as const satisfies Record<string, Row>;
