@@ -81,7 +81,7 @@ func collectArgs(id string) map[string]any {
 	return prod(map[string]any{"confirmation_id": id})
 }
 
-// TestARevealConfirmedOnThePageIsCollectedOnce checks the no-elicitation path: nothing
+// TestARevealConfirmedOnThePageIsCollectedOnce checks the page path: nothing
 // before the confirmation, the values once after it, never on the page itself.
 func TestARevealConfirmedOnThePageIsCollectedOnce(t *testing.T) {
 	f := newFixture(t)

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-11-14
+
+### Security
+
+- fix(mcp): `casier_reveal_secrets` is confirmed only on the `/pending` page in the person's own browser. A client that can elicit gets the confirm link like any other, and an in-client (MRTR) `accept` is refused, since a client binary could forge it. `casier_delete_secret` keeps the in-client path.
+- fix(mcp): a reveal from a token with an empty `client_id` is refused (`permission_denied`), so two clients without an id never share a confirmation.
+
+### Changed
+
+- build(api): tronc v0.23.1 (request dedupe matches the OAuth client).
+- test(api): the authz suite sends a real `b-` browser cookie to the confirm page routes: with `X-Facile-CSRF` they reach the handlers (404 on a missing action), without it they answer 403.
+
 ## [0.9.1] - 2026-11-14
 
 ### Added

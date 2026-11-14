@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/FacileStudio/tronc/errors"
 	mcpkit "github.com/FacileStudio/tronc/mcp"
@@ -21,15 +22,25 @@ const omittedMessage = "The keys in omitted did not fit in one answer and were n
 
 var errKeys = stderrors.New("pass keys, 1 to 50 secret keys of the environment, or confirmation_id")
 
+var errNoClient = errors.Forbidden("this token names no OAuth client, so Casier cannot bind a reveal to it. " +
+	"Sign in again with an MCP client that registers itself")
+
+var errInClient = errors.Failed("Casier sends secret values only after the user confirms on the confirm page " +
+	"in their browser, never through an answer in the client. Call casier_reveal_secrets again with keys to get confirm_url")
+
 // reveal is casier_reveal_secrets: the values of named keys, once the user confirmed
-// reading them.
+// reading them on the confirm page in their own browser. A client that can elicit is
+// still sent to the page, and an in-client answer is refused: a client could forge it.
 func (t *toolset) reveal(ctx context.Context, req *sdk.CallToolRequest, in revealInput) (*sdk.CallToolResult, revealOutput, error) {
 	if mcpkit.Retrying(req) {
-		return t.resumeReveal(ctx, req)
+		return nil, revealOutput{}, errInClient
 	}
 	c, err := t.callerOf(ctx, req)
 	if err != nil {
 		return nil, revealOutput{}, err
+	}
+	if strings.TrimSpace(c.who.ClientID) == "" {
+		return nil, revealOutput{}, errNoClient
 	}
 	if id := strings.TrimSpace(in.ConfirmationID); id != "" {
 		return t.handOver(ctx, c, id)
@@ -39,33 +50,22 @@ func (t *toolset) reveal(ctx context.Context, req *sdk.CallToolRequest, in revea
 		return nil, revealOutput{}, err
 	}
 	g := target{Project: in.Project, Environment: in.Environment, Keys: keys, Client: c.who.ClientID}
-	result, outcome, err := t.confirm.Request(ctx, req, kindReveal, g.encode(), revealQuestion(g))
+	_, outcome, err := t.confirm.Request(ctx, req, kindReveal, g.encode(), revealQuestion(g))
 	if err != nil {
 		return nil, revealOutput{}, mcpkit.Failure(err, hintSecret)
 	}
-	if result != nil {
-		return result, revealOutput{}, nil
-	}
 	return nil, revealOutput{
-		Status: outcome.Status, Project: g.Project, Environment: g.Environment, ConfirmURL: outcome.ConfirmURL,
-		ConfirmationID: outcome.Action.ID, Message: outcome.Message + collectAfterConfirm,
+		Status: mcpkit.StatusPending, Project: g.Project, Environment: g.Environment,
+		ConfirmURL: t.confirm.Link(outcome.Action.ID), ConfirmationID: outcome.Action.ID,
+		Message: onPageOnly(outcome.Action.ExpiresAt) + collectAfterConfirm,
 	}, nil
 }
 
-// resumeReveal handles the retry that carries the person's answer.
-func (t *toolset) resumeReveal(ctx context.Context, req *sdk.CallToolRequest) (*sdk.CallToolResult, revealOutput, error) {
-	c, err := t.callerOf(ctx, req)
-	if err != nil {
-		return nil, revealOutput{}, err
-	}
-	outcome, err := t.confirm.Resume(ctx, req, kindReveal)
-	if err != nil {
-		return nil, revealOutput{}, mcpkit.Failure(err, "Call casier_reveal_secrets again to ask the user afresh.")
-	}
-	if outcome.Status == mcpkit.StatusDeclined {
-		return nil, revealOutput{Status: mcpkit.StatusDeclined, Message: outcome.Message}, nil
-	}
-	return t.handOver(ctx, c, outcome.Action.ID)
+// onPageOnly is the text for the model while a reveal waits on the confirm page.
+func onPageOnly(expires time.Time) string {
+	return "Nothing happened yet: Casier sends secret values only after the user confirms in their browser. " +
+		"Give the user confirm_url and ask them to confirm there. Do not call this tool again for the same keys; " +
+		"the request stays open until " + expires.UTC().Format(time.RFC3339) + "."
 }
 
 // handOver collects a confirmed reveal for the client that asked and reads its values

@@ -35,9 +35,11 @@ same client reuses the open confirmation instead of opening another.
 
 ## Reveal
 
-Only `casier_reveal_secrets` returns values, and only after the person confirms: in the client
-when it can elicit, otherwise on Casier's `/pending` page. A confirmation on the page shows no
-value. The client that asked then calls again with `confirmation_id`, within 15 minutes, and
+Only `casier_reveal_secrets` returns values, and only after the person confirms on Casier's
+`/pending` page in their own browser. A client that can elicit is not asked in the client: it
+gets the same `confirm_url`, and an in-client answer is refused, since a client could forge an
+`accept`. A token whose `client_id` is empty cannot reveal, so two such clients never share a
+confirmation. A confirmation on the page shows no value. The client that asked then calls again with `confirmation_id`, within 15 minutes, and
 gets the values once.
 
 - **Result budget.** One answer stays within tronc's `ResultBudget` (75,000 bytes). Casier reads
