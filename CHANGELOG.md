@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-14
+
+### Added
+
+- The landing shows a mise-en-scene demo: a secret is added to prod, then `casier run` starts an app with every value masked.
+- A `/downloads` page lists every way to install the CLI (install script, `facile install casier`, Homebrew). The landing shows only the visitor's device option.
+
+### Changed
+
+- The landing copy is shorter: one hero line, four features, a closing call to action.
+- build(client): muse v0.23.0 (Magnetik fonts) and mise-en-scene v0.2.1.
+
 ## [0.7.6] - 2026-11-13
 
 ### Changed
