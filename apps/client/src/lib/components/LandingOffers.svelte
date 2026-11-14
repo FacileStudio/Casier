@@ -1,8 +1,16 @@
 <script lang="ts">
-	import { PricingPlans } from '@facile/muse';
+	import { LANDING_HEADING, PricingPlans } from '@facile/muse';
 	import { t } from '$lib/i18n/index.svelte';
 </script>
 
-<section class="mx-auto max-w-5xl px-6 py-16 empty:hidden sm:py-20">
-	<PricingPlans highlight={[]} title={t('landing.pricing')} />
-</section>
+<PricingPlans
+	id="pricing"
+	class="mx-auto w-full max-w-5xl scroll-mt-20 px-4 py-16 sm:px-6"
+	title={t('landing.pricing')}
+	headingClass={LANDING_HEADING}
+	highlight={[]}
+	highlightOnly
+	notes={{ '*': t('landing.plan.included') }}
+	recommended="pro"
+	suiteHref="https://suite.facile.studio/#tarifs"
+/>

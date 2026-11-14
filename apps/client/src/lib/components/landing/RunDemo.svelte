@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { fade } from 'svelte/transition';
-	import { Badge, Button, icons, maskSecret } from '@facile/muse';
+	import { Badge, Button, Icon, icons, maskSecret } from '@facile/muse';
 	import { Bar, Caret, Cursor, Stage, Terminal, Window, cursorAt, grow, type Act } from '@facile/mise-en-scene';
 	import { t } from '$lib/i18n/index.svelte';
 
@@ -65,7 +65,7 @@
 
 {#snippet nav()}
 	<div class="flex items-center gap-2 px-5 pt-3 pb-5 font-fc-title text-[15px] font-bold text-fc-fg">
-		<iconify-icon icon="solar:key-minimalistic-square-bold-duotone" width="20" height="20"></iconify-icon>
+		<Icon icon="solar:key-minimalistic-square-bold-duotone" size={20} />
 		<span>Casier</span>
 	</div>
 	<div class="grid gap-1 px-3">

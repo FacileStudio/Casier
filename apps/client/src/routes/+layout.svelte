@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import '$lib/icons';
 	import { Toaster, provideLocale } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { bindLocale, localeSource } from '$lib/i18n/index.svelte';

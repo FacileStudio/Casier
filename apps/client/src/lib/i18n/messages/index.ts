@@ -6,9 +6,10 @@ import { psettings } from './psettings';
 import { secrets } from './secrets';
 import { settings } from './settings';
 import { shell } from './shell';
+import { landing } from './landing';
 import type { Row } from '../row';
 
-const rows = { ...shell, ...settings, ...projects, ...members, ...psettings, ...secrets, ...pending };
+const rows = { ...shell, ...landing, ...settings, ...projects, ...members, ...psettings, ...secrets, ...pending };
 
 export type AppKey = keyof typeof rows;
 type AppCatalog = Record<AppKey, Message>;
