@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.10.6] - 2026-11-16
+
+### Changed
+
+- build(client): muse v0.32.0. Tabs match the Button height (36px, 44px on touch) and the highlight pill follows the active tab's real box. The plan row moves from the avatar menu to Settings, Preferences. 0.10.5 shipped without the pin change.
+
 ## [0.10.5] - 2026-11-16
 
 ### Changed
