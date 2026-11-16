@@ -23,7 +23,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
-	dbconfig "github.com/FacileStudio/Casier/apps/api/internal/testdb"
+	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
@@ -31,7 +31,6 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/projects"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
-	"github.com/FacileStudio/tronc/testdb"
 
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
@@ -180,9 +179,9 @@ var (
 func TestMain(m *testing.M) {
 	url, configured := testdb.URL()
 	if !configured {
-		testdb.Announce(dbconfig.Bootstrap)
+		testdb.Announce()
 	} else {
-		db, err := testdb.Open(url, dbconfig.Config)
+		db, err := testdb.Open(url)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "authz: %v\n", err)
 			os.Exit(1)
@@ -315,7 +314,7 @@ func hashToken(token string) string {
 // (127.0.0.1:1), a refused connection ends the goroutine immediately instead of
 // hanging on DNS.
 func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
-	if err := testdb.Truncate(db, dbconfig.Config); err != nil {
+	if err := testdb.Truncate(db); err != nil {
 		return fixture{}, err
 	}
 
@@ -1360,7 +1359,7 @@ func onConfirmPage(method, path, token string, csrf bool) *httptest.ResponseReco
 func requireDatabase(t *testing.T) {
 	t.Helper()
 	if !databaseOn {
-		t.Skip(testdb.SkipReason(dbconfig.Bootstrap))
+		t.Skip(testdb.SkipReason)
 	}
 }
 

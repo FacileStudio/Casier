@@ -8,7 +8,7 @@
 
 ### Changed
 
-- refactor(api): porte v0.21.0, tronc v0.26.0: `pg.NewFromEnv`, `kit.NewDeletions`, `porte.ConfigFromEnv`, `httpx.Serve`, `health.Version`, `tronc/testdb`. The MCP verifier now reads identities through the sealed porte store. Dead `authcrypto` removed.
+- refactor(api): porte v0.21.0, tronc v0.26.0: `pg.NewFromEnv`, `kit.NewDeletions`, `porte.ConfigFromEnv`, `httpx.Serve`, `health.Version`. The MCP verifier now reads identities through the sealed porte store. Dead `authcrypto` removed.
 - refactor(client): `@facile/client` v0.3.0, muse v0.28.0 (`PendingCard`, `Row`), `authConfig`, `refusesOwnSession` and the shared locale resolver. A `?lang=` in the URL and the profile locale now beat the stored locale cookie.
 
 ## [0.10.3] - 2026-11-14

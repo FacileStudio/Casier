@@ -9,7 +9,6 @@ require (
 	github.com/FacileStudio/porte/mcpauth v0.3.2
 	github.com/FacileStudio/tronc v0.26.0
 	github.com/FacileStudio/tronc/migrate v0.1.1
-	github.com/FacileStudio/tronc/testdb v0.2.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	gorm.io/driver/postgres v1.6.0

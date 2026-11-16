@@ -14,7 +14,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
-	dbconfig "github.com/FacileStudio/Casier/apps/api/internal/testdb"
+	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
@@ -25,7 +25,6 @@ import (
 	"github.com/FacileStudio/porte/mcpauth"
 	mcpkit "github.com/FacileStudio/tronc/mcp"
 	"github.com/FacileStudio/tronc/mcp/mcptest"
-	"github.com/FacileStudio/tronc/testdb"
 	"github.com/go-chi/chi/v5"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"gorm.io/gorm"
@@ -109,14 +108,14 @@ func openDB(t *testing.T) (*gorm.DB, *sql.DB) {
 	t.Helper()
 	url, ok := testdb.URL()
 	if !ok {
-		testdb.Announce(dbconfig.Bootstrap)
-		t.Skip(testdb.SkipReason(dbconfig.Bootstrap))
+		testdb.Announce()
+		t.Skip(testdb.SkipReason)
 	}
-	db, err := testdb.Open(url, dbconfig.Config)
+	db, err := testdb.Open(url)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := testdb.Truncate(db, dbconfig.Config); err != nil {
+	if err := testdb.Truncate(db); err != nil {
 		t.Fatal(err)
 	}
 	db.Logger = logger.Discard
