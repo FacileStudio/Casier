@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** The members and API tokens tabs of a project. */
 export const members = {

@@ -14,6 +14,8 @@ import (
 
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 
+	"github.com/FacileStudio/tronc/netguard"
+
 	"gorm.io/gorm"
 )
 
@@ -34,7 +36,9 @@ type Event struct {
 }
 
 // Dispatcher delivers events to the webhooks registered on a project, in the
-// background, bounded by a timeout.
+// background, bounded by a timeout. Deliveries dial through netguard, so a
+// webhook cannot reach loopback, private or link-local addresses, and a redirect
+// is not followed.
 type Dispatcher struct {
 	orm    *gorm.DB
 	logger *slog.Logger
@@ -47,7 +51,7 @@ func NewDispatcher(orm *gorm.DB, logger *slog.Logger) *Dispatcher {
 	d := &Dispatcher{
 		orm:    orm,
 		logger: logger,
-		client: &http.Client{Timeout: deliveryTimeout},
+		client: (&netguard.Guard{}).Client(deliveryTimeout),
 	}
 	d.load = d.loadActive
 	return d

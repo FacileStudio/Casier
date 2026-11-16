@@ -6,6 +6,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/authcontext"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
 	"github.com/FacileStudio/tronc/errors"
+	"github.com/FacileStudio/tronc/netguard"
 )
 
 // Controller adapts the project Service to HTTP request handlers.
@@ -229,6 +230,9 @@ func (controller *Controller) createWebhook(ctx context.Context, slug string, re
 	}
 	if req.URL == "" {
 		return nil, errors.Invalid("url is required")
+	}
+	if _, err := netguard.CheckURL(req.URL); err != nil {
+		return nil, errors.Invalid("webhook url must be a public http or https address")
 	}
 	return controller.service.createWebhook(ctx, slug, userID, req.URL, req.Events, req.Secret)
 }

@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** The page where the person confirms what an AI client asked Casier to do. */
 export const pending = {

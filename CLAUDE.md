@@ -20,7 +20,7 @@ apps/
     main.go             Entrypoint
     authz_test.go       The authorization matrix (see below) — needs TEST_DATABASE_URL
     modules/            Domain modules (auth, projects, environments, secrets)
-    internal/           Shared infra: audit, authcontext, authcrypto, crypto, database,
+    internal/           Shared infra: audit, authcontext, crypto, database,
                         documentation, env, mailer, middleware, testdb, webhook.
                         Logging, HTTP errors and JSON come from tronc, not from here.
     schemas/            GORM models and migrations

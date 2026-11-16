@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** The project list, the project layout, the environments tab and the audit log. */
 export const projects = {

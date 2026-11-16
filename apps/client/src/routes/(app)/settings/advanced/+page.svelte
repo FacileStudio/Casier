@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { Button, SettingsRow, SettingsSection, StatusDot, icons } from '@facile/muse';
-	import { api, type AuthConfig } from '$lib/backend';
+	import { authConfig } from '@facile/client';
+	import { apiFetch } from '$lib/backend';
 	import { t } from '$lib/i18n/index.svelte';
 
 	let oidcEnabled = $state(false);
@@ -9,7 +10,7 @@
 
 	onMount(async () => {
 		try {
-			const config = await api.get<AuthConfig>('/auth/config');
+			const config = await authConfig(apiFetch);
 			oidcEnabled = config.oidc_enabled;
 		} catch {
 			oidcEnabled = false;

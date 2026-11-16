@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/FacileStudio/porte/directory"
+	"github.com/FacileStudio/porte"
+	"github.com/FacileStudio/porte/kit"
 	portepg "github.com/FacileStudio/porte/pg"
 
 	"gorm.io/gorm"
@@ -33,7 +34,17 @@ func eraseThroughDirectory(t *testing.T, db *gorm.DB, issuer, subject string) {
 		t.Fatalf("db.DB: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	receiver := NewDeletions(db, directory.Client{Issuer: issuer}, portepg.New(sqlDB).EraseIdentity, portepg.New(sqlDB).HoldsIdentity, logger).receiver
+	receiver, err := kit.NewDeletions(kit.DeletionsConfig{
+		OIDC:  porte.Config{Issuer: issuer},
+		Store: portepg.New(sqlDB),
+		OnPersonDeleted: func(ctx context.Context, provider, subject string) error {
+			return ErasePerson(ctx, db, provider, subject)
+		},
+		Logger: logger,
+	})
+	if err != nil {
+		t.Fatalf("kit.NewDeletions: %v", err)
+	}
 	ctx := context.Background()
 	if err := receiver.OnPersonDeleted(ctx, receiver.Client.Issuer, subject); err != nil {
 		t.Fatalf("OnPersonDeleted(%s, %s): %v", issuer, subject, err)

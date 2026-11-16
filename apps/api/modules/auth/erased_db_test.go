@@ -12,6 +12,7 @@ import (
 
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
+	kitpkg "github.com/FacileStudio/porte/kit"
 	"github.com/FacileStudio/porte/oidc"
 	"github.com/FacileStudio/porte/oidc/jwt"
 	portepg "github.com/FacileStudio/porte/pg"
@@ -26,7 +27,7 @@ import (
 type erasedFixture struct {
 	db        *gorm.DB
 	issuer    string
-	deletions *Deletions
+	deletions *directory.Deletions
 	kit       *oidc.Kit
 	other     int64
 }
@@ -47,16 +48,26 @@ func newErasedFixture(t *testing.T) erasedFixture {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	store := portepg.New(sqlDB)
-	client := directory.Client{Issuer: idp.URL, HTTP: rewriteTo(registre.URL)}
-	deletions := NewDeletions(db, client, store.EraseIdentity, store.HoldsIdentity, logger)
 	cfg := porte.Config{Issuer: idp.URL, ClientID: "casier", ClientSecret: "secret", RedirectURL: "http://casier.test/api/auth/oidc/callback", SuccessURL: "http://casier.test"}
+	deletions, err := kitpkg.NewDeletions(kitpkg.DeletionsConfig{
+		OIDC:  cfg,
+		Store: store,
+		OnPersonDeleted: func(ctx context.Context, provider, subject string) error {
+			return ErasePerson(ctx, db, provider, subject)
+		},
+		Logger: logger,
+	})
+	if err != nil {
+		t.Fatalf("kit.NewDeletions: %v", err)
+	}
+	deletions.Client.HTTP = rewriteTo(registre.URL)
 	sessions, err := session.New(cfg, session.Deps{Sessions: store.Sessions(), Logger: logger})
 	if err != nil {
 		t.Fatalf("session.New: %v", err)
 	}
 	kit, err := oidc.New(context.Background(), cfg, oidc.Deps{
 		Users: newTestUserStore(t, db), Identities: store.Identities(), Sessions: sessions,
-		Codes: store.LoginCodes(), Logger: logger, Erased: deletions,
+		Codes: store.LoginCodes(), Logger: logger, Erased: kitpkg.ErasedGuard(deletions),
 	})
 	if err != nil {
 		t.Fatalf("oidc.New: %v", err)
@@ -94,7 +105,7 @@ func (f erasedFixture) claims(subject, email string) jwt.Claims {
 
 func (f erasedFixture) poll(t *testing.T) {
 	t.Helper()
-	if err := f.deletions.receiver.Poll(context.Background()); err != nil {
+	if err := f.deletions.Poll(context.Background()); err != nil {
 		t.Fatalf("poll: %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** Strings shared by the whole app: buttons, the shell, the sign-in and download pages. */
 export const shell = {

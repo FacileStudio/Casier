@@ -23,7 +23,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/internal/audit"
 	"github.com/FacileStudio/Casier/apps/api/internal/crypto"
 	"github.com/FacileStudio/Casier/apps/api/internal/env"
-	"github.com/FacileStudio/Casier/apps/api/internal/testdb"
+	dbconfig "github.com/FacileStudio/Casier/apps/api/internal/testdb"
 	"github.com/FacileStudio/Casier/apps/api/internal/webhook"
 	"github.com/FacileStudio/Casier/apps/api/modules/auth"
 	"github.com/FacileStudio/Casier/apps/api/modules/environments"
@@ -31,6 +31,7 @@ import (
 	"github.com/FacileStudio/Casier/apps/api/modules/projects"
 	"github.com/FacileStudio/Casier/apps/api/modules/secrets"
 	"github.com/FacileStudio/Casier/apps/api/schemas"
+	"github.com/FacileStudio/tronc/testdb"
 
 	"github.com/FacileStudio/porte"
 	"github.com/FacileStudio/porte/directory"
@@ -179,9 +180,9 @@ var (
 func TestMain(m *testing.M) {
 	url, configured := testdb.URL()
 	if !configured {
-		testdb.Announce()
+		testdb.Announce(dbconfig.Bootstrap)
 	} else {
-		db, err := testdb.Open(url)
+		db, err := testdb.Open(url, dbconfig.Config)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "authz: %v\n", err)
 			os.Exit(1)
@@ -224,10 +225,11 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	appEnv := env.Config{
 		EncryptionKey: seedRootKey,
 		AdminEmails:   []string{rotatorEmail},
+		OIDC:          porte.Config{AcceptLegacyCookie: true},
 	}
 
 	store := portepg.New(sqlDB)
-	porteCfg := appEnv.Porte()
+	porteCfg := appEnv.OIDC
 	sessions, err := session.New(porteCfg, session.Deps{Sessions: store.Sessions(), Logger: logger})
 	if err != nil {
 		panic(fmt.Sprintf("session.New: %v", err))
@@ -242,7 +244,17 @@ func buildTestRouter(db *gorm.DB, sqlDB *sql.DB, keyring *crypto.Keyring) chi.Ro
 	}
 	var oidcKit *oidc.Kit
 	authService := auth.NewService(db, keyring, logger, sessions, users)
-	deletions := auth.NewDeletions(db, testDirectory, nil, nil, logger)
+	deletions, err := kit.NewDeletions(kit.DeletionsConfig{
+		OIDC:  porte.Config{Issuer: testDirectory.Issuer, ClientID: testDirectory.ClientID, ClientSecret: testDirectory.ClientSecret},
+		Store: store,
+		OnPersonDeleted: func(ctx context.Context, provider, subject string) error {
+			return auth.ErasePerson(ctx, db, provider, subject)
+		},
+		Logger: logger,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("kit.NewDeletions: %v", err))
+	}
 	webhookDispatcher := webhook.NewDispatcher(db, logger)
 	auditLogger := audit.NewLogger(db, logger)
 	projectsService := projects.NewService(db, keyring, auditLogger)
@@ -303,7 +315,7 @@ func hashToken(token string) string {
 // (127.0.0.1:1), a refused connection ends the goroutine immediately instead of
 // hanging on DNS.
 func seed(db *gorm.DB, keyring *crypto.Keyring) (fixture, error) {
-	if err := testdb.Truncate(db); err != nil {
+	if err := testdb.Truncate(db, dbconfig.Config); err != nil {
 		return fixture{}, err
 	}
 
@@ -802,7 +814,7 @@ func routeCases(f fixture) []routeCase {
 		},
 		{
 			name: "create webhook", method: "POST", pattern: "/api/projects/{slug}/webhooks", path: alphaPath + "/webhooks",
-			body: `{"url":"http://127.0.0.1:1/new","events":"*","secret":""}`,
+			body: `{"url":"https://hooks.example.com/new","events":"*","secret":""}`,
 			outcomes: []outcome{
 				ok(201, projectAdmins...),
 				denied(cMember, cViewer),
@@ -1348,7 +1360,7 @@ func onConfirmPage(method, path, token string, csrf bool) *httptest.ResponseReco
 func requireDatabase(t *testing.T) {
 	t.Helper()
 	if !databaseOn {
-		t.Skip(testdb.SkipReason)
+		t.Skip(testdb.SkipReason(dbconfig.Bootstrap))
 	}
 }
 
