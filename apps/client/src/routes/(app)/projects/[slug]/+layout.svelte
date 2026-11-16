@@ -143,7 +143,7 @@
 		<Skeleton class="h-4 w-80 max-w-full" />
 		<div class="flex gap-1 overflow-hidden">
 			{#each Array(4) as _, i (i)}
-				<Skeleton class="h-11 w-28 shrink-0 rounded-fc-pill" />
+				<Skeleton class="h-9 w-28 shrink-0 rounded-fc-pill [@media(pointer:coarse)]:h-11" />
 			{/each}
 		</div>
 	</div>

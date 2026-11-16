@@ -2,11 +2,10 @@
 	import { setContext } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { MobileNav, SideBar, SpaceSwitcher, Spinner, Topbar, icons, toast, type Locale, type Theme } from '@facile/muse';
+	import { MobileNav, SideBar, SpaceSwitcher, Spinner, Topbar, icons, toast } from '@facile/muse';
 	import { auth } from '$lib/auth.svelte';
 	import { displayName } from '$lib/format';
-	import { locale, rememberLocale, t } from '$lib/i18n/index.svelte';
-	import { theme } from '$lib/theme.svelte';
+	import { t } from '$lib/i18n/index.svelte';
 	import {
 		api,
 		ApiError,
@@ -104,13 +103,8 @@
 	}
 
 	const userMenu = $derived({
-		subscription: { plan: 'Gratuit', href: 'https://sso.facile.studio/spaces' },
 		helpHref: 'https://github.com/FacileStudio/Casier/tree/main/docs',
 		onSignOut: signOut,
-		locale: locale(),
-		onLocaleChange: (next: Locale) => rememberLocale(next),
-		theme: theme.mode,
-		onThemeChange: (next: Theme) => theme.set(next),
 		invitations,
 	});
 

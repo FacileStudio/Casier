@@ -9,6 +9,7 @@
 </svelte:head>
 
 <PreferencesSection
+	subscription={{ plan: 'Gratuit', href: 'https://sso.facile.studio/spaces' }}
 	theme={theme.mode}
 	onThemeChange={(next: Theme) => theme.set(next)}
 	onLocaleChange={(next: Locale) => rememberLocale(next)}
