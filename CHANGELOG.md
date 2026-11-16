@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-11-16
+
 ### Security
 
 - fix(api): webhook deliveries dial through tronc `netguard`, so a webhook can no longer reach loopback, private or link-local addresses or follow a redirect to one, and creating a webhook with an internal or non-http(s) URL answers 400. A webhook already stored with an internal URL stops delivering.
