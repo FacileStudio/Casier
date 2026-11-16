@@ -1,10 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { refusesOwnSession } from '@facile/client';
 	import { Alert, Button, EmptyState, Spinner, icons, toast } from '@facile/muse';
 	import { API_BASE, ApiError, api, type PendingAction, type PendingList, type PendingResult } from '$lib/backend';
 	import PageHeader from '$lib/components/PageHeader.svelte';
-	import PendingCard from '$lib/components/PendingCard.svelte';
+	import PendingRequest from '$lib/components/PendingRequest.svelte';
 	import { t } from '$lib/i18n/index.svelte';
 
 	let actions = $state<PendingAction[]>([]);
@@ -20,19 +21,13 @@
 
 	onMount(load);
 
-	const OWN_SESSION_REFUSAL = "only the person's own session can confirm actions";
-
 	/**
 	 * Reports whether err is porte's refusal of a session that is not the person's own
 	 * browser session, and shows the sign-in prompt if so. Signing in again fixes only
 	 * this one; any other 403 is the confirmed action's own refusal.
 	 */
 	function refusedSession(err: unknown): boolean {
-		signInAgain =
-			err instanceof ApiError &&
-			err.status === 403 &&
-			err.code === 'permission_denied' &&
-			err.message === OWN_SESSION_REFUSAL;
+		signInAgain = refusesOwnSession(err);
 		return signInAgain;
 	}
 
@@ -102,7 +97,7 @@
 		<EmptyState icon={icons.check} title={t('pending.none')} description={t('pending.noneBody')} />
 	{:else}
 		{#each ordered as action (action.id)}
-			<PendingCard {action} busy={busy === action.id} onconfirm={confirm} ondismiss={dismiss} />
+			<PendingRequest {action} busy={busy === action.id} onconfirm={confirm} ondismiss={dismiss} />
 		{/each}
 	{/if}
 </div>

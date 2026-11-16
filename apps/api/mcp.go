@@ -18,20 +18,20 @@ import (
 // A person's first MCP call creates their account through the OIDC kit, Casier's own
 // sign-in write path, as a first web login would. Resolved actions older than 30 days
 // are pruned hourly until ctx ends.
-func newMCP(ctx context.Context, appEnv env.Config, kit *oidc.Kit, deps mcp.Deps, appLogger *slog.Logger) (*mcp.Service, error) {
-	if appEnv.OIDC == nil || appEnv.OIDC.MCPResource == "" || kit == nil {
+func newMCP(ctx context.Context, appEnv env.Config, store *portepg.Store, kit *oidc.Kit, deps mcp.Deps, appLogger *slog.Logger) (*mcp.Service, error) {
+	if !appEnv.OIDC.Enabled() || appEnv.MCPResource == "" || kit == nil {
 		return nil, nil
 	}
 	verifier, err := mcpauth.Verifier(ctx, mcpauth.Config{
-		Issuer: appEnv.OIDC.Issuer, Resource: appEnv.OIDC.MCPResource, ScopePrefix: "casier",
-		Identities: portepg.New(deps.Actions).Identities(), Provision: true, Accounts: kit, Logger: appLogger,
+		Issuer: appEnv.OIDC.Issuer, Resource: appEnv.MCPResource, ScopePrefix: "casier",
+		Identities: store.Identities(), Provision: true, Accounts: kit, Logger: appLogger,
 	})
 	if err != nil {
 		return nil, err
 	}
 	pending := mcpkit.PostgresPending{DB: deps.Actions}
 	service, err := mcp.NewService(deps, mcp.Config{
-		Resource: appEnv.OIDC.MCPResource, Issuer: appEnv.OIDC.Issuer, Version: version,
+		Resource: appEnv.MCPResource, Issuer: appEnv.OIDC.Issuer, Version: version,
 		Origins: appEnv.CORSAllowedOrigins, StateKey: mcpkit.StateKey("casier", appEnv.OIDC.ClientSecret), Verifier: verifier,
 		Pending: pending, Logger: appLogger,
 	})
@@ -39,6 +39,6 @@ func newMCP(ctx context.Context, appEnv env.Config, kit *oidc.Kit, deps mcp.Deps
 		return nil, err
 	}
 	go mcpkit.KeepPruned(ctx, pending, 0, 0, appLogger)
-	appLogger.Info("mcp server on", slog.String("resource", appEnv.OIDC.MCPResource))
+	appLogger.Info("mcp server on", slog.String("resource", appEnv.MCPResource))
 	return service, nil
 }

@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** The public landing page and the sign-in tagline, worded from the suite's canonical copy. */
 export const landing = {

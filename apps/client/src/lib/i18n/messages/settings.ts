@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** The account settings pages: profile, appearance, API and advanced. */
 export const settings = {

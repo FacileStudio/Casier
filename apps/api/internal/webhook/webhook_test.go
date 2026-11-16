@@ -89,3 +89,23 @@ func TestMatchesEvent(t *testing.T) {
 		}
 	}
 }
+
+func TestNewDispatcherRefusesAnInternalTarget(t *testing.T) {
+	hit := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		hit <- struct{}{}
+	}))
+	defer server.Close()
+
+	dispatcher := NewDispatcher(nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	dispatcher.load = func(context.Context, int64) ([]schemas.Webhook, error) {
+		return []schemas.Webhook{{ID: 1, URL: server.URL, Events: "*", Active: true}}, nil
+	}
+	dispatcher.dispatch(context.Background(), Event{Type: "secret.updated", ProjectID: 7})
+
+	select {
+	case <-hit:
+		t.Fatal("the dispatcher reached a loopback address")
+	default:
+	}
+}

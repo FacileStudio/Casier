@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Security
+
+- fix(api): webhook deliveries dial through tronc `netguard`, so a webhook can no longer reach loopback, private or link-local addresses or follow a redirect to one, and creating a webhook with an internal or non-http(s) URL answers 400. A webhook already stored with an internal URL stops delivering.
+
+### Changed
+
+- refactor(api): porte v0.21.0, tronc v0.26.0: `pg.NewFromEnv`, `kit.NewDeletions`, `porte.ConfigFromEnv`, `httpx.Serve`, `health.Version`, `tronc/testdb`. The MCP verifier now reads identities through the sealed porte store. Dead `authcrypto` removed.
+- refactor(client): `@facile/client` v0.3.0, muse v0.28.0 (`PendingCard`, `Row`), `authConfig`, `refusesOwnSession` and the shared locale resolver. A `?lang=` in the URL and the profile locale now beat the stored locale cookie.
+
 ## [0.10.3] - 2026-11-14
 
 ### Changed

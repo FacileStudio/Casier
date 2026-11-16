@@ -4,14 +4,10 @@ export { ApiError };
 
 export const API_BASE = '/api';
 
-export const COOKIE_SESSION = 'cookie';
+export const apiFetch = createApi({ base: API_BASE, onUnauthorized: redirectToLogin });
 
-const apiFetch = createApi({ base: API_BASE, onUnauthorized: redirectToLogin });
-
-function request<T>(method: string, path: string, body?: unknown, token?: string | null, options?: CallOptions): Promise<T> {
-	const headers: Record<string, string> = {};
-	if (token && token !== COOKIE_SESSION) headers['Authorization'] = `Bearer ${token}`;
-	return apiFetch<T>(path, { method, headers, body: body ? JSON.stringify(body) : undefined }, options);
+function request<T>(method: string, path: string, body?: unknown, options?: CallOptions): Promise<T> {
+	return apiFetch<T>(path, { method, body: body ? JSON.stringify(body) : undefined }, options);
 }
 
 /**
@@ -19,21 +15,16 @@ function request<T>(method: string, path: string, body?: unknown, token?: string
  * except on a call made with `{ quiet: true }`, such as the session probe.
  */
 export const api = {
-	get: <T>(path: string, token?: string | null, options?: CallOptions) => request<T>('GET', path, undefined, token, options),
-	post: <T>(path: string, body: unknown, token?: string | null) => request<T>('POST', path, body, token),
-	put: <T>(path: string, body: unknown, token?: string | null) => request<T>('PUT', path, body, token),
-	del: <T>(path: string, token?: string | null) => request<T>('DELETE', path, undefined, token),
+	get: <T>(path: string, options?: CallOptions) => request<T>('GET', path, undefined, options),
+	post: <T>(path: string, body: unknown) => request<T>('POST', path, body),
+	put: <T>(path: string, body: unknown) => request<T>('PUT', path, body),
+	del: <T>(path: string) => request<T>('DELETE', path, undefined),
 };
 
 /** GET /me/invitations: Registre's pending space invitations for the user menu. */
 export type Invitations = {
 	count: number;
 	href?: string;
-};
-
-export type AuthConfig = {
-	sso_only: boolean;
-	oidc_enabled: boolean;
 };
 
 /** The author name the API stores on rows written by someone whose account was erased. */

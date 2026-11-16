@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -44,6 +42,8 @@ import (
 	"gorm.io/gorm"
 )
 
+var version = "dev"
+
 func redirectToProjects(w http.ResponseWriter, request *http.Request) {
 	target := "/projects" + strings.TrimPrefix(request.URL.Path, "/spaces")
 	http.Redirect(w, request, target, http.StatusMovedPermanently)
@@ -73,13 +73,9 @@ func refConfig() apiref.Config {
 // buildAuth wires porte: the session manager always, and with an issuer the
 // OIDC kit and the user-menu invitations, both over the sealed porte store.
 // The kit refuses an account to any subject the deletion receiver erased.
-func buildAuth(ctx context.Context, sqlDB *sql.DB, users *kit.Store, deletions *auth.Deletions, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
-	store, err := newPorteStore(sqlDB)
-	if err != nil {
-		return auth.Routes{}, err
-	}
-	resealInBackground(ctx, store, appLogger)
-	cfg := appEnv.Porte()
+func buildAuth(ctx context.Context, store *portepg.Store, users *kit.Store, deletions *directory.Deletions, appEnv env.Config, appLogger *slog.Logger) (auth.Routes, error) {
+	portepg.ResealInBackground(ctx, store, appLogger)
+	cfg := appEnv.OIDC
 
 	sessions, err := session.New(cfg, session.Deps{Sessions: store.Sessions(), Logger: appLogger})
 	if err != nil || cfg.Issuer == "" {
@@ -94,9 +90,7 @@ func buildAuth(ctx context.Context, sqlDB *sql.DB, users *kit.Store, deletions *
 		Sessions:   sessions,
 		Codes:      store.LoginCodes(),
 		Logger:     appLogger,
-	}
-	if deletions != nil {
-		deps.Erased = deletions
+		Erased:     kit.ErasedGuard(deletions),
 	}
 	oidcKit, err := oidc.New(ctx, cfg, deps)
 	invitations := &kit.InvitationsConfig{
@@ -112,21 +106,18 @@ func buildAuth(ctx context.Context, sqlDB *sql.DB, users *kit.Store, deletions *
 // poll runs in the background, so a Registre that is down never holds up boot.
 // Casier runs one replica, so this is the one deletion poller. Without OIDC
 // there is nothing to follow and the receiver is nil.
-func startDeletions(ctx context.Context, db *gorm.DB, appEnv env.Config, appLogger *slog.Logger) (*auth.Deletions, error) {
-	if appEnv.OIDC == nil {
-		return nil, nil
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
+func startDeletions(ctx context.Context, db *gorm.DB, store *portepg.Store, appEnv env.Config, appLogger *slog.Logger) (*directory.Deletions, error) {
+	deletions, err := kit.NewDeletions(kit.DeletionsConfig{
+		OIDC:  appEnv.OIDC,
+		Store: store,
+		OnPersonDeleted: func(ctx context.Context, provider, subject string) error {
+			return auth.ErasePerson(ctx, db, provider, subject)
+		},
+		Logger: appLogger,
+	})
+	if err != nil || deletions == nil {
 		return nil, err
 	}
-	client := directory.Client{
-		Issuer:       appEnv.OIDC.Issuer,
-		ClientID:     appEnv.OIDC.ClientID,
-		ClientSecret: appEnv.OIDC.ClientSecret,
-	}
-	store := portepg.New(sqlDB)
-	deletions := auth.NewDeletions(db, client, store.EraseIdentity, store.HoldsIdentity, appLogger)
 	go deletions.Run(ctx)
 	return deletions, nil
 }
@@ -200,7 +191,13 @@ func run() int {
 	shutdownCtx, cancelCleanup := context.WithCancel(context.Background())
 	defer cancelCleanup()
 
-	deletions, err := startDeletions(shutdownCtx, db, appEnv, appLogger)
+	store, err := portepg.NewFromEnv(sqlDB)
+	if err != nil {
+		appLogger.Error("failed to build the porte store", slog.Any("error", err))
+		return 1
+	}
+
+	deletions, err := startDeletions(shutdownCtx, db, store, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to start the deletion receiver", slog.Any("error", err))
 		return 1
@@ -211,7 +208,7 @@ func run() int {
 		appLogger.Error("failed to build the user store", slog.Any("error", err))
 		return 1
 	}
-	authRoutes, err := buildAuth(shutdownCtx, sqlDB, users, deletions, appEnv, appLogger)
+	authRoutes, err := buildAuth(shutdownCtx, store, users, deletions, appEnv, appLogger)
 	if err != nil {
 		appLogger.Error("failed to initialise porte", slog.Any("error", err))
 		return 1
@@ -227,7 +224,7 @@ func run() int {
 	secretsService := secrets.NewService(db, appLogger, projectsService, environmentsService, projectsService, webhookDispatcher, auditLogger)
 	secretsService.StartTrashPurge(shutdownCtx)
 
-	mcpService, err := newMCP(shutdownCtx, appEnv, authRoutes.OIDC, mcp.Deps{
+	mcpService, err := newMCP(shutdownCtx, appEnv, store, authRoutes.OIDC, mcp.Deps{
 		Projects: projectsService, Environments: environmentsService, Secrets: secretsService, Accounts: users, Actions: sqlDB,
 	}, appLogger)
 	if err != nil {
@@ -250,7 +247,7 @@ func run() int {
 	})
 
 	health.Mount(router, health.DB(sqlDB))
-	router.Get("/version", versionHandler)
+	router.Get("/version", health.Version(version))
 	apiref.Mount(router, refConfig())
 	if mcpService != nil {
 		mcp.RegisterRoutes(router, mcpService)
@@ -282,45 +279,26 @@ func run() int {
 	}
 
 	addr := ":" + strconv.Itoa(appEnv.Port)
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	serverErrCh := make(chan error, 1)
-	go func() {
-		serverErrCh <- server.ListenAndServe()
-	}()
-
 	shutdownSignal, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	appLogger.Info("server starting", slog.String("addr", addr))
-	select {
-	case err := <-serverErrCh:
-		if !errors.Is(err, http.ErrServerClosed) {
-			appLogger.Error("server stopped", slog.Any("error", err))
-			return 1
-		}
-	case <-shutdownSignal.Done():
-		appLogger.Info("server shutting down")
-		shutdownContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
+	if err := httpx.Serve(shutdownSignal, router, httpx.ServeConfig{
+		Addr:         addr,
+		Logger:       appLogger,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
 
-		if err := server.Shutdown(shutdownContext); err != nil {
-			appLogger.Error("server shutdown failed", slog.Any("error", err))
-			return 1
-		}
-		appLogger.Info("server stopped")
+		ShutdownGrace: 10 * time.Second,
+	}); err != nil {
+		appLogger.Error("server stopped", slog.Any("error", err))
+		return 1
 	}
 
 	return 0
 }
 
-func deletionsHandler(deletions *auth.Deletions) http.Handler {
+func deletionsHandler(deletions *directory.Deletions) http.Handler {
 	if deletions == nil {
 		return nil
 	}

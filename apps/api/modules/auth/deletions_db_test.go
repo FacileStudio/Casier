@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"testing"
 
 	"gorm.io/gorm"
@@ -129,22 +128,4 @@ func TestErasePersonDeletesThePersonalVaultAndKeepsTheSpace(t *testing.T) {
 		assertUnreferenced(t, db, f)
 	}
 	eraseThroughDirectory(t, db, deleteIssuer, "never-signed-in")
-}
-
-func TestDeletionStateRoundTrips(t *testing.T) {
-	db := resetTestDB(t)
-	state := deletionState{orm: db}
-	ctx := context.Background()
-
-	if got, err := state.Load(ctx); err != nil || got != nil {
-		t.Fatalf("Load before any save = (%q, %v), want (nil, nil)", got, err)
-	}
-	for _, blob := range []string{`{"a":1}`, `{"a":2}`} {
-		if err := state.Save(ctx, []byte(blob)); err != nil {
-			t.Fatalf("Save: %v", err)
-		}
-	}
-	if got, err := state.Load(ctx); err != nil || string(got) != `{"a":2}` {
-		t.Fatalf("Load = (%q, %v), want the second blob", got, err)
-	}
 }

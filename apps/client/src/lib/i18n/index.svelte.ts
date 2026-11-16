@@ -1,25 +1,15 @@
-import { browser } from '$app/environment';
-import { createTranslator, LOCALE_COOKIE, resolveLocale, type Locale } from '@facile/muse';
+import { rememberLocale, resolveClientLocale } from '@facile/client/locale';
+import { createTranslator, LOCALES, resolveLocale, type Locale } from '@facile/muse';
 import { auth } from '$lib/auth.svelte';
 import { catalogs } from './messages';
 
+export { rememberLocale };
+
 let active: () => Locale = () => 'en';
 
-function cookieLocale(): string | null {
-	if (!browser) return null;
-	const prefix = `${LOCALE_COOKIE}=`;
-	const found = document.cookie.split('; ').find((part) => part.startsWith(prefix));
-	return found ? decodeURIComponent(found.slice(prefix.length)) : null;
-}
-
-/** The locale source for `provideLocale`: the picked cookie, then the session, then the browser. */
-export function localeSource(): string | null {
-	return cookieLocale() ?? auth.locale ?? (browser ? navigator.language : null);
-}
-
-/** Persists the locale picked on a session-less page for the next visit. */
-export function rememberLocale(locale: Locale) {
-	document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=31536000; samesite=lax`;
+/** The locale source for `provideLocale`: the URL, the session, the picked cookie, then the browser. Null when nothing matched. */
+export function localeSource(): Locale | null {
+	return resolveClientLocale({ supported: LOCALES, profile: auth.locale }).hint;
 }
 
 /** Points the translator and the Intl helpers at the locale `provideLocale` resolved. */

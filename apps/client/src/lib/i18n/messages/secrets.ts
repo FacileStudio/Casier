@@ -1,4 +1,4 @@
-import type { Row } from '../row';
+import type { Row } from '@facile/muse';
 
 /** The secrets table of an environment and the drawers around it. */
 export const secrets = {
