@@ -69,12 +69,12 @@ casier run -- npm start
 ## Command line
 
 [`casier`](https://github.com/FacileStudio/casier-cli) drives Casier from a terminal. It
-installs through [facile](https://github.com/FacileStudio/facile), the suite installer,
+installs through [kit](https://github.com/FacileStudio/kit), the Facile package manager,
 which fetches a prebuilt binary and puts `~/.local/bin` on your PATH:
 
 ```sh
 curl -fsSL https://get.facile.studio | bash
-facile install casier
+kit add casier
 ```
 
 `facile login casier` signs in through Facile SSO in your browser.
