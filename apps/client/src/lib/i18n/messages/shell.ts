@@ -60,6 +60,6 @@ export const shell = {
 	],
 	'downloads.cta': ['Install the CLI', 'Installer la CLI', 'Instalar la CLI', 'CLI installieren'],
 	'downloads.install.script': ['Install script', 'Script d’installation', 'Script de instalación', 'Installationsskript'],
-	'downloads.install.facile': ['With facile', 'Avec facile', 'Con facile', 'Mit facile'],
+	'downloads.install.kit': ['With kit', 'Avec kit', 'Con kit', 'Mit kit'],
 	'downloads.install.brew': ['Homebrew', 'Homebrew', 'Homebrew', 'Homebrew']
 } as const satisfies Record<string, Row>;
